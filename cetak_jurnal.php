@@ -230,12 +230,13 @@ $qPrint = array_filter([
     <div class="ket-kode">
       Keterangan kehadiran siswa:
       <?php $kodeKet = []; foreach ($kolomKehadiran as [$kode, $label]) { $kodeKet[] = '<b>' . e($kode) . '</b> = ' . e($label); } ?>
-      <?= implode(' &middot; ', $kodeKet) ?>.
+      <?= implode(', ', $kodeKet) ?>.
     </div>
 
-    <div class="sheet-foot">
-      <?php ttd_blok('Guru Mata Pelajaran', (string) $guruCetak, '', 'sheet-sign sheet-sign-kiri'); ?>
-      <?php ttd_blok('Mengetahui, ' . jabatan_kepala(), kepala_nama(), kepala_nip(), 'sheet-sign sheet-sign-kanan'); ?>
+    <!-- Posisi tanda tangan: kepala sekolah/madrasah di KIRI, guru di KANAN (permintaan pemilik). -->
+    <div class="sheet-foot dua-ttd">
+      <?php ttd_blok('Mengetahui, ' . jabatan_kepala(), kepala_nama(), kepala_nip(), 'sheet-sign sheet-sign-kiri'); ?>
+      <?php ttd_blok('Guru Mata Pelajaran', (string) $guruCetak, '', 'sheet-sign sheet-sign-kanan'); ?>
     </div>
 
     <p class="xs mut center" style="margin-top:18px">

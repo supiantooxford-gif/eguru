@@ -23,6 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($user === '' || $pass === '') {
         $err = 'Nama pengguna dan kata sandi wajib diisi.';
+        log_gagal(null, $user, 'nama pengguna atau kata sandi kosong');
     } else {
         $u = one('SELECT * FROM users WHERE username = ? COLLATE NOCASE', [$user]);
         $sekolahUser = ($u && $u['role'] !== 'super' && (int) ($u['sekolah_id'] ?? 0) > 0)
@@ -31,24 +32,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (!$u || !password_verify($pass, (string) $u['password_hash'])) {
             $err = 'Nama pengguna atau kata sandi salah.';
+            log_gagal($u, $user, $u ? 'kata sandi salah' : 'nama pengguna tidak dikenal');
         } elseif ((int) $u['aktif'] !== 1) {
             $err = 'Akun ini sedang dinonaktifkan. Hubungi Super Admin.';
+            log_gagal($u, $user, 'akun dinonaktifkan');
         } elseif ($u['role'] !== 'super' && !$sekolahUser) {
             $err = 'Akun ini belum ditautkan ke sekolah/madrasah mana pun. Hubungi Super Admin.';
+            log_gagal($u, $user, 'akun belum ditautkan ke sekolah');
         } elseif ($sekolahUser && ($sekolahUser['verifikasi'] ?? 'disetujui') === 'menunggu') {
             $err = 'Pendaftaran ' . $sekolahUser['nama'] . ' masih MENUNGGU PERSETUJUAN Super Admin. '
                  . 'Anda dapat masuk setelah pendaftaran disetujui.';
+            log_gagal($u, $user, 'pendaftaran sekolah masih menunggu persetujuan');
         } elseif ($sekolahUser && ($sekolahUser['verifikasi'] ?? 'disetujui') === 'ditolak') {
             $err = 'Pendaftaran ' . $sekolahUser['nama'] . ' belum disetujui'
                  . (!empty($sekolahUser['alasan_tolak']) ? ': ' . $sekolahUser['alasan_tolak'] : '.')
                  . ' Silakan hubungi Super Admin.';
+            log_gagal($u, $user, 'pendaftaran sekolah ditolak');
         } elseif ($sekolahUser && (int) $sekolahUser['aktif'] !== 1) {
             $err = 'Sekolah/madrasah ' . $sekolahUser['nama'] . ' sedang dinonaktifkan. Hubungi Super Admin.';
+            log_gagal($u, $user, 'sekolah dinonaktifkan');
         } elseif ($u['role'] === 'guru' && (int) ($u['guru_id'] ?? 0) <= 0) {
             $err = 'Akun guru ini belum ditautkan ke data guru. Hubungi Admin Operator atau Super Admin.';
+            log_gagal($u, $user, 'akun guru belum ditautkan ke data guru');
         } else {
             session_regenerate_id(true);
             $_SESSION['uid'] = (int) $u['id'];
+            log_sesi_mulai($u);   // daftarkan sebagai online + catat aktivitas "masuk"
             // Konteks sekolah dimulai bersih: super admin memilih sekolah sendiri lewat Kelola Sekolah.
             unset($_SESSION['ctx_sekolah_id']);
             q('UPDATE users SET login_terakhir = ? WHERE id = ?', [date('Y-m-d H:i:s'), (int) $u['id']]);
@@ -189,7 +198,7 @@ $menuPortal = [
           <div class="divider"></div>
           <p class="sm mut" style="margin:0 0 10px">
             Belum punya akun? Sekolah/madrasah Anda dapat mendaftar sendiri, lalu aplikasi dipakai setelah
-            pendaftaran disetujui Super Admin.
+            pendaftaran disetujui Admin.
           </p>
           <a class="btn btn-ghost full" href="daftar.php"><?= ikon('school', 16) ?> Daftarkan Sekolah/Madrasah</a>
 

@@ -57,7 +57,7 @@ page_top('Akun Saya');
     <div class="card-head"><div><h2>Profil</h2><p>Data akun yang Anda pakai untuk masuk.</p></div></div>
     <div class="foto-baris">
       <div class="foto-sisi">
-        <?= avatar_html((string) $aku['nama'], 76, 'avatar avatar-besar') ?>
+        <?= avatar_user($aku, 76, 'avatar avatar-besar') ?>
         <span class="pill pill-B"><?= e(role_label()) ?></span>
       </div>
       <div class="foto-form">
@@ -82,6 +82,50 @@ page_top('Akun Saya');
   </div>
 
   <div class="grid" style="gap:20px;align-content:start">
+    <div class="card" id="cardFoto">
+      <div class="card-head">
+        <div><h2>Foto Profil</h2><p>Tampil pada sidebar dan daftar pengguna aplikasi.</p></div>
+      </div>
+      <div class="foto-baris">
+        <div class="foto-sisi">
+          <div class="foto-preview">
+            <?php if (foto_user($aku)): ?>
+              <img src="<?= e((string) foto_user($aku)) ?>" alt="Foto profil <?= e((string) $aku['nama']) ?>">
+            <?php else: ?>
+              <span class="mut xs">Belum ada foto</span>
+            <?php endif; ?>
+          </div>
+          <?php if (foto_user($aku)): ?>
+            <form method="post" action="upload_foto.php" data-confirm="Hapus foto profil Anda?">
+              <?= csrf_field() ?>
+              <input type="hidden" name="aksi" value="hapus">
+              <button class="btn btn-danger btn-sm" type="submit"><?= ikon('trash', 15) ?> Hapus foto</button>
+            </form>
+          <?php endif; ?>
+        </div>
+        <form class="foto-form" id="formFoto" method="post" action="upload_foto.php" enctype="multipart/form-data">
+          <?= csrf_field() ?>
+          <label class="f" for="foto">Pilih berkas foto</label>
+          <input type="file" id="foto" name="foto" accept=".jpg,.jpeg,.png,.gif,.webp,.svg,image/*">
+          <div class="foto-input-baris mt8">
+            <div class="foto-preview-wrap" id="fotoPreviewWrap" <?= foto_user($aku) ? '' : 'hidden' ?>>
+              <div class="foto-preview" id="fotoPreview">
+                <?php if (foto_user($aku)): ?><img src="<?= e((string) foto_user($aku)) ?>" alt="Pratinjau foto"><?php endif; ?>
+              </div>
+              <span class="xs mut" id="fotoUkuran">Foto saat ini</span>
+            </div>
+            <div>
+              <div class="hint" id="fotoHint">Format JPG, PNG, GIF, WEBP, atau SVG — maksimal 15 MB. Gunakan foto persegi agar hasilnya rapi.</div>
+              <div class="form-actions">
+                <button class="btn btn-primary" id="btnFoto" type="submit"><?= ikon('upload', 16) ?> <?= foto_user($aku) ? 'Ganti foto' : 'Unggah foto' ?></button>
+                <span class="xs mut" id="fotoStatus"></span>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-head"><div><h2>Ganti Kata Sandi</h2><p>Minimal 6 karakter.</p></div></div>
       <form method="post" class="form-grid" autocomplete="off">

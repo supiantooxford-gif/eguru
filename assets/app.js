@@ -188,6 +188,61 @@
     segarkanRingkas();
   }
 
+  /* ---------- Foto profil: pratinjau & pemeriksaan ukuran ---------- */
+  function initFoto() {
+    var inp = document.getElementById('foto');
+    if (!inp) return;
+    var wrap = document.getElementById('fotoPreviewWrap');
+    var prev = document.getElementById('fotoPreview');
+    var info = document.getElementById('fotoUkuran');
+    var hint = document.getElementById('fotoHint');
+    var btn = document.getElementById('btnFoto');
+    var form = document.getElementById('formFoto');
+    var status = document.getElementById('fotoStatus');
+    var MAKS = 15 * 1024 * 1024;
+    var OK = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
+
+    function mb(b) { return (b / 1048576).toFixed(b < 1048576 ? 2 : 1).replace('.', ',') + ' MB'; }
+
+    inp.addEventListener('change', function () {
+      var f = inp.files && inp.files[0];
+      if (!f) return;
+      var ext = (f.name.split('.').pop() || '').toLowerCase();
+      if (OK.indexOf(ext) === -1) {
+        hint.innerHTML = '<b style="color:#b91c1c">Format .' + ext + ' tidak didukung.</b> Pakai JPG, PNG, GIF, WEBP, atau SVG.';
+        if (wrap) wrap.hidden = true;
+        if (btn) btn.disabled = true;
+        return;
+      }
+      if (f.size > MAKS) {
+        hint.innerHTML = '<b style="color:#b91c1c">Terlalu besar (' + mb(f.size) + ').</b> Maksimal 15 MB — perkecil dulu fotonya.';
+        if (wrap) wrap.hidden = true;
+        if (btn) btn.disabled = true;
+        return;
+      }
+      if (btn) btn.disabled = false;
+      hint.innerHTML = 'Berkas siap diunggah: <b>' + f.name.replace(/[<>&"]/g, '') + '</b>';
+      if (info) info.textContent = mb(f.size);
+      if (ext === 'svg') {
+        if (wrap) wrap.hidden = true;
+        return;
+      }
+      var fr = new FileReader();
+      fr.onload = function () {
+        if (prev) prev.innerHTML = '<img src="' + fr.result + '" alt="Pratinjau foto">';
+        if (wrap) wrap.hidden = false;
+      };
+      fr.readAsDataURL(f);
+    });
+
+    if (form) {
+      form.addEventListener('submit', function () {
+        if (btn) { btn.disabled = true; btn.textContent = 'Mengunggah...'; }
+        if (status) status.textContent = 'Mohon tunggu, foto sedang diunggah.';
+      });
+    }
+  }
+
   /* ---------- Logo sekolah: pratinjau & pemeriksaan ukuran ---------- */
   function initLogo() {
     var inp = document.getElementById('logo');
@@ -345,6 +400,7 @@
     initNilaiGrid();
     initHadirGrid();
     initLogo();
+    initFoto();
     initJenis();
     initPrint();
   });

@@ -42,6 +42,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash('Catatan pertemuan tidak ditemukan.', 'err');
         } elseif (!boleh_kelas((int) $sesi['kelas_id']) || !boleh_mapel((int) $sesi['mapel_id'])) {
             tolak403('Catatan pertemuan ini di luar kelas/mata pelajaran yang Anda ampu.');
+        } elseif (is_guru() && (int) ($sesi['guru_id'] ?? 0) !== guru_id_saya()) {
+            // Guru hanya mengelola pertemuan miliknya sendiri (daftar pun hanya menampilkan itu).
+            tolak403('Catatan pertemuan ini milik guru lain.');
         } elseif (!$bolehKelola) {
             tolak403('Menghapus catatan pertemuan daftar hadir hanya untuk Super Admin dan Admin Operator.');
         } else {
@@ -56,6 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // ---------------------------------------------------------------- filter
 $daftarKelas = kelas_pilih();
 $daftarMapel = mapel_pilih();
+$guruAkun = is_guru();   // guru hanya melihat pertemuan miliknya → kolom "Guru" tidak perlu ditampilkan
 
 $fKelas = (int) ($_GET['kelas'] ?? 0);
 // Penting: kelas dipilih otomatis LEBIH DULU. Kalau penjaga cakupan dijalankan sebelum ini,
@@ -96,6 +100,12 @@ if ($fKelas > 0) {
         $w[] = 'a.tanggal <= ?';
         $p[] = $fSampai;
     }
+    // Guru HANYA melihat pertemuan yang IA catat sendiri (permintaan pemilik) — tidak melihat
+    // daftar hadir guru/mata pelajaran lain pada kelas yang sama.
+    if (is_guru()) {
+        $w[] = 'a.guru_id = ?';
+        $p[] = guru_id_saya();
+    }
     $sesiList = all('SELECT a.*, m.nama AS mapel_nama, g.nama AS guru_nama,
         (SELECT COUNT(*) FROM absensi_detail d WHERE d.absensi_id = a.id AND d.status = "H") AS jml_h,
         (SELECT COUNT(*) FROM absensi_detail d WHERE d.absensi_id = a.id AND d.status = "S") AS jml_s,
@@ -105,7 +115,9 @@ if ($fKelas > 0) {
         WHERE ' . implode(' AND ', $w) . ' ORDER BY a.tanggal DESC, a.pertemuan DESC', $p);
 
     $siswa = siswa_kelas($fKelas, true);
-    $rekap = absensi_rekap($fKelas, $fMapel, (int) $ta['id'], (int) $sem['id'], $fDari, $fSampai);
+    // Rekap kehadiran juga dibatasi pada pertemuan guru ini sendiri (bukan milik guru lain).
+    $rekap = absensi_rekap($fKelas, $fMapel, (int) $ta['id'], (int) $sem['id'], $fDari, $fSampai,
+        is_guru() ? guru_id_saya() : 0);
 }
 
 $qBase = ['kelas' => $fKelas, 'mapel' => $fMapel ?: null, 'dari' => $fDari, 'sampai' => $fSampai,
@@ -260,7 +272,7 @@ page_top('Daftar Hadir Siswa');
     <?php else: ?>
       <div class="table-wrap">
         <table class="tbl" id="tblSesi">
-          <thead><tr><th class="ctr">Pertemuan</th><th>Tanggal</th><th>Mata Pelajaran</th><th>Materi</th><th>Guru</th><th class="ctr">H</th><th class="ctr">S</th><th class="ctr">I</th><th class="ctr">A</th><th></th></tr></thead>
+          <thead><tr><th class="ctr">Pertemuan</th><th>Tanggal</th><th>Mata Pelajaran</th><th>Materi</th><?php if (!$guruAkun): ?><th>Guru</th><?php endif; ?><th class="ctr">H</th><th class="ctr">S</th><th class="ctr">I</th><th class="ctr">A</th><th></th></tr></thead>
           <tbody>
           <?php foreach ($sesiList as $s): ?>
             <tr>
@@ -268,7 +280,7 @@ page_top('Daftar Hadir Siswa');
               <td class="nowrap"><?= e(tanggal_id((string) $s['tanggal'], true)) ?></td>
               <td><?= e((string) $s['mapel_nama']) ?></td>
               <td><?= e((string) ($s['materi'] ?: '-')) ?></td>
-              <td><?= e((string) ($s['guru_nama'] ?: '-')) ?></td>
+              <?php if (!$guruAkun): ?><td><?= e((string) ($s['guru_nama'] ?: '-')) ?></td><?php endif; ?>
               <td class="ctr"><span class="pill pill-st-H"><?= (int) $s['jml_h'] ?></span></td>
               <td class="ctr"><span class="pill pill-st-S"><?= (int) $s['jml_s'] ?></span></td>
               <td class="ctr"><span class="pill pill-st-I"><?= (int) $s['jml_i'] ?></span></td>

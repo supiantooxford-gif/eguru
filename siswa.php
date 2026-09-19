@@ -38,6 +38,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $fKelas = (int) ($_GET['kelas'] ?? 0);
 $cari = trim((string) ($_GET['cari'] ?? ''));
 $fStatus = (string) ($_GET['status'] ?? '');
+// Filter status siswa: 'aktif' (belum lulus) atau 'lulus'. Parameter `aktif` tetap dipakai
+// untuk aktif/nonaktif administratif (kolom `aktif`).
+$fLulus = in_array((string) ($_GET['status_siswa'] ?? ''), ['aktif', 'lulus'], true) ? (string) $_GET['status_siswa'] : '';
 
 $w = ['s.sekolah_id = ?'];
 $p = [sekolah_id()];
@@ -60,6 +63,11 @@ if ($fKelas > 0) {
 if (in_array($fStatus, ['1', '0'], true)) {
     $w[] = 's.aktif = ' . (int) $fStatus;
 }
+if ($fLulus === 'lulus') {
+    $w[] = "s.status = 'lulus'";
+} elseif ($fLulus === 'aktif') {
+    $w[] = "(s.status = 'aktif' OR s.status IS NULL)";
+}
 if ($cari !== '') {
     $w[] = '(s.nama LIKE ? OR s.nis LIKE ? OR s.nisn LIKE ? OR s.nama_wali LIKE ?)';
     $like = '%' . $cari . '%';
@@ -77,6 +85,14 @@ $totalAktif = (int) val('SELECT COUNT(*) FROM siswa WHERE aktif = 1 AND sekolah_
 $totalL = (int) val('SELECT COUNT(*) FROM siswa WHERE aktif = 1 AND jenis_kelamin = "L" AND sekolah_id = ?', [$sid], 0);
 $totalP = (int) val('SELECT COUNT(*) FROM siswa WHERE aktif = 1 AND jenis_kelamin = "P" AND sekolah_id = ?', [$sid], 0);
 
+// Parameter filter yang diwariskan ke lembar cetak Data Siswa.
+$qCetak = array_filter([
+    'cari' => $cari !== '' ? $cari : null,
+    'kelas' => $fKelas > 0 ? $fKelas : null,
+    'status' => $fStatus !== '' ? $fStatus : null,
+    'status_siswa' => $fLulus !== '' ? $fLulus : null,
+]);
+
 page_top('Data Siswa');
 ?>
 <div class="grid g4">
@@ -92,9 +108,15 @@ page_top('Data Siswa');
     <div class="stat-ic p"><?= ikon('user', 18) ?></div>
     <div><div class="stat-num" style="font-size:1.3rem"><?= $totalP ?></div><div class="stat-lbl">Perempuan</div></div>
   </div>
+  <?php $totalLulus = jumlah_siswa_status('lulus'); ?>
   <div class="card stat card-tight">
-    <div class="stat-ic o"><?= ikon('school', 18) ?></div>
-    <div><div class="stat-num" style="font-size:1.3rem"><?= (int) val('SELECT COUNT(*) FROM siswa WHERE aktif = 1 AND kelas_id IS NULL AND sekolah_id = ?', [$sid], 0) ?></div><div class="stat-lbl">Belum berkelas</div></div>
+    <div class="stat-ic o"><?= ikon($totalLulus > 0 ? 'star' : 'school', 18) ?></div>
+    <div>
+      <div class="stat-num" style="font-size:1.3rem"><?= $totalLulus > 0
+        ? $totalLulus
+        : (int) val('SELECT COUNT(*) FROM siswa WHERE aktif = 1 AND kelas_id IS NULL AND sekolah_id = ?', [$sid], 0) ?></div>
+      <div class="stat-lbl"><?= $totalLulus > 0 ? 'Siswa lulus' : 'Belum berkelas' ?></div>
+    </div>
   </div>
 </div>
 
@@ -105,8 +127,13 @@ page_top('Data Siswa');
       <?php if ($bolehUbah): ?>
         <a class="btn btn-primary" href="siswa_edit.php"><?= ikon('plus', 16) ?> Tambah Siswa</a>
         <a class="btn btn-ghost" href="siswa_import.php"><?= ikon('upload', 16) ?> Impor Excel/CSV</a>
+        <a class="btn btn-ghost" href="kenaikan.php"><?= ikon('switch', 16) ?> Kenaikan &amp; Kelulusan</a>
       <?php endif; ?>
       <a class="btn btn-ghost" href="absensi.php<?= $fKelas > 0 ? '?kelas=' . (int) $fKelas : '' ?>"><?= ikon('clipboard', 16) ?> Daftar Hadir</a>
+      <?php if ($bolehUbah): ?>
+        <?php // Cetak Data Siswa: Super Admin (dalam konteks sekolah) & Admin Operator, mengikuti filter aktif. ?>
+        <a class="btn btn-ghost" href="cetak_siswa.php?<?= e(http_build_query($qCetak)) ?>"><?= ikon('print', 16) ?> Cetak Data Siswa</a>
+      <?php endif; ?>
     </div>
   </div>
 
@@ -125,7 +152,15 @@ page_top('Data Siswa');
       </select>
     </div>
     <div>
-      <label class="f" for="status">Status</label>
+      <label class="f" for="status_siswa">Status Siswa</label>
+      <select id="status_siswa" name="status_siswa" data-auto>
+        <option value="">Semua status</option>
+        <option value="aktif" <?= $fLulus === 'aktif' ? 'selected' : '' ?>>Aktif (belum lulus)</option>
+        <option value="lulus" <?= $fLulus === 'lulus' ? 'selected' : '' ?>>Lulus</option>
+      </select>
+    </div>
+    <div>
+      <label class="f" for="status">Aktif/Niraktif</label>
       <select id="status" name="status" data-auto>
         <option value="">Semua</option>
         <option value="1" <?= $fStatus === '1' ? 'selected' : '' ?>>Aktif</option>
@@ -133,7 +168,7 @@ page_top('Data Siswa');
       </select>
     </div>
     <button class="btn btn-ghost" type="submit"><?= ikon('filter', 15) ?> Terapkan</button>
-    <?php if ($cari !== '' || $fKelas > 0 || $fStatus !== ''): ?><a class="btn btn-ghost" href="siswa.php">Reset</a><?php endif; ?>
+    <?php if ($cari !== '' || $fKelas > 0 || $fStatus !== '' || $fLulus !== ''): ?><a class="btn btn-ghost" href="siswa.php">Reset</a><?php endif; ?>
   </form>
 
   <?php if (!$rows): ?>
@@ -151,7 +186,7 @@ page_top('Data Siswa');
   <?php else: ?>
     <div class="table-wrap">
       <table class="tbl" id="tblSiswa">
-        <thead><tr><th>Nama</th><th>NIS / NISN</th><th class="ctr">JK</th><th>Kelas</th><th>Wali</th><th class="ctr">Nilai</th><th class="ctr">Kasus</th><th class="ctr">Status</th><th></th></tr></thead>
+        <thead><tr><th>Nama</th><th>NIS / NISN</th><th class="ctr">JK</th><th>Kelas</th><th>Wali</th><th class="ctr">Nilai</th><th class="ctr">Kasus</th><th class="ctr">Status</th><th class="ctr">Tindakan</th></tr></thead>
         <tbody>
         <?php foreach ($rows as $s): ?>
           <tr>
@@ -173,7 +208,17 @@ page_top('Data Siswa');
                 <span class="mut xs">-</span>
               <?php endif; ?>
             </td>
-            <td class="ctr"><span class="pill <?= (int) $s['aktif'] === 1 ? 'pill-ok' : 'pill-gray' ?>"><?= (int) $s['aktif'] === 1 ? 'Aktif' : 'Nonaktif' ?></span></td>
+            <td class="ctr">
+              <?php
+              $lulusSiswa = strcasecmp((string) ($s['status'] ?? 'aktif'), 'lulus') === 0;
+              ?>
+              <?php if ($lulusSiswa): ?>
+                <span class="pill pill-A">Lulus</span>
+                <span class="tbl-sub"><?= e((string) ($s['tanggal_status'] ? tanggal_id((string) $s['tanggal_status']) : '-')) ?></span>
+              <?php else: ?>
+                <span class="pill <?= (int) $s['aktif'] === 1 ? 'pill-ok' : 'pill-gray' ?>"><?= (int) $s['aktif'] === 1 ? 'Aktif' : 'Nonaktif' ?></span>
+              <?php endif; ?>
+            </td>
             <td>
               <?php if ($bolehUbah): ?>
                 <div class="row-actions">

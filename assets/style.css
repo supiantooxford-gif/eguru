@@ -310,6 +310,13 @@ details.editbox > summary:hover{text-decoration:underline}
 .mini-avatar .avatar{font-size:.78rem}
 .foto-cetak{width:28mm;height:38mm;border:1px solid #b9b6a8;object-fit:cover;display:block}
 
+/* ===== Log Aktivitas: penanda online ===== */
+.dot-online{
+  flex:0 0 auto;width:9px;height:9px;border-radius:50%;background:#10b981;
+  box-shadow:0 0 0 3px rgba(16,185,129,.22);animation:denyut 2.2s ease-in-out infinite;
+}
+@keyframes denyut{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.55;transform:scale(.86)}}
+
 /* ===== Tabel nilai (Formatif / Sumatif Lingkup Materi / ASAS) =====
    Tabel memakai table-layout:fixed + <colgroup> sehingga lebar setiap kolom
    SAMA antara baris judul dan baris isian (tanpa ini judul F1..F4/S1..S4 tidak
@@ -576,6 +583,10 @@ table.sheet thead tr.sub th{font-size:.72rem;color:var(--muted);font-weight:700}
 .sheet-foot.kanan{justify-content:flex-end}
 .sheet-sign-kanan{flex:0 0 auto;min-width:250px;text-align:center}
 .sheet-sign-kiri{text-align:center}
+/* Dua tanda tangan berdampingan (mis. kepala sekolah/madrasah & guru): kedua blok
+   dibuat SAMA LEBAR sehingga berlaku simetris — posisinya ditentukan oleh URUTAN di HTML,
+   bukan oleh kelas. Urutan yang dipakai aplikasi ini: kepala di KIRI, guru di KANAN. */
+.sheet-foot.dua-ttd .sheet-sign{flex:1 1 0;min-width:0;text-align:center}
 .nilai-box{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;margin:18px 0}
 .nilai-chip{min-width:132px;text-align:center;border:1px solid var(--line);border-top:3px solid var(--emas);
   border-radius:11px;padding:11px 16px;background:#fff}

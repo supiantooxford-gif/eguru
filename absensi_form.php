@@ -36,6 +36,10 @@ if (!boleh_kelas($kelasId)) {
 if (!boleh_mapel($mapelId)) {
     tolak403('Mata pelajaran itu tidak Anda ampu.');
 }
+// Guru hanya boleh membuka pertemuan miliknya sendiri (bukan catatan guru lain pada kelas yang sama).
+if ($sesi && is_guru() && (int) ($sesi['guru_id'] ?? 0) !== guru_id_saya()) {
+    tolak403('Catatan pertemuan ini milik guru lain.');
+}
 if (!kelas_by_id($kelasId) || !mapel_by_id($mapelId)) {
     flash('Kelas atau mata pelajaran tidak valid.', 'err');
     redirect('absensi.php');

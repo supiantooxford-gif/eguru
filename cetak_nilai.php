@@ -159,15 +159,16 @@ $kolNA = [];
     </div>
 
     <div class="ket">
-      Keterangan: F = Nilai Formatif (penilaian proses, tidak dihitung ke nilai akhir) &middot;
-      S = Sumatif Lingkup Materi (bobot <?= e(r0(bobot_sumatif())) ?>%) &middot; ASAS = Sumatif Akhir Semester (bobot <?= e(r0($bobotAsas)) ?>%).<br>
+      Keterangan: F = Nilai Formatif (penilaian proses, tidak dihitung ke nilai akhir),
+      S = Sumatif Lingkup Materi (bobot <?= e(r0(bobot_sumatif())) ?>%), ASAS = Sumatif Akhir Semester (bobot <?= e(r0($bobotAsas)) ?>%).<br>
       Nilai Akhir = (rata-rata Sumatif Lingkup Materi &times; <?= e(r0(bobot_sumatif())) ?>%) + (ASAS &times; <?= e(r0($bobotAsas)) ?>%).
       Predikat: A &ge; <?= e(r0(thresholds()['batas_a'])) ?>, B &ge; <?= e(r0(thresholds()['batas_b'])) ?>, C &ge; <?= e(r0(thresholds()['batas_c'])) ?>, D di bawahnya.
     </div>
 
-    <div class="sheet-foot">
-      <?php ttd_blok('Guru Mata Pelajaran', $guru ? (string) $guru['nama'] : '-', '', 'sheet-sign sheet-sign-kiri'); ?>
-      <?php ttd_blok('Mengetahui, ' . jabatan_kepala(), kepala_nama(), kepala_nip(), 'sheet-sign sheet-sign-kanan'); ?>
+    <!-- Posisi tanda tangan: kepala sekolah/madrasah di KIRI, guru di KANAN (permintaan pemilik). -->
+    <div class="sheet-foot dua-ttd">
+      <?php ttd_blok('Mengetahui, ' . jabatan_kepala(), kepala_nama(), kepala_nip(), 'sheet-sign sheet-sign-kiri'); ?>
+      <?php ttd_blok('Guru Mata Pelajaran', $guru ? (string) $guru['nama'] : '-', '', 'sheet-sign sheet-sign-kanan'); ?>
     </div>
 
     <p class="xs mut center" style="margin-top:18px">

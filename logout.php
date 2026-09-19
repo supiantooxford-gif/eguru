@@ -3,6 +3,9 @@
 declare(strict_types=1);
 require_once __DIR__ . '/inc/init.php';
 
+$u = current_user();
+log_sesi_selesai($u);   // catat aktivitas "keluar" + hapus dari daftar online
+
 $_SESSION = [];
 if (ini_get('session.use_cookies')) {
     $p = session_get_cookie_params();

@@ -42,18 +42,24 @@ if ($fDari !== null && $fSampai !== null && $fDari > $fSampai) {
 }
 
 $siswa = siswa_kelas($kelasId, true);
-$rekap = absensi_rekap($kelasId, $mapelId, (int) $ta['id'], (int) $sem['id'], $fDari, $fSampai);
+// Guru hanya mencetak rekap dari pertemuan yang IA catat sendiri (konsisten dengan absensi.php).
+$guruIdRekap = is_guru() ? guru_id_saya() : 0;
+$rekap = absensi_rekap($kelasId, $mapelId, (int) $ta['id'], (int) $sem['id'], $fDari, $fSampai, $guruIdRekap);
 $guru = $mapelId > 0 ? guru_pengampu($kelasId, $mapelId) : null;
 
 $periode = ($fDari || $fSampai)
     ? (($fDari ? tanggal_id($fDari) : 'awal') . ' s/d ' . ($fSampai ? tanggal_id($fSampai) : 'akhir'))
     : 'Seluruh periode semester ini';
 
-$jmlPertemuan = (int) val('SELECT COUNT(*) FROM absensi WHERE sekolah_id = ' . sekolah_id() . ' AND kelas_id = ? AND ta_id = ? AND semester_id = ?'
+$jmlPertemuan = (int) val('SELECT COUNT(*) FROM absensi WHERE sekolah_id = ' . sekolah_id()
+    . ' AND kelas_id = ? AND ta_id = ? AND semester_id = ?'
     . ($mapelId > 0 ? ' AND mapel_id = ?' : '')
     . ($fDari !== null ? ' AND tanggal >= ?' : '')
-    . ($fSampai !== null ? ' AND tanggal <= ?' : ''),
-    array_merge([$kelasId, (int) $ta['id'], (int) $sem['id']], $mapelId > 0 ? [$mapelId] : [], $fDari !== null ? [$fDari] : [], $fSampai !== null ? [$fSampai] : []), 0);
+    . ($fSampai !== null ? ' AND tanggal <= ?' : '')
+    . ($guruIdRekap > 0 ? ' AND guru_id = ?' : ''),
+    array_merge([$kelasId, (int) $ta['id'], (int) $sem['id']], $mapelId > 0 ? [$mapelId] : [],
+        $fDari !== null ? [$fDari] : [], $fSampai !== null ? [$fSampai] : [],
+        $guruIdRekap > 0 ? [$guruIdRekap] : []), 0);
 
 $autoPrint = isset($_GET['auto']);
 ?>
@@ -149,9 +155,10 @@ $autoPrint = isset($_GET['auto']);
       Keterangan: H = Hadir, S = Sakit, I = Izin, A = Alpa. Persentase kehadiran dihitung dari jumlah kehadiran dibagi seluruh catatan pertemuan.
     </p>
 
-    <div class="sheet-foot">
-      <?php ttd_blok('Guru Mata Pelajaran', $guru ? (string) $guru['nama'] : '-', '', 'sheet-sign sheet-sign-kiri'); ?>
-      <?php ttd_blok('Mengetahui, ' . jabatan_kepala() . '', kepala_nama(), kepala_nip(), 'sheet-sign sheet-sign-kanan'); ?>
+    <!-- Posisi tanda tangan: kepala sekolah/madrasah di KIRI, guru di KANAN (permintaan pemilik). -->
+    <div class="sheet-foot dua-ttd">
+      <?php ttd_blok('Mengetahui, ' . jabatan_kepala(), kepala_nama(), kepala_nip(), 'sheet-sign sheet-sign-kiri'); ?>
+      <?php ttd_blok('Guru Mata Pelajaran', $guru ? (string) $guru['nama'] : '-', '', 'sheet-sign sheet-sign-kanan'); ?>
     </div>
 
     <p class="xs mut center" style="margin-top:18px">

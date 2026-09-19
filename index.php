@@ -170,9 +170,17 @@ $gid = $guru ? guru_id_saya() : 0;
 $kelasIds = $guru ? array_map('intval', array_column(kelas_diampu(), 'id')) : [];
 $inKelas = '';
 $pInKelas = [];
+$mapelIds = $guru ? array_map('intval', array_column(mapel_diampu(), 'id')) : [];
+$inMapel = '';
+$pInMapel = [];
 if ($guru) {
     $inKelas = $kelasIds ? ' IN (' . implode(',', array_fill(0, count($kelasIds), '?')) . ')' : ' = -1';
     $pInKelas = $kelasIds;
+    // Dashboard guru HANYA menampilkan data miliknya sendiri: kelas yang diajar, MATA PELAJARAN
+    // yang diampu, serta catatan/pertemuan yang ia buat sendiri (tidak melihat mapel atau
+    // rekapan guru lain) — permintaan pemilik.
+    $inMapel = $mapelIds ? ' IN (' . implode(',', array_fill(0, count($mapelIds), '?')) . ')' : ' = -1';
+    $pInMapel = $mapelIds;
 }
 
 $jmlGuru = (int) val('SELECT COUNT(*) FROM guru WHERE aktif = 1 AND sekolah_id = ?', [$sid], 0);
@@ -184,8 +192,9 @@ $jmlMapel = $guru ? count(mapel_diampu()) : (int) val('SELECT COUNT(*) FROM mape
 $jmlJurnal = $guru
     ? (int) val('SELECT COUNT(*) FROM jurnal WHERE guru_id = ?', [$gid], 0)
     : (int) val('SELECT COUNT(*) FROM jurnal WHERE sekolah_id = ?', [$sid], 0);
-$kasusAktif = (int) val('SELECT COUNT(*) FROM kasus WHERE status <> "selesai" AND sekolah_id = ?' . ($guru ? ' AND kelas_id' . $inKelas : ''),
-    array_merge([$sid], $guru ? $pInKelas : []), 0);
+$kasusAktif = $guru
+    ? (int) val('SELECT COUNT(*) FROM kasus WHERE status <> "selesai" AND sekolah_id = ? AND guru_id = ?', [$sid, $gid], 0)
+    : (int) val('SELECT COUNT(*) FROM kasus WHERE status <> "selesai" AND sekolah_id = ?', [$sid], 0);
 
 // Grafik: siswa per kelas
 $siswaPerKelas = all('SELECT k.nama, (SELECT COUNT(*) FROM siswa s WHERE s.kelas_id = k.id AND s.aktif = 1) AS jml
@@ -197,8 +206,8 @@ $awalBulan = date('Y-m-01');
 $akhirBulan = date('Y-m-t');
 $kehadiran = ['H' => 0, 'S' => 0, 'I' => 0, 'A' => 0];
 foreach (all('SELECT d.status, COUNT(*) AS jml FROM absensi a JOIN absensi_detail d ON d.absensi_id = a.id
-              WHERE a.tanggal BETWEEN ? AND ? AND a.sekolah_id = ?' . ($guru ? ' AND a.kelas_id' . $inKelas : '') . ' GROUP BY d.status',
-        array_merge([$awalBulan, $akhirBulan, $sid], $guru ? $pInKelas : [])) as $r) {
+              WHERE a.tanggal BETWEEN ? AND ? AND a.sekolah_id = ?' . ($guru ? ' AND a.guru_id = ?' : '') . ' GROUP BY d.status',
+        $guru ? [$awalBulan, $akhirBulan, $sid, $gid] : [$awalBulan, $akhirBulan, $sid]) as $r) {
     if (isset($kehadiran[(string) $r['status']])) {
         $kehadiran[(string) $r['status']] = (int) $r['jml'];
     }
@@ -228,8 +237,9 @@ $predikatJml = ['A' => 0, 'B' => 0, 'C' => 0, 'D' => 0];
 $rataMapel = [];
 if ($ta && $sem) {
     $barisNilai = all('SELECT n.siswa_id, n.mapel_id, n.jenis, n.kolom, n.nilai FROM nilai n
-                       WHERE n.sekolah_id = ? AND n.ta_id = ? AND n.semester_id = ?' . ($guru ? ' AND n.kelas_id' . $inKelas : ''),
-        array_merge([$sid, (int) $ta['id'], (int) $sem['id']], $guru ? $pInKelas : []));
+                       WHERE n.sekolah_id = ? AND n.ta_id = ? AND n.semester_id = ?'
+        . ($guru ? ' AND n.kelas_id' . $inKelas . ' AND n.mapel_id' . $inMapel : ''),
+        array_merge([$sid, (int) $ta['id'], (int) $sem['id']], $guru ? array_merge($pInKelas, $pInMapel) : []));
     $kelompok = [];
     foreach ($barisNilai as $r) {
         $kunci = (int) $r['siswa_id'] . '-' . (int) $r['mapel_id'];
@@ -277,8 +287,8 @@ $jurnalTerbaru = all('SELECT j.*, k.nama AS kelas_nama, m.nama AS mapel_nama, g.
     $guru ? [$sid, $gid] : [$sid]);
 $kasusTerbaru = all('SELECT ks.*, s.nama AS siswa_nama, k.nama AS kelas_nama
     FROM kasus ks LEFT JOIN siswa s ON s.id = ks.siswa_id LEFT JOIN kelas k ON k.id = ks.kelas_id
-    WHERE ks.status <> "selesai" AND ks.sekolah_id = ?' . ($guru ? ' AND ks.kelas_id' . $inKelas : '')
-    . ' ORDER BY ks.tanggal DESC LIMIT 5', array_merge([$sid], $guru ? $pInKelas : []));
+    WHERE ks.status <> "selesai" AND ks.sekolah_id = ?' . ($guru ? ' AND ks.guru_id = ?' : '')
+    . ' ORDER BY ks.tanggal DESC LIMIT 5', $guru ? [$sid, $gid] : [$sid]);
 
 $belumSiap = [];
 if (trim((string) $sekolah['nama']) === '') {

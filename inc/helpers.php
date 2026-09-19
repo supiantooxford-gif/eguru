@@ -1192,6 +1192,77 @@ function absensi_rekap(int $kelasId, int $mapelId, int $taId, int $semId, ?strin
     return $out;
 }
 
+// ------------------------------------------------------------------ kenaikan kelas & kelulusan
+
+/** Status siswa: kunci => label. */
+function status_siswa_list(): array
+{
+    return ['aktif' => 'Aktif', 'lulus' => 'Lulus'];
+}
+
+function status_siswa(?string $status): string
+{
+    $st = (string) $status;
+    return status_siswa_list()[$st] ?? 'Aktif';
+}
+
+/** Benar bila kolom `status` sudah ada (basis data lama belum tentu punya). */
+function ada_kolom_status_siswa(): bool
+{
+    static $ada = null;
+    if ($ada === null) {
+        $ada = false;
+        foreach (all("PRAGMA table_info(siswa)") as $r) {
+            if (strcasecmp((string) $r['name'], 'status') === 0) {
+                $ada = true;
+                break;
+            }
+        }
+    }
+    return $ada;
+}
+
+/** Daftar siswa aktif pada satu kelas (status apa pun: aktif maupun lulus). */
+function siswa_kelas_status(int $kelasId): array
+{
+    $sid = sekolah_id();
+    if ($kelasId <= 0 || $sid <= 0) {
+        return [];
+    }
+    return all('SELECT s.*, k.nama AS kelas_nama FROM siswa s LEFT JOIN kelas k ON k.id = s.kelas_id
+                WHERE s.kelas_id = ? AND s.sekolah_id = ? AND s.aktif = 1 ORDER BY s.nama', [$kelasId, $sid]);
+}
+
+/** Riwayat kenaikan/kelulusan sebuah sekolah (terbaru lebih dahulu). */
+function kenaikan_riwayat(int $limit = 100): array
+{
+    $sid = sekolah_id();
+    if ($sid <= 0) {
+        return [];
+    }
+    return all('SELECT r.*, s.nama AS siswa_nama, s.nis,
+                       kd.nama AS dari_kelas, kk.nama AS ke_kelas
+                FROM siswa_kenaikan r
+                LEFT JOIN siswa s ON s.id = r.siswa_id
+                LEFT JOIN kelas kd ON kd.id = r.dari_kelas_id
+                LEFT JOIN kelas kk ON kk.id = r.ke_kelas_id
+                WHERE r.sekolah_id = ?
+                ORDER BY r.dibuat DESC, r.id DESC LIMIT ' . max(1, min(2000, $limit)), [$sid]);
+}
+
+/** Jumlah siswa berstatus tertentu (mis. lulus) pada sekolah aktif. */
+function jumlah_siswa_status(string $status): int
+{
+    $sid = sekolah_id();
+    if ($sid <= 0) {
+        return 0;
+    }
+    if ($status === 'lulus') {
+        return (int) val("SELECT COUNT(*) FROM siswa WHERE sekolah_id = ? AND aktif = 0 AND status = 'lulus'", [$sid], 0);
+    }
+    return (int) val("SELECT COUNT(*) FROM siswa WHERE sekolah_id = ? AND aktif = 1 AND (status = 'aktif' OR status IS NULL)", [$sid], 0);
+}
+
 // ------------------------------------------------------------------ jurnal & kasus
 
 /**
@@ -1264,6 +1335,7 @@ function require_login(): array
         $_SESSION['redirect_after'] = $_SERVER['REQUEST_URI'] ?? '';
         redirect('login.php');
     }
+    log_sesi_ping();   // perbarui "terakhir aktif" agar daftar online akurat (maks 1x/60 detik)
     return $u;
 }
 
@@ -1318,17 +1390,17 @@ function require_admin(): array
     return $u;
 }
 
-/** Boleh mengubah identitas & aturan penilaian (super dalam konteks, atau kepala). */
+/** Boleh mengubah identitas & aturan penilaian (super dalam konteks, kepala, atau Admin Operator). */
 function boleh_pengaturan(): bool
 {
-    return is_kepala() || (is_super() && current_sekolah() !== null);
+    return is_kepala() || is_operator() || (is_super() && current_sekolah() !== null);
 }
 
 function require_pengaturan(): array
 {
     $u = require_login();
     if (!boleh_pengaturan()) {
-        tolak403('Pengaturan aplikasi hanya untuk Super Admin (dalam konteks sekolah) dan Kepala Sekolah/Madrasah.');
+        tolak403('Pengaturan aplikasi hanya untuk Super Admin (dalam konteks sekolah), Kepala Sekolah/Madrasah, dan Admin Operator.');
     }
     require_sekolah();
     return $u;
@@ -1366,15 +1438,28 @@ function require_transaksi(): array
     return $u;
 }
 
-/** Melihat/mencetak data satu sekolah: semua peran kecuali guru (yang hanya kelas/mapelnya). */
-function require_staf(): array
+/**
+ * Melihat/mencetak data satu sekolah: semua peran kecuali guru (yang hanya kelas/mapelnya).
+ * Pesan 403 dapat disesuaikan agar jelas bagi pengguna halaman tertentu.
+ */
+function require_staf(string $pesan = ''): array
 {
     $u = require_login();
     if ($u['role'] === 'guru') {
-        tolak403('Halaman ini tidak tersedia untuk akun guru.');
+        tolak403($pesan !== '' ? $pesan : 'Halaman ini tidak tersedia untuk akun guru.');
     }
     require_sekolah();
     return $u;
+}
+
+/**
+ * Daftar Data Guru — memuat nama pengguna (akun login) guru lain, jadi akun GURU DILARANG
+ * membukanya (permintaan pemilik: "hapus menu data guru dari akun guru agar tidak bisa melihat
+ * akun guru lainnya"). Kepala Sekolah/Madrasah, Super Admin, dan Admin Operator tetap boleh.
+ */
+function require_data_guru(): array
+{
+    return require_staf('Daftar Data Guru (termasuk akun login guru lain) hanya untuk Super Admin, Kepala Sekolah/Madrasah, dan Admin Operator.');
 }
 
 // ------------------------------------------------------------------ unggah berkas (media proxy)
@@ -1475,10 +1560,26 @@ function validasi_foto(string $namaAsli, int $ukuran, string $tmpPath): array
     return ['ok' => true];
 }
 
-/** Avatar inisial nama (dipakai pada tabel & sidebar). */
-function avatar_html(string $nama, int $size = 34, string $kelas = 'avatar'): string
+/** URL foto profil pengguna (null bila belum diunggah). */
+function foto_user(?array $u): ?string
+{
+    $f = $u['foto'] ?? null;
+    return ($f !== null && trim((string) $f) !== '') ? trim((string) $f) : null;
+}
+
+/**
+ * Avatar pengguna: foto profil bila ada, kalau tidak inisial nama dengan gradien.
+ * $foto boleh dikosongkan — pemanggil lama (yang hanya punya nama) tetap bekerja.
+ */
+function avatar_html(string $nama, int $size = 34, string $kelas = 'avatar', ?string $foto = null): string
 {
     $nama = trim($nama);
+    $style = 'width:' . $size . 'px;height:' . $size . 'px;font-size:' . max(11, (int) round($size / 2.6)) . 'px';
+    if ($foto !== null && trim($foto) !== '') {
+        return '<span class="' . e($kelas) . ' avatar-img" style="' . $style . '">'
+            . '<img src="' . e(trim($foto)) . '" alt="Foto ' . e($nama !== '' ? $nama : 'pengguna') . '" loading="lazy">'
+            . '</span>';
+    }
     $bagian = preg_split('/\s+/', $nama !== '' ? $nama : 'U') ?: ['U'];
     $inisial = '';
     foreach ($bagian as $b) {
@@ -1486,8 +1587,13 @@ function avatar_html(string $nama, int $size = 34, string $kelas = 'avatar'): st
             $inisial .= strtoupper(substr($b, 0, 1));
         }
     }
-    $style = 'width:' . $size . 'px;height:' . $size . 'px;font-size:' . max(11, (int) round($size / 2.6)) . 'px';
     return '<span class="' . e($kelas) . '" style="' . $style . '">' . e($inisial !== '' ? $inisial : 'U') . '</span>';
+}
+
+/** Avatar dari baris pengguna (nama + foto sekaligus). */
+function avatar_user(?array $u, int $size = 34, string $kelas = 'avatar'): string
+{
+    return avatar_html((string) ($u['nama'] ?? ''), $size, $kelas, foto_user($u));
 }
 
 // ------------------------------------------------------------------ NIP & nama pengguna
@@ -1537,6 +1643,286 @@ function guru_sandi_awal(array $guru): string
 {
     $nip = nip_bersih($guru['nip'] ?? '');
     return strlen($nip) >= 6 ? $nip : 'guru123';
+}
+
+// ------------------------------------------------------------------ log aktivitas & pengguna online
+//
+// Halaman Log Aktivitas (Super Admin) menampilkan DUA hal:
+//   1. pengguna yang SEDANG ONLINE  -> tabel `sesi_aktif` (online bila aktif <= 15 menit lalu)
+//   2. RIWAYAT masuk/keluar/gagal masuk -> tabel `log_aktivitas`
+// Semua penulisan log dibungkus try/catch: pencatatan TIDAK BOLEH menggagalkan permintaan pengguna.
+
+/** Jumlah menit tanpa aktivitas sebelum sebuah sesi dianggap tidak online lagi. */
+const LOG_MENIT_ONLINE = 15;
+
+/** Alamat IP pemakai. Aplikasi di belakang proxy, jadi X-Forwarded-For diutamakan. */
+function log_ip(): string
+{
+    $fwd = (string) ($_SERVER['HTTP_X_FORWARDED_FOR'] ?? '');
+    if ($fwd !== '') {
+        foreach (explode(',', $fwd) as $bagian) {
+            $ip = trim($bagian);
+            if (filter_var($ip, FILTER_VALIDATE_IP) !== false) {
+                return $ip;
+            }
+        }
+    }
+    $ip = trim((string) ($_SERVER['REMOTE_ADDR'] ?? ''));
+    return $ip === '' ? '-' : substr($ip, 0, 45);
+}
+
+/** Nama peramban + sistem operasi dari User-Agent (ringkas, ditampilkan apa adanya). */
+function log_peramban(?string $ua = null): string
+{
+    $ua = trim($ua === null ? (string) ($_SERVER['HTTP_USER_AGENT'] ?? '') : $ua);
+    if ($ua === '') {
+        return 'Tidak dikenal';
+    }
+
+    // Urutan penting: Edge & Opera memuat kata "Chrome", jadi diperiksa lebih dulu.
+    $nama = 'Peramban lain';
+    $pola = [
+        ['/Edg(?:e|A|iOS)?\/([\d.]+)/i', 'Edge'],
+        ['/OPR\/([\d.]+)/i', 'Opera'],
+        ['/SamsungBrowser\/([\d.]+)/i', 'Samsung Internet'],
+        ['/Firefox\/([\d.]+)/i', 'Firefox'],
+        ['/CriOS\/([\d.]+)/i', 'Chrome'],
+        ['/Chrome\/([\d.]+)/i', 'Chrome'],
+        ['/Version\/([\d.]+).*Safari/i', 'Safari'],
+        ['/Safari\/([\d.]+)/i', 'Safari'],
+    ];
+    foreach ($pola as $p) {
+        if (preg_match($p[0], $ua, $m) === 1) {
+            $versi = (string) ($m[1] ?? '');
+            $utama = $versi !== '' ? explode('.', $versi)[0] : '';
+            $nama = $p[1] . ($utama !== '' ? ' ' . $utama : '');
+            break;
+        }
+    }
+
+    $sistem = '';
+    if (stripos($ua, 'Android') !== false) {
+        $sistem = 'Android';
+    } elseif (preg_match('/iPhone|iPad|iPod/i', $ua) === 1) {
+        $sistem = 'iPhone/iPad';
+    } elseif (stripos($ua, 'Windows') !== false) {
+        $sistem = 'Windows';
+    } elseif (stripos($ua, 'Mac OS X') !== false || stripos($ua, 'Macintosh') !== false) {
+        $sistem = 'macOS';
+    } elseif (stripos($ua, 'CrOS') !== false) {
+        $sistem = 'ChromeOS';
+    } elseif (stripos($ua, 'Linux') !== false) {
+        $sistem = 'Linux';
+    }
+    $hp = preg_match('/Mobile|Android|iPhone|iPad|iPod/i', $ua) === 1 ? 'HP' : 'Komputer';
+
+    return $nama . ($sistem !== '' ? ' · ' . $sistem : '') . ' · ' . $hp;
+}
+
+/** Penanda sesi (hash) — id sesi mentah tidak pernah disimpan di basis data. */
+function log_sesi_id(): string
+{
+    return substr(hash('sha256', session_id()), 0, 32);
+}
+
+/** Tanggal & jam yang mudah dibaca, mis. "15 Juni 2026 · 14:32:07". */
+function waktu_id(?string $dt): string
+{
+    $dt = trim((string) $dt);
+    if ($dt === '') {
+        return '-';
+    }
+    $ts = strtotime($dt);
+    if ($ts === false) {
+        return $dt;
+    }
+    return tanggal_id(date('Y-m-d', $ts)) . ' &middot; ' . date('H:i:s', $ts);
+}
+
+/**
+ * Catat satu aktivitas ke log_aktivitas.
+ *
+ * @param string     $aktivitas  'masuk' | 'keluar' | 'gagal'
+ * @param array|null $user       baris users (boleh dari current_user()) — null bila nama tidak dikenal
+ * @param string     $namaManual nama yang diketik saat masuk (untuk percobaan gagal)
+ * @param string     $keterangan alasan singkat (mis. "kata sandi salah")
+ */
+function log_aktivitas_catat(string $aktivitas, ?array $user = null, string $namaManual = '', string $keterangan = ''): void
+{
+    try {
+        $uid = $user ? (int) ($user['id'] ?? 0) : 0;
+        $nama = $user ? trim((string) ($user['nama'] ?? '')) : '';
+        if ($nama === '') {
+            $nama = $namaManual !== '' ? $namaManual : '(nama tidak dikenal)';
+        }
+        $username = $user ? trim((string) ($user['username'] ?? '')) : $namaManual;
+        $role = $user ? (string) ($user['role'] ?? '') : '';
+        $sid = $user ? (int) ($user['sekolah_id'] ?? 0) : 0;
+        $sekolah = '';
+        if ($sid > 0) {
+            $sekolah = trim((string) ($user['sekolah_nama'] ?? ''));
+            if ($sekolah === '') {
+                $sekolah = (string) val('SELECT nama FROM sekolah WHERE id = ?', [$sid], '');
+            }
+        }
+        q('INSERT INTO log_aktivitas (user_id, nama, username, role, sekolah_id, sekolah, aktivitas, keterangan, ip, peramban, waktu)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)', [
+            $uid > 0 ? $uid : null,
+            $nama,
+            $username !== '' ? $username : null,
+            $role !== '' ? $role : null,
+            $sid > 0 ? $sid : null,
+            $sekolah !== '' ? $sekolah : null,
+            $aktivitas,
+            $keterangan !== '' ? $keterangan : null,
+            log_ip(),
+            log_peramban(),
+            date('Y-m-d H:i:s'),
+        ]);
+    } catch (Throwable $e) {
+        // Diabaikan dengan sengaja: kegagalan mencatat log tidak boleh menghalangi pengguna.
+    }
+}
+
+/** Mulai sesi: daftarkan sebagai pengguna online + catat aktivitas "masuk". */
+function log_sesi_mulai(array $u): void
+{
+    $_SESSION['__log_ping'] = time();
+    try {
+        $sid = log_sesi_id();
+        $now = date('Y-m-d H:i:s');
+        // Sesi dengan penanda sama (mis. masuk ulang di peramban yang sama) dimulai dari awal.
+        q('DELETE FROM sesi_aktif WHERE id = ?', [$sid]);
+        q('INSERT INTO sesi_aktif (id, user_id, ip, peramban, mulai, terakhir) VALUES (?,?,?,?,?,?)',
+            [$sid, (int) $u['id'], log_ip(), log_peramban(), $now, $now]);
+    } catch (Throwable $e) {
+    }
+    log_aktivitas_catat('masuk', $u);
+}
+
+/**
+ * Perbarui waktu aktif sesi (dipanggil dari require_login()).
+ * Ditulis paling sering sekali per 60 detik agar tidak membebani basis data.
+ */
+function log_sesi_ping(): void
+{
+    $u = current_user();
+    if (!$u) {
+        return;
+    }
+    $kini = time();
+    if ($kini - (int) ($_SESSION['__log_ping'] ?? 0) < 60) {
+        return;
+    }
+    $_SESSION['__log_ping'] = $kini;
+    try {
+        $sid = log_sesi_id();
+        $now = date('Y-m-d H:i:s');
+        $ip = log_ip();
+        $pb = log_peramban();
+        // Sesi lama (dibuat sebelum fitur ini ada) atau sesi baru didaftarkan sekalian.
+        q('INSERT OR IGNORE INTO sesi_aktif (id, user_id, ip, peramban, mulai, terakhir) VALUES (?,?,?,?,?,?)',
+            [$sid, (int) $u['id'], $ip, $pb, $now, $now]);
+        q('UPDATE sesi_aktif SET user_id = ?, terakhir = ?, ip = ?, peramban = ? WHERE id = ?',
+            [(int) $u['id'], $now, $ip, $pb, $sid]);
+    } catch (Throwable $e) {
+    }
+}
+
+/** Akhiri sesi: catat aktivitas "keluar" + hilangkan dari daftar online. */
+function log_sesi_selesai(?array $u): void
+{
+    try {
+        if ($u) {
+            log_aktivitas_catat('keluar', $u);
+        }
+        q('DELETE FROM sesi_aktif WHERE id = ?', [log_sesi_id()]);
+    } catch (Throwable $e) {
+    }
+}
+
+/**
+ * Batasi riwayat percobaan masuk yang GAGAL (halaman login publik, bisa dipicu siapa saja).
+ * Hanya `$maks` baris terbaru yang disimpan; riwayat masuk/keluar tidak tersentuh.
+ */
+function log_batasi_gagal(int $maks = 2000): void
+{
+    try {
+        $jml = (int) val('SELECT COUNT(*) FROM log_aktivitas WHERE aktivitas = "gagal"', [], 0);
+        if ($jml > $maks) {
+            q('DELETE FROM log_aktivitas WHERE aktivitas = "gagal" AND id NOT IN (
+                   SELECT id FROM log_aktivitas WHERE aktivitas = "gagal" ORDER BY id DESC LIMIT ?)', [$maks]);
+        }
+    } catch (Throwable $e) {
+    }
+}
+
+/** Catat percobaan masuk yang gagal + jaga jumlah barisnya. */
+function log_gagal(?array $user, string $namaManual, string $keterangan): void
+{
+    log_aktivitas_catat('gagal', $user, $namaManual, $keterangan);
+    log_batasi_gagal();
+}
+
+/** Buang catatan sesi yang sudah lama tidak aktif (bukan penghapusan riwayat). */
+function log_sesi_bersihkan(int $hari = 1): int
+{
+    try {
+        $st = q('DELETE FROM sesi_aktif WHERE terakhir < ?', [date('Y-m-d H:i:s', time() - max(1, $hari) * 86400)]);
+        return $st->rowCount();
+    } catch (Throwable $e) {
+        return 0;
+    }
+}
+
+/**
+ * Syarat SQL sebuah sesi dianggap "sedang online".
+ * Hanya sesi dari akun yang MASIH aktif dan sekolahnya masih aktif & disetujui: akun/sekolah yang
+ * sudah dinonaktifkan tidak lagi dihitung online walau sesinya belum sempat ditutup (konsisten
+ * dengan aturan "sekolah nonaktif hilang dari ringkasan"). Akun super (sekolah_id NULL) selalu boleh.
+ */
+function log_online_syarat(string $alias = 'sx', string $aliasUser = 'u'): string
+{
+    return $alias . '.terakhir >= ? AND ' . $aliasUser . '.aktif = 1
+        AND (' . $aliasUser . '.sekolah_id IS NULL OR EXISTS (
+                SELECT 1 FROM sekolah sk WHERE sk.id = ' . $aliasUser . '.sekolah_id
+                  AND sk.aktif = 1 AND sk.verifikasi = "disetujui"))';
+}
+
+/** Pengguna yang dianggap MASIH online (aktif dalam LOG_MENIT_ONLINE menit terakhir). */
+function log_online(int $menit = LOG_MENIT_ONLINE): array
+{
+    $batas = date('Y-m-d H:i:s', time() - max(1, $menit) * 60);
+    return all('SELECT sx.id AS sesi, sx.ip, sx.peramban, sx.mulai, sx.terakhir,
+                       u.id AS user_id, u.nama, u.username, u.role, u.sekolah_id, u.foto,
+                       s.nama AS sekolah_nama
+                FROM sesi_aktif sx
+                JOIN users u ON u.id = sx.user_id
+                LEFT JOIN sekolah s ON s.id = u.sekolah_id
+                WHERE ' . log_online_syarat() . '
+                ORDER BY sx.terakhir DESC, u.nama', [$batas]);
+}
+
+/** Berapa pengguna yang sedang online (dipakai lencana pada menu sidebar). */
+function log_jumlah_online(int $menit = LOG_MENIT_ONLINE): int
+{
+    try {
+        $batas = date('Y-m-d H:i:s', time() - max(1, $menit) * 60);
+        return (int) val('SELECT COUNT(*) FROM sesi_aktif sx JOIN users u ON u.id = sx.user_id
+                          WHERE ' . log_online_syarat(), [$batas], 0);
+    } catch (Throwable $e) {
+        return 0;
+    }
+}
+
+/** Ringkasan asal sekolah/madrasah seorang pengguna pada daftar log. */
+function log_sekolah_label(?string $role, ?string $sekolah): string
+{
+    $sekolah = trim((string) $sekolah);
+    if ($sekolah !== '') {
+        return $sekolah;
+    }
+    return (string) $role === 'super' ? 'Lintas sekolah/madrasah' : '-';
 }
 
 // ------------------------------------------------------------------ ekspor CSV

@@ -16,7 +16,7 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/helpers.php'; // untuk setting_default() saat seed (tidak ada query saat di-include)
 
 /** Naikkan angka ini setiap kali skema berubah agar migrasi/seed ikut berjalan. */
-const SCHEMA_VERSION = '3';
+const SCHEMA_VERSION = '6';
 
 function db(): PDO
 {
@@ -256,6 +256,7 @@ function ensure_schema(PDO $pdo): void
             nama TEXT NOT NULL,
             role TEXT NOT NULL DEFAULT "guru",
             guru_id INTEGER REFERENCES guru(id) ON DELETE SET NULL,
+            foto TEXT,
             aktif INTEGER NOT NULL DEFAULT 1,
             login_terakhir TEXT,
             dibuat TEXT
@@ -308,6 +309,8 @@ function ensure_schema(PDO $pdo): void
             telepon TEXT,
             alamat TEXT,
             aktif INTEGER NOT NULL DEFAULT 1,
+            status TEXT NOT NULL DEFAULT "aktif",
+            tanggal_status TEXT,
             dibuat TEXT
         )');
 
@@ -396,6 +399,56 @@ function ensure_schema(PDO $pdo): void
             dibuat_oleh INTEGER
         )');
 
+        // ---------------------------------------------------------------- kenaikan kelas & kelulusan (skema v6)
+        // Riwayat proses naik kelas / kelulusan siswa. Disimpan sebagai riwayat agar perubahan
+        // kelas seorang siswa dapat ditelusuri (dan dibatalkan bila salah proses).
+        $pdo->exec('CREATE TABLE IF NOT EXISTS siswa_kenaikan (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sekolah_id INTEGER NOT NULL DEFAULT 1,
+            siswa_id INTEGER REFERENCES siswa(id) ON DELETE CASCADE,
+            dari_kelas_id INTEGER REFERENCES kelas(id) ON DELETE SET NULL,
+            ke_kelas_id INTEGER REFERENCES kelas(id) ON DELETE SET NULL,
+            jenis TEXT NOT NULL DEFAULT "naik",
+            ta_id INTEGER,
+            ta_nama TEXT,
+            catatan TEXT,
+            diproses_oleh INTEGER,
+            diproses_nama TEXT,
+            dibatalkan TEXT,
+            dibuat TEXT NOT NULL
+        )');
+
+        // ---------------------------------------------------------------- log aktivitas & sesi (skema v5)
+        // Riwayat masuk/keluar/gagal masuk + daftar pengguna yang sedang online, dipakai
+        // halaman Log Aktivitas (khusus Super Admin). Nama akun & sekolah disimpan sebagai
+        // SNAPSHOT supaya riwayat tetap terbaca walau akun/sekolahnya kelak dihapus
+        // (relasinya SET NULL, bukan CASCADE).
+        $pdo->exec('CREATE TABLE IF NOT EXISTS log_aktivitas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            nama TEXT,
+            username TEXT,
+            role TEXT,
+            sekolah_id INTEGER REFERENCES sekolah(id) ON DELETE SET NULL,
+            sekolah TEXT,
+            aktivitas TEXT NOT NULL,
+            keterangan TEXT,
+            ip TEXT,
+            peramban TEXT,
+            waktu TEXT NOT NULL
+        )');
+
+        // Sesi yang masih berjalan → dasar daftar "sedang online". `id` adalah HASH id sesi;
+        // id sesi yang sebenarnya tidak pernah disimpan.
+        $pdo->exec('CREATE TABLE IF NOT EXISTS sesi_aktif (
+            id TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            ip TEXT,
+            peramban TEXT,
+            mulai TEXT NOT NULL,
+            terakhir TEXT NOT NULL
+        )');
+
         $pdo->exec('CREATE TABLE IF NOT EXISTS kasus (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             sekolah_id INTEGER NOT NULL DEFAULT 1,
@@ -431,6 +484,17 @@ function ensure_schema(PDO $pdo): void
             if (db_has_table($pdo, $tabel)) {
                 db_add_column($pdo, $tabel, 'sekolah_id', $def);
             }
+        }
+
+        // Foto profil pengguna (skema v4): URL CDN hasil media proxy platform.
+        if (db_has_table($pdo, 'users')) {
+            db_add_column($pdo, 'users', 'foto', 'TEXT');
+        }
+
+        // Kenaikan kelas & kelulusan (skema v6): status siswa + waktu perubahan statusnya.
+        if (db_has_table($pdo, 'siswa')) {
+            db_add_column($pdo, 'siswa', 'status', 'TEXT NOT NULL DEFAULT "aktif"');
+            db_add_column($pdo, 'siswa', 'tanggal_status', 'TEXT');
         }
 
         // Jurnal Harian: kolom kehadiran (S,I,A,B,T) + keterangan (skema v2).
@@ -560,6 +624,12 @@ function ensure_schema(PDO $pdo): void
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_jurnal_guru ON jurnal(guru_id, tanggal)');
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_kasus_tanggal ON kasus(sekolah_id, tanggal)');
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_users_sekolah ON users(sekolah_id, role)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_siswa_status ON siswa(sekolah_id, status, kelas_id)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_kenaikan_siswa ON siswa_kenaikan(siswa_id)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_kenaikan_sekolah ON siswa_kenaikan(sekolah_id, dibuat)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_log_waktu ON log_aktivitas(waktu)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_log_aktivitas ON log_aktivitas(aktivitas)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_sesi_aktif_terakhir ON sesi_aktif(terakhir)');
 
         // ---------------------------------------------------------------- data awal
         $now = date('Y-m-d H:i:s');

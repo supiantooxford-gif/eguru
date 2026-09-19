@@ -165,7 +165,6 @@ $sisa = max(0, 3 - (int) $_SESSION['daftar_jumlah']);
         <p><?= e(APP_NAME) ?> &middot; <?= e(APP_SUB) ?> &middot; satu aplikasi melayani banyak sekolah/madrasah</p>
       </div>
       <div class="daftar-head-kanan">
-        <span class="pill pill-gold"><?= jumlah_sekolah() ?> sekolah/madrasah aktif</span>
         <a class="btn btn-ghost btn-sm" href="login.php"><?= ikon('lock', 15) ?> Halaman Masuk</a>
       </div>
     </div>
@@ -235,9 +234,8 @@ $sisa = max(0, 3 - (int) $_SESSION['daftar_jumlah']);
         <div class="card-head">
           <div>
             <h2>Formulir Pendaftaran</h2>
-            <p>Isi data sekolah/madrasah dan akun pengelolanya. Login dapat dipakai setelah pendaftaran disetujui Super Admin.</p>
+            <p>Isi data sekolah/madrasah dan akun pengelolanya. Login dapat dipakai setelah pendaftaran disetujui Admin.</p>
           </div>
-          <span class="chip">Sisa kuota sesi: <?= $sisa ?> dari 3</span>
         </div>
 
         <div class="grid g3 mb16" style="gap:12px">
@@ -261,7 +259,7 @@ $sisa = max(0, 3 - (int) $_SESSION['daftar_jumlah']);
                 <div>
                   <label class="f" for="nama">Nama Sekolah/Madrasah *</label>
                   <input type="text" id="nama" name="nama" value="<?= e($nilai['nama']) ?>" required
-                         placeholder="mis. MTsS. Sirojuth Tholibiin Mootilango">
+                         placeholder="mis. MA. Sirojuth Tholibiin Mootilango">
                 </div>
                 <div>
                   <label class="f" for="jenis">Jenis *</label>

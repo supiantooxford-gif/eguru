@@ -129,6 +129,10 @@ $cari = trim((string) ($_GET['cari'] ?? ''));
 $w = ['ks.sekolah_id = ?'];
 $p = [sekolah_id()];
 if (is_guru()) {
+    // Guru HANYA melihat catatan pelanggaran yang IA buat sendiri (permintaan pemilik) —
+    // bukan lagi seluruh catatan pada kelas yang diajar (yang bisa ditulis guru lain).
+    $w[] = 'ks.guru_id = ?';
+    $p[] = guru_id_saya();
     $kelasGuru = array_map('intval', array_column(kelas_diampu(), 'id'));
     if (!$kelasGuru) {
         $w[] = '1 = 0';
@@ -161,7 +165,14 @@ $rows = all('SELECT ks.*, s.nama AS siswa_nama, s.nis, k.nama AS kelas_nama, g.n
     . $where . ' ORDER BY ks.tanggal DESC, ks.id DESC LIMIT 400', $p);
 
 $ringkas = ['baru' => 0, 'proses' => 0, 'selesai' => 0];
-foreach (all('SELECT status, COUNT(*) AS jml FROM kasus WHERE sekolah_id = ? GROUP BY status', [sekolah_id()]) as $r) {
+// Kartu ringkasan status memakai aturan yang SAMA dengan daftar (guru = catatannya sendiri saja).
+$wRingkas = ['sekolah_id = ?'];
+$pRingkas = [sekolah_id()];
+if (is_guru()) {
+    $wRingkas[] = 'guru_id = ?';
+    $pRingkas[] = guru_id_saya();
+}
+foreach (all('SELECT status, COUNT(*) AS jml FROM kasus WHERE ' . implode(' AND ', $wRingkas) . ' GROUP BY status', $pRingkas) as $r) {
     if (isset($ringkas[(string) $r['status']])) {
         $ringkas[(string) $r['status']] = (int) $r['jml'];
     }
@@ -173,6 +184,11 @@ if ($edit && is_guru() && (int) $edit['guru_id'] !== guru_id_saya()) {
     tolak403('Catatan kasus ini bukan Anda yang membuat.');
 }
 $siswaPilihan = kasus_siswa_pilihan();
+
+// Filter yang sedang aktif → dipakai tombol "Cetak Laporan" supaya lembar cetak sama dengan layar.
+$qCetak = array_filter([
+    'kelas' => $fKelas ?: null, 'status' => $fStatus ?: null, 'jenis' => $fJenis ?: null, 'cari' => $cari ?: null,
+]);
 
 page_top('Catatan Pelanggaran Siswa');
 ?>
@@ -196,7 +212,7 @@ page_top('Catatan Pelanggaran Siswa');
   <div class="card">
     <div class="card-head">
       <div>
-        <h2><?= $edit ? 'Ubah Catatan Kasus' : 'Catat Kasus Baru' ?></h2>
+        <h2><?= $edit ? 'Ubah Catatan Pelanggaran' : 'Catat Pelanggaran Baru' ?></h2>
         <p>Catat peristiwa penting siswa beserta penanganannya sebagai bukti pembinaan.</p>
       </div>
       <?php if ($edit): ?><a class="btn btn-ghost btn-sm" href="kasus.php">Batal</a><?php endif; ?>
@@ -283,7 +299,10 @@ page_top('Catatan Pelanggaran Siswa');
 
 <div class="card">
   <div class="card-head">
-    <div><h2>Daftar Catatan Kasus</h2><p><span id="tblCount"><?= count($rows) ?></span> catatan ditemukan</p></div>
+    <div><h2>Daftar Catatan Pelanggaran</h2><p><span id="tblCount"><?= count($rows) ?></span> catatan ditemukan<?= $qCetak ? ' (sesuai filter)' : '' ?></p></div>
+    <div class="flex">
+      <a class="btn btn-ghost" href="cetak_kasus.php?<?= e(http_build_query($qCetak)) ?>" target="_blank"><?= ikon('print', 16) ?> Cetak Laporan</a>
+    </div>
   </div>
 
   <form class="filterbar mb16" method="get">

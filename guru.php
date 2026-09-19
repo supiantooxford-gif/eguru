@@ -1,12 +1,14 @@
 <?php
 /**
  * Data Guru — nama guru, kelas yang diajar, dan mata pelajaran yang dipegang.
- * Semua peran dapat melihat; pengubahan hanya Super Admin & Admin Operator.
+ * Halaman ini juga menampilkan nama pengguna (akun login) guru, sehingga akun GURU DILARANG
+ * membukanya (permintaan pemilik) — lihat require_data_guru().
+ * Pengubahan hanya Super Admin & Admin Operator; cetak tersedia untuk keduanya.
  */
 declare(strict_types=1);
 require_once __DIR__ . '/inc/init.php';
 
-$u = require_sekolah(); // super admin tanpa konteks dialihkan ke Kelola Sekolah
+$u = require_data_guru(); // super admin tanpa konteks dialihkan ke Kelola Sekolah; guru 403
 $bolehUbah = boleh_master();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -88,11 +90,21 @@ $rows = all('SELECT g.*,
     (SELECT GROUP_CONCAT(m.nama, "||") FROM guru_mapel gm JOIN mapel m ON m.id = gm.mapel_id WHERE gm.guru_id = g.id) AS mapel_nama,
     (SELECT GROUP_CONCAT(k.nama, "||") FROM guru_kelas gk JOIN kelas k ON k.id = gk.kelas_id WHERE gk.guru_id = g.id) AS kelas_nama,
     (SELECT username FROM users us WHERE us.guru_id = g.id LIMIT 1) AS username,
+    (SELECT foto FROM users us WHERE us.guru_id = g.id AND us.foto IS NOT NULL AND us.foto <> "" LIMIT 1) AS foto,
     (SELECT COUNT(*) FROM jurnal j WHERE j.guru_id = g.id) AS jml_jurnal
     FROM guru g' . $where . ' ORDER BY g.nama', $p);
 
 $total = (int) val('SELECT COUNT(*) FROM guru WHERE aktif = 1 AND sekolah_id = ?', [sekolah_id()], 0);
 $totalAkun = (int) val('SELECT COUNT(*) FROM users WHERE role = "guru" AND sekolah_id = ?', [sekolah_id()], 0);
+
+// Parameter filter yang diwariskan ke lembar cetak (hanya bila pengguna berhak mencetak).
+$qCetak = array_filter([
+    'cari' => $cari !== '' ? $cari : null,
+    'mapel' => $fMapel > 0 ? $fMapel : null,
+    'kelas' => $fKelas > 0 ? $fKelas : null,
+    'akun' => $fAkun !== '' ? $fAkun : null,
+    'status' => $fStatus !== '' ? $fStatus : null,
+]);
 
 page_top('Data Guru');
 ?>
@@ -122,6 +134,8 @@ page_top('Data Guru');
       <?php if ($bolehUbah): ?>
         <a class="btn btn-primary" href="guru_edit.php"><?= ikon('plus', 16) ?> Tambah Guru</a>
         <a class="btn btn-ghost" href="guru_import.php"><?= ikon('upload', 16) ?> Impor Excel/CSV</a>
+        <?php // Cetak Data Guru: Super Admin (dalam konteks sekolah) & Admin Operator. Mengikuti filter aktif. ?>
+        <a class="btn btn-ghost" href="cetak_guru.php?<?= e(http_build_query($qCetak)) ?>"><?= ikon('print', 16) ?> Cetak Data Guru</a>
       <?php endif; ?>
     </div>
   </div>
@@ -195,7 +209,7 @@ page_top('Data Guru');
           <tr>
             <td>
               <span class="mini-avatar">
-                <?= avatar_html((string) $g['nama'], 34) ?>
+                <?= avatar_html((string) $g['nama'], 34, 'avatar', $g['foto'] !== null ? (string) $g['foto'] : null) ?>
                 <span>
                   <b><?= e((string) $g['nama']) ?></b>
                   <span class="tbl-sub"><?= e((string) ($g['jabatan'] ?: '-')) ?><?= $g['jenis_kelamin'] ? ' &middot; ' . e((string) $g['jenis_kelamin']) : '' ?></span>

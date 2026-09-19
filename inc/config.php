@@ -2,14 +2,15 @@
 /**
  * Konfigurasi dasar aplikasi e-GURU (Administrasi Guru Digital).
  *
- * Aplikasi SINGLE-SEKOLAH: satu instalasi dipakai satu sekolah/madrasah.
- * Identitas sekolah, tahun ajaran, semester, dan kelas diatur lewat Pengaturan.
+ * Aplikasi MULTI-SEKOLAH (lintas sekolah/madrasah): identitas sekolah & tahun ajaran
+ * disimpan pada tabel `sekolah` (lihat inc/db.php + inc/helpers.php).
+ * Unggahan berkas pengguna (foto profil, logo sekolah) lewat media proxy platform.
  */
 declare(strict_types=1);
 
 define('APP_NAME', 'e-GURU');
 define('APP_SUB', 'Administrasi Guru Digital');
-define('APP_VERSION', '1.0.1');
+define('APP_VERSION', '1.0.4');
 
 // Unggahan berkas (logo sekolah) lewat media proxy platform. Token dibaca server-side
 // dari berkas .vibecoder-media-token dan TIDAK pernah dikirim ke browser.

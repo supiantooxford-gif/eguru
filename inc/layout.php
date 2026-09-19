@@ -70,10 +70,11 @@ function page_top(string $judul, string $sub = ''): void
     $r = peran();
     $super = is_super();
     $sekolah = current_sekolah();
-    $menuSekolah = ['index.php', 'guru.php', 'guru_edit.php', 'guru_import.php', 'siswa.php', 'siswa_edit.php',
-        'siswa_import.php', 'absensi.php', 'absensi_form.php', 'cetak_absensi.php', 'nilai.php', 'cetak_nilai.php',
-        'jurnal.php', 'cetak_jurnal.php', 'kasus.php', 'kelas.php', 'mapel.php', 'tahun_ajaran.php',
-        'pengaturan.php', 'pengguna.php'];
+    $menuSekolah = ['index.php', 'guru.php', 'guru_edit.php', 'guru_import.php', 'cetak_guru.php',
+        'siswa.php', 'siswa_edit.php', 'siswa_import.php', 'cetak_siswa.php',
+        'absensi.php', 'absensi_form.php', 'cetak_absensi.php', 'nilai.php', 'cetak_nilai.php',
+        'jurnal.php', 'cetak_jurnal.php', 'kasus.php', 'cetak_kasus.php', 'kelas.php', 'mapel.php',
+        'tahun_ajaran.php', 'kenaikan.php', 'pengaturan.php', 'pengguna.php'];
     $diSekolah = in_array($here, $menuSekolah, true);
     $menunggu = $super ? jumlah_pendaftaran_menunggu() : 0;
     ?>
@@ -118,6 +119,10 @@ function page_top(string $judul, string $sub = ''): void
         <?php if ($menunggu > 0): ?><span class="pill pill-warn" style="margin-left:auto">baru</span><?php endif; ?>
       </a>
       <a class="nav-item <?= $here === 'pengguna.php' && !$sekolah ? 'on' : '' ?>" href="pengguna.php"><?= ikon('key') ?><span>Akun Super Admin</span></a>
+      <?php $jmlOnline = log_jumlah_online(); ?>
+      <a class="nav-item <?= $here === 'log.php' ? 'on' : '' ?>" href="log.php"><?= ikon('eye') ?><span>Log Aktivitas</span>
+        <?php if ($jmlOnline > 0): ?><span class="pill pill-ok" style="margin-left:auto"><?= (int) $jmlOnline ?> online</span><?php endif; ?>
+      </a>
       <?php if ($sekolah): ?>
         <div class="nav-sec">Sekolah yang Dikelola</div>
         <a class="nav-item <?= $here === 'index.php' && $sekolah ? 'on' : '' ?>" href="index.php?sekolah=1"><?= ikon('dashboard') ?><span>Dashboard Sekolah Ini</span></a>
@@ -131,8 +136,11 @@ function page_top(string $judul, string $sub = ''): void
 
     <?php if ($sekolah && in_array($r, ['kepala', 'operator', 'guru', 'super'], true)): ?>
       <div class="nav-sec">Administrasi</div>
-      <a class="nav-item <?= $here === 'guru.php' ? 'on' : '' ?>" href="guru.php"><?= ikon('users') ?><span>Data Guru</span></a>
-      <a class="nav-item <?= $here === 'siswa.php' ? 'on' : '' ?>" href="siswa.php"><?= ikon('student') ?><span>Data Siswa</span></a>
+      <?php // Data Guru memuat akun login guru lain → TIDAK ditampilkan untuk akun guru (permintaan pemilik). ?>
+      <?php if ($r !== 'guru'): ?>
+        <a class="nav-item <?= in_array($here, ['guru.php', 'cetak_guru.php'], true) ? 'on' : '' ?>" href="guru.php"><?= ikon('users') ?><span>Data Guru</span></a>
+      <?php endif; ?>
+      <a class="nav-item <?= in_array($here, ['siswa.php', 'cetak_siswa.php'], true) ? 'on' : '' ?>" href="siswa.php"><?= ikon('student') ?><span>Data Siswa</span></a>
       <a class="nav-item <?= in_array($here, ['absensi.php', 'absensi_form.php', 'cetak_absensi.php'], true) ? 'on' : '' ?>" href="absensi.php"><?= ikon('clipboard') ?><span>Daftar Hadir Siswa</span></a>
       <a class="nav-item <?= in_array($here, ['nilai.php', 'cetak_nilai.php'], true) ? 'on' : '' ?>" href="nilai.php"><?= ikon('chart') ?><span>Daftar Nilai Siswa</span></a>
       <a class="nav-item <?= in_array($here, ['jurnal.php', 'cetak_jurnal.php'], true) ? 'on' : '' ?>" href="jurnal.php"><?= ikon('book') ?><span>Jurnal Harian Guru</span></a>
@@ -146,6 +154,7 @@ function page_top(string $judul, string $sub = ''): void
       <?php if (boleh_master()): ?>
         <a class="nav-item <?= $here === 'guru_import.php' ? 'on' : '' ?>" href="guru_import.php"><?= ikon('upload') ?><span>Impor Guru</span></a>
         <a class="nav-item <?= $here === 'siswa_import.php' ? 'on' : '' ?>" href="siswa_import.php"><?= ikon('upload') ?><span>Impor Siswa</span></a>
+        <a class="nav-item <?= $here === 'kenaikan.php' ? 'on' : '' ?>" href="kenaikan.php"><?= ikon('switch') ?><span>Kenaikan &amp; Kelulusan</span></a>
       <?php endif; ?>
       <a class="nav-item <?= $here === 'tahun_ajaran.php' ? 'on' : '' ?>" href="tahun_ajaran.php"><?= ikon('calendar') ?><span>Tahun Ajaran &amp; Semester</span></a>
       <?php if (boleh_pengaturan()): ?>
@@ -163,7 +172,7 @@ function page_top(string $judul, string $sub = ''): void
 
   <div class="sidebar-foot">
     <div class="who">
-      <?= avatar_html((string) ($u['nama'] ?? ''), 36) ?>
+      <?= avatar_user($u, 36) ?>
       <div class="who-txt">
         <strong><?= e((string) ($u['nama'] ?? '')) ?></strong>
         <small><?= e(role_label($r)) ?></small>

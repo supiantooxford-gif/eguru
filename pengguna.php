@@ -306,7 +306,15 @@ page_top($lintas ? 'Akun Super Admin' : 'Pengguna & Akun: ' . nama_sekolah_tampi
         <tbody>
         <?php foreach ($users as $us): ?>
           <tr>
-            <td><b><?= e((string) $us['nama']) ?></b><?php if ((int) $us['id'] === $aku): ?><span class="tbl-sub">akun Anda</span><?php endif; ?></td>
+            <td>
+              <span class="mini-avatar">
+                <?= avatar_user($us, 34) ?>
+                <span>
+                  <b><?= e((string) $us['nama']) ?></b>
+                  <?php if ((int) $us['id'] === $aku): ?><span class="tbl-sub">akun Anda</span><?php endif; ?>
+                </span>
+              </span>
+            </td>
             <td class="nowrap"><?= e((string) $us['username']) ?></td>
             <td><span class="pill <?= $us['role'] === 'super' ? 'pill-B' : ($us['role'] === 'guru' ? 'pill-ok' : 'pill-gold') ?>"><?= e(role_label((string) $us['role'])) ?></span></td>
             <?php if (!$lintas): ?><td><?= e((string) ($us['guru_nama'] ?? '-')) ?></td><?php endif; ?>

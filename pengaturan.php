@@ -90,7 +90,7 @@ page_top('Identitas & Pengaturan');
       <input type="hidden" name="aksi" value="simpan">
       <div>
         <label class="f" for="nama_sekolah">Nama <?= e(istilah_sekolah('Sekolah')) ?></label>
-        <input type="text" id="nama_sekolah" name="nama_sekolah" value="<?= e((string) $s['nama_sekolah']) ?>" placeholder="mis. MTsS. Sirojuth Tholibiin Mootilango">
+        <input type="text" id="nama_sekolah" name="nama_sekolah" value="<?= e((string) $s['nama_sekolah']) ?>" placeholder="mis. MA. Sirojuth Tholibiin Mootilango">
       </div>
       <div class="grid g2" style="gap:16px">
         <div>
@@ -195,7 +195,7 @@ page_top('Identitas & Pengaturan');
 
     <div class="card" id="cardLogo">
       <div class="card-head">
-        <div><h2>Logo (Kop Dokumen Cetak)</h2><p>Tampil pada kop daftar nilai, rekap kehadiran, dan jurnal.</p></div>
+        <div><h2>Logo (Kop Dokumen Cetak)</h2><p>Tampil pada kop seluruh dokumen cetak: daftar nilai, rekap kehadiran, jurnal, catatan pelanggaran, serta daftar data guru &amp; siswa.</p></div>
       </div>
       <div class="foto-baris">
         <div class="foto-sisi">
