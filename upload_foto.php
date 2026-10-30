@@ -1,7 +1,13 @@
 <?php
 /**
  * Unggah / hapus FOTO PROFIL pengguna aplikasi (semua peran: Super Admin, Kepala
- * Sekolah/Madrasah, Admin Operator, dan Guru).
+ * Sekolah/Madrasah, Admin Operator, Guru, dan **Pengawas Sekolah/Madrasah**).
+ *
+ * ⚠️ **PENGAWAS**: halaman ini WAJIB terdaftar pada `pengawas_berkas_boleh()` **dan**
+ * `pengawas_berkas_post()` (`inc/helpers.php`). Bila hanya terdaftar pada daftar POST, gerbang
+ * pengawas menolak berkasnya lebih dulu (pemeriksaan berkas dijalankan SEBELUM pemeriksaan POST)
+ * sehingga unggahan foto profil dijawab **403** — persis keluhan pemilik: *"Pada akun pengawas
+ * pastikan pengawas bisa mengunggah foto profil. Karena saat ini fitur itu terkunci"*.
  *
  * Berkas diteruskan ke media proxy platform dari sisi server (media_upload() di inc/helpers.php);
  * token unggah TIDAK pernah dikirim ke browser. Yang disimpan ke basis data hanya URL CDN

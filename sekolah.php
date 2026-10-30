@@ -46,12 +46,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($aksi === 'tambah') {
         $nama = trim((string) ($_POST['nama'] ?? ''));
         $jenis = ((string) ($_POST['jenis'] ?? 'umum')) === 'madrasah' ? 'madrasah' : 'umum';
+        // v49: PILIHAN JENJANG (SD/SMP/SMA/SMK atau MI/MTs/MA/MAK) — pilihannya mengikuti jenis.
+        $jenjang = trim((string) ($_POST['jenjang'] ?? ''));
         $npsn = trim((string) ($_POST['npsn'] ?? ''));
         $alamat = trim((string) ($_POST['alamat'] ?? ''));
         $telepon = trim((string) ($_POST['telepon'] ?? ''));
         $email = trim((string) ($_POST['email'] ?? ''));
         $kepala = trim((string) ($_POST['kepala_sekolah'] ?? ''));
         $nip = nip_bersih($_POST['nip_kepala_sekolah'] ?? '');
+        // v37: identitas lembaga — NSM & alamat per wilayah.
+        // v39: identitas — NAMA + NIP PENGAWAS BINA (permintaan pemilik).
+        $nsm = trim((string) ($_POST['nsm'] ?? ''));
+        $desa = trim((string) ($_POST['desa'] ?? ''));
+        $kecamatan = trim((string) ($_POST['kecamatan'] ?? ''));
+        $kabupaten = trim((string) ($_POST['kabupaten'] ?? ''));
+        $provinsi = trim((string) ($_POST['provinsi'] ?? ''));
+        $pengawasNama = trim((string) ($_POST['pengawas_nama'] ?? ''));
+        $pengawasNip = nip_bersih($_POST['pengawas_nip'] ?? '');
         $admNama = trim((string) ($_POST['admin_nama'] ?? ''));
         $admUser = trim((string) ($_POST['admin_username'] ?? ''));
         $admPass = (string) ($_POST['admin_password'] ?? '');
@@ -60,6 +71,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $galat = [];
         if ($nama === '') {
             $galat[] = 'Nama sekolah/madrasah wajib diisi.';
+        }
+        if ($jenjang !== '' && !jenjang_sah($jenjang, $jenis)) {
+            $galat[] = 'Jenjang "' . $jenjang . '" tidak berlaku untuk jenis lembaga yang dipilih.';
         }
         if ($admNama === '' || $admUser === '' || strlen($admPass) < 6) {
             $galat[] = 'Nama, nama pengguna, dan kata sandi (min. 6 karakter) akun pengelola wajib diisi.';
@@ -77,9 +91,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $now = date('Y-m-d H:i:s');
         db()->exec('BEGIN IMMEDIATE');
         try {
-            q('INSERT INTO sekolah (nama, npsn, alamat, telepon, email, kepala_sekolah, nip_kepala_sekolah, jenis,
-                    verifikasi, aktif, didaftar, ditinjau, dibuat) VALUES (?,?,?,?,?,?,?,?,"disetujui",1,?,?,?)',
-                [$nama, $npsn, $alamat, $telepon, $email, $kepala, $nip, $jenis, $now, $now, $now]);
+            q('INSERT INTO sekolah (nama, npsn, nsm, alamat, desa, kecamatan, kabupaten, provinsi, telepon, email,
+                    website, kepala_sekolah, nip_kepala_sekolah, pengawas_nama, pengawas_nip, jenis, jenjang,
+                    verifikasi, aktif, didaftar, ditinjau, dibuat) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,"disetujui",1,?,?,?)',
+                [$nama, $npsn, $nsm, $alamat, $desa, $kecamatan, $kabupaten, $provinsi, $telepon, $email,
+                 trim((string) ($_POST['website'] ?? '')), $kepala, $nip, $pengawasNama, $pengawasNip,
+                 $jenis, $jenjang, $now, $now, $now]);
             $sid = (int) db()->lastInsertId();
             q('INSERT INTO users (sekolah_id, username, password_hash, nama, role, aktif, dibuat) VALUES (?,?,?,?,?,1,?)',
                 [$sid, $admUser, password_hash($admPass, PASSWORD_DEFAULT), $admNama, $admRole, $now]);
@@ -107,6 +124,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect('sekolah.php');
         }
         $jenis = ((string) ($_POST['jenis'] ?? 'umum')) === 'madrasah' ? 'madrasah' : 'umum';
+        // v49: jenjang hanya ditulis bila medannya benar-benar dikirim (form lama tetap aman); nilai
+        // yang tidak berlaku untuk jenis tersebut dibuang (dikosongkan) — tidak ada nilai yang ditebak.
+        $kirimJenjang = array_key_exists('jenjang', $_POST);
+        $jenjang = trim((string) ($_POST['jenjang'] ?? ''));
+        if ($jenjang !== '' && !jenjang_sah($jenjang, $jenis)) {
+            flash('Jenjang "' . $jenjang . '" tidak berlaku untuk jenis lembaga yang dipilih — jenjang dikosongkan.', 'warn');
+            $jenjang = '';
+        }
         $a = (float) str_replace(',', '.', (string) ($_POST['batas_a'] ?? 90));
         $b = (float) str_replace(',', '.', (string) ($_POST['batas_b'] ?? 80));
         $c = (float) str_replace(',', '.', (string) ($_POST['batas_c'] ?? 70));
@@ -117,12 +142,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash('Ambang predikat harus A > B > C (0-100) dan bobot ASAS 0-100%.', 'err');
             redirect('sekolah.php');
         }
-        q('UPDATE sekolah SET nama=?, jenis=?, npsn=?, alamat=?, telepon=?, email=?, website=?, kepala_sekolah=?, nip_kepala_sekolah=?,
+        q('UPDATE sekolah SET nama=?, jenis=?, '
+            . ($kirimJenjang ? 'jenjang=?, ' : '')
+            . 'npsn=?, nsm=?, alamat=?, desa=?, kecamatan=?, kabupaten=?, provinsi=?,
+             telepon=?, email=?, website=?, kepala_sekolah=?, nip_kepala_sekolah=?,
+             pengawas_nama=?, pengawas_nip=?,
              batas_a=?, batas_b=?, batas_c=?, bobot_asas=?, jumlah_formatif=?, jumlah_sumatif=? WHERE id=?',
-            [$nama, $jenis, trim((string) ($_POST['npsn'] ?? '')), trim((string) ($_POST['alamat'] ?? '')),
+            array_merge([$nama, $jenis], ($kirimJenjang ? [$jenjang] : []), [
+             trim((string) ($_POST['npsn'] ?? '')), trim((string) ($_POST['nsm'] ?? '')),
+             trim((string) ($_POST['alamat'] ?? '')), trim((string) ($_POST['desa'] ?? '')),
+             trim((string) ($_POST['kecamatan'] ?? '')), trim((string) ($_POST['kabupaten'] ?? '')),
+             trim((string) ($_POST['provinsi'] ?? '')),
              trim((string) ($_POST['telepon'] ?? '')), trim((string) ($_POST['email'] ?? '')), trim((string) ($_POST['website'] ?? '')),
              trim((string) ($_POST['kepala_sekolah'] ?? '')), nip_bersih($_POST['nip_kepala_sekolah'] ?? ''),
-             $a, $b, $c, $bobot, $jf, $js, $id]);
+             trim((string) ($_POST['pengawas_nama'] ?? '')), nip_bersih($_POST['pengawas_nip'] ?? ''),
+             $a, $b, $c, $bobot, $jf, $js, $id]));
         settings_all(true);
         current_sekolah(true);
         flash('Profil & pengaturan ' . $nama . ' disimpan.');
@@ -148,71 +182,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // ---------------- nonaktifkan / aktifkan kembali
+    if ($aksi === 'aktivasi') {
+        // Permintaan pemilik: Super Admin menentukan AKTIF PERMANEN atau MASA UJI COBA (30/60/90 hari).
+        $mode = (string) ($_POST['mode'] ?? 'permanen');
+        $hari = (int) ($_POST['hari'] ?? UJI_COBA_HARI_DEFAULT);
+        if (!in_array($hari, aktivasi_pilihan_hari(), true)) {
+            $hari = UJI_COBA_HARI_DEFAULT;
+        }
+        if ($mode === 'uji_coba') {
+            aktivasi_uji_coba((int) $s['id'], $hari);
+            $sBaru = one('SELECT * FROM sekolah WHERE id = ?', [(int) $s['id']]) ?: $s;
+            flash('Masa uji coba ' . nama_sekolah_tampil($sBaru) . ' diberikan selama ' . $hari . ' hari. '
+                . 'Kode aktivasi lembaga (periode ke-' . aktivasi_periode($sBaru)
+                . ', hanya bisa dipakai sekali): ' . kode_aktivasi_sekolah($sBaru), 'warn');
+        } else {
+            aktivasi_permanen((int) $s['id']);
+            flash('Sekolah/madrasah ' . nama_sekolah_tampil($s) . ' diaktifkan PERMANEN.');
+        }
+        redirect('sekolah.php');
+    }
+
     if ($aksi === 'nonaktif' || $aksi === 'aktifkan') {
-        if ($aksi === 'nonaktif') {
-            $jumlahAktif = (int) val('SELECT COUNT(*) FROM sekolah WHERE aktif = 1 AND verifikasi = "disetujui"', [], 0);
-            if ($jumlahAktif <= 1) {
-                flash('Minimal harus ada satu sekolah/madrasah aktif.', 'err');
-                redirect('sekolah.php');
-            }
-            q('UPDATE sekolah SET aktif = 0 WHERE id = ?', [$id]);
-            if (sekolah_id() === $id) {
-                set_sekolah_context(null);
-            }
+        // Aturannya satu sumber: sekolah_set_aktif() (dipakai juga oleh daftar sekolah pada dasbor).
+        $hasil = sekolah_set_aktif($id, $aksi === 'aktifkan');
+        if (!$hasil['ok']) {
+            flash($hasil['pesan'], 'err');
+        } elseif ($aksi === 'nonaktif') {
             $d = sekolah_dampak($id);
             flash(nama_sekolah_tampil($s) . ' dinonaktifkan. Datanya tetap utuh (' . $d['guru'] . ' guru, ' . $d['siswa']
                 . ' siswa, ' . $d['nilai'] . ' baris nilai) dan dapat diaktifkan kembali.');
         } else {
-            q('UPDATE sekolah SET aktif = 1 WHERE id = ?', [$id]);
             flash(nama_sekolah_tampil($s) . ' diaktifkan kembali.');
         }
         redirect('sekolah.php');
     }
 
     // ---------------- hapus permanen
+    // SANDI KONFIRMASI (permintaan pemilik, v1.72.3): *"Sebelum menghapus super admin akan
+    // dimintakan sandi (sandinya: 181288). Tujuan sandi ini agar ketika tidak sengaja di klik hapus
+    // lembaga tidak langsung terhapus"*. Diperiksa di SERVER (bukan hanya di peramban).
     if ($aksi === 'hapus') {
         if (strtoupper(trim((string) ($_POST['konfirmasi'] ?? ''))) !== 'HAPUS') {
             flash('Ketik HAPUS pada kotak konfirmasi untuk menghapus sekolah/madrasah secara permanen.', 'err');
             redirect('sekolah.php');
         }
-        if ((int) val('SELECT COUNT(*) FROM sekolah', [], 0) <= 1) {
-            flash('Sekolah/madrasah terakhir tidak dapat dihapus.', 'err');
+        if (!sekolah_hapus_sandi_sah($_POST['sandi'] ?? '')) {
+            flash('Sandi konfirmasi salah — sekolah/madrasah TIDAK dihapus. Periksa kembali sandi yang '
+                . 'diminta sebelum menekan Hapus permanen.', 'err');
             redirect('sekolah.php');
         }
-        $d = sekolah_dampak($id); // dihitung SEBELUM penghapusan agar laporannya benar
-        $jmlAkun = (int) val('SELECT COUNT(*) FROM users WHERE sekolah_id = ?', [$id], 0);
-        db()->exec('BEGIN IMMEDIATE');
-        try {
-            q('DELETE FROM absensi_detail WHERE absensi_id IN (SELECT id FROM absensi WHERE sekolah_id = ?)', [$id]);
-            foreach (['absensi', 'nilai', 'jurnal', 'kasus', 'siswa', 'guru_mapel', 'guru_kelas'] as $tabel) {
-                if ($tabel === 'guru_mapel') {
-                    q('DELETE FROM guru_mapel WHERE guru_id IN (SELECT id FROM guru WHERE sekolah_id = ?)', [$id]);
-                } elseif ($tabel === 'guru_kelas') {
-                    q('DELETE FROM guru_kelas WHERE guru_id IN (SELECT id FROM guru WHERE sekolah_id = ?)', [$id]);
-                } else {
-                    q('DELETE FROM ' . $tabel . ' WHERE sekolah_id = ?', [$id]);
-                }
-            }
-            $taIds = array_map('intval', array_column(all('SELECT id FROM tahun_ajaran WHERE sekolah_id = ?', [$id]), 'id'));
-            foreach ($taIds as $ta) {
-                q('DELETE FROM semester WHERE ta_id = ?', [$ta]);
-            }
-            q('DELETE FROM tahun_ajaran WHERE sekolah_id = ?', [$id]);
-            q('DELETE FROM users WHERE sekolah_id = ?', [$id]);
-            q('DELETE FROM kelas WHERE sekolah_id = ?', [$id]);
-            q('DELETE FROM mapel WHERE sekolah_id = ?', [$id]);
-            q('DELETE FROM guru WHERE sekolah_id = ?', [$id]);
-            q('DELETE FROM sekolah WHERE id = ?', [$id]);
-            db()->exec('COMMIT');
-        } catch (Throwable $ex) {
-            db()->exec('ROLLBACK');
-            throw $ex;
-        }
-        if (sekolah_id() === $id) {
-            set_sekolah_context(null);
-        }
-        flash('Sekolah/madrasah ' . nama_sekolah_tampil($s) . ' dihapus permanen: ' . $d['kelas'] . ' kelas, ' . $d['siswa']
-            . ' siswa, ' . $d['guru'] . ' guru, ' . $d['nilai'] . ' baris nilai, ' . $jmlAkun . ' akun.', 'warn');
+        $hasil = sekolah_hapus_permanen($id);
+        flash($hasil['pesan'], $hasil['ok'] ? 'warn' : 'err');
         redirect('sekolah.php');
     }
 
@@ -259,9 +279,13 @@ function kartu_sekolah(array $r, int $kodeSekarang, bool $aktif): void
     <div class="card<?= $tandaKelola ? ' card-terpilih' : '' ?>">
       <div class="card-head">
         <div>
+          <?php $ak = aktivasi_status($r); ?>
           <h2><?= tetap_kata(nama_sekolah_tampil($r)) ?>
             <span class="pill <?= $aktif ? 'pill-ok' : 'pill-gray' ?>"><?= $aktif ? 'Aktif' : 'Nonaktif' ?></span>
             <span class="pill pill-gold"><?= $r['jenis'] === 'madrasah' ? 'Madrasah' : 'Sekolah Umum' ?></span>
+            <?php // v49: PILIHAN JENJANG tiap sekolah (Super Admin). Belum dipilih → ditandai abu-abu. ?>
+            <span class="pill <?= ((string) ($r['jenjang'] ?? '')) !== '' ? 'pill-B' : 'pill-gray' ?>"><?= ((string) ($r['jenjang'] ?? '')) !== '' ? 'Jenjang ' . e((string) $r['jenjang']) : 'jenjang belum dipilih' ?></span>
+            <span class="pill <?= $ak['mode'] === 'permanen' ? 'pill-ok' : ($ak['habis'] ? 'pill-D' : 'pill-uji') ?>"><?= e($ak['label']) ?></span>
             <?php if ($tandaKelola): ?><span class="pill pill-B">sedang dikelola</span><?php endif; ?>
           </h2>
           <p>NPSN <?= e((string) ($r['npsn'] ?: '-')) ?> &middot; <?= e((string) ($r['alamat'] ?: 'alamat belum diisi')) ?>
@@ -301,6 +325,32 @@ function kartu_sekolah(array $r, int $kodeSekarang, bool $aktif): void
         </div>
       </div>
 
+      <?php // Kode aktivasi lembaga (unik berdasar nama + id + PERIODE) + pengaturan masa uji coba/aktivasi.
+            // Aturan SEKALI PAKAI: setelah lembaga memakai kodenya, `aktivasi_ke` naik sehingga kode
+            // di sini otomatis BERGANTI (lihat kode_aktivasi_sekolah()). ?>
+      <div class="kode-kotak mb8">
+        <span class="xs mut">Kode aktivasi lembaga (periode ke-<?= (int) aktivasi_periode($r) ?>,
+          hanya bisa dipakai sekali):</span>
+        <code id="kode<?= $sid ?>"><?= e(kode_aktivasi_sekolah($r)) ?></code>
+        <button class="btn btn-ghost btn-sm" type="button" data-salin="#kode<?= $sid ?>"><?= ikon('doc', 14) ?> Salin kode</button>
+      </div>
+      <form method="post" class="form-setujui mb16">
+        <?= csrf_field() ?>
+        <input type="hidden" name="aksi" value="aktivasi">
+        <input type="hidden" name="id" value="<?= $sid ?>">
+        <span class="xs mut">Aktivasi:</span>
+        <select name="mode" aria-label="Status aktivasi">
+          <option value="permanen" <?= $ak['mode'] === 'permanen' ? 'selected' : '' ?>>Aktif permanen</option>
+          <option value="uji_coba" <?= $ak['mode'] === 'uji_coba' ? 'selected' : '' ?>>Masa uji coba</option>
+        </select>
+        <select name="hari" aria-label="Lama uji coba">
+          <?php foreach (aktivasi_pilihan_hari() as $h): ?>
+            <option value="<?= (int) $h ?>" <?= (int) $h === ($ak['hari'] ?: UJI_COBA_HARI_DEFAULT) ? 'selected' : '' ?>><?= (int) $h ?> hari</option>
+          <?php endforeach; ?>
+        </select>
+        <button class="btn btn-ghost btn-sm" type="submit"><?= ikon('save', 14) ?> Simpan status aktivasi</button>
+      </form>
+
       <div class="stat-mini mb16">
         <div><b><?= $st['kelas'] ?></b><span>Kelas</span></div>
         <div><b><?= $st['guru'] ?></b><span>Guru aktif</span></div>
@@ -333,14 +383,20 @@ function kartu_sekolah(array $r, int $kodeSekarang, bool $aktif): void
           <p class="sm mut">Menghapus sekolah/madrasah ini akan menghapus permanen:
             <?= $d['kelas'] ?> kelas, <?= $d['mapel'] ?> mata pelajaran, <?= $d['guru'] ?> data guru,
             <?= $d['siswa'] ?> siswa, <?= $d['nilai'] ?> baris nilai, <?= $d['absensi'] ?> pertemuan daftar hadir,
-            <?= $d['jurnal'] ?> jurnal, <?= $d['kasus'] ?> catatan kasus, dan <?= $d['akun'] ?> akun.</p>
+            <?= $d['jurnal'] ?> jurnal, <?= $d['kasus'] ?> catatan kasus, <?= $d['notulen'] ?> notulen rapat, dan <?= $d['akun'] ?> akun.</p>
+          <?php // SANDI KONFIRMASI (permintaan pemilik): hapus TIDAK langsung berjalan —
+                // sandi diperiksa di server oleh sekolah_hapus_sandi_sah(). ?>
           <form method="post" class="flex mt8" data-confirm="Hapus permanen <?= e((string) $r['nama']) ?> beserta seluruh datanya?">
             <?= csrf_field() ?>
             <input type="hidden" name="aksi" value="hapus">
             <input type="hidden" name="id" value="<?= $sid ?>">
             <input type="text" name="konfirmasi" placeholder="ketik HAPUS" style="max-width:180px">
+            <input type="password" name="sandi" placeholder="sandi konfirmasi" autocomplete="off"
+                   style="max-width:190px" required>
             <button class="btn btn-danger" type="submit"><?= ikon('trash', 15) ?> Hapus permanen</button>
           </form>
+          <p class="hint" style="margin:6px 0 0">Hapus permanen meminta <b>sandi konfirmasi</b> lebih dulu,
+            agar lembaga tidak terhapus karena salah klik.</p>
         </details>
       <?php endif; ?>
     </div>
@@ -377,7 +433,12 @@ page_top('Kelola Sekolah/Madrasah', 'Super Admin &middot; ' . count($daftar) . '
   </div>
 <?php endif; ?>
 
-<div class="grid g12">
+<?php // Kartu "Daftar Sekolah/Madrasah" yang dulu berada di sebelah kanan kartu ini sudah
+      // DIHAPUS atas permintaan pemilik. Karena itu grid hanya dua kolom saat ada form "Ubah"
+      // (kalau tidak, kolom kanan kosong dan kartu Tambah jadi sempit).
+      // Catatan: $cari masih dihormati lewat ?cari= (filter daftar di bawah) bila nanti kotak
+      // pencariannya dipasang lagi. ?>
+<div class="grid<?= $editSekolah ? ' g12' : '' ?>">
   <div class="card">
     <div class="card-head">
       <div><h2>Tambah Sekolah/Madrasah</h2><p><?= count(mapel_awal()) ?> mata pelajaran awal, tahun ajaran, dan semester dibuat otomatis.</p></div>
@@ -391,30 +452,75 @@ page_top('Kelola Sekolah/Madrasah', 'Super Admin &middot; ' . count($daftar) . '
       </div>
       <div class="grid g2" style="gap:16px">
         <div>
-          <label class="f" for="jenis">Jenis</label>
+          <label class="f" for="jenis">Jenis Lembaga</label>
           <select id="jenis" name="jenis">
             <option value="umum">Sekolah Umum (SD/SMP/SMA/SMK)</option>
-            <option value="madrasah">Madrasah (MI/MTs/MA)</option>
+            <option value="madrasah">Madrasah (MI/MTs/MA/MAK)</option>
           </select>
           <div class="hint">Menentukan istilah pada aplikasi &amp; dokumen cetak sekolah tersebut.</div>
         </div>
+        <?php // v49: PILIHAN JENJANG — pilihan mengikuti jenis lembaga (Sekolah Umum → SD/SMP/SMA/SMK,
+              // Madrasah → MI/MTs/MA/MAK). initJenisJenjang() menyusun ulang pilihan saat jenis
+              // diganti; server tetap memeriksa keabsahannya. ?>
+        <div>
+          <label class="f" for="jenjang">Jenjang</label>
+          <select id="jenjang" name="jenjang"
+                  data-jenjang="<?= e(json_encode(JENJANG_PILIHAN, JSON_UNESCAPED_UNICODE)) ?>"
+                  data-label="<?= e(json_encode(JENJANG_LABEL, JSON_UNESCAPED_UNICODE)) ?>">
+            <option value="">— belum dipilih —</option>
+            <?php foreach (jenjang_pilihan('umum') as $jj): ?>
+              <option value="<?= e($jj) ?>"><?= e(JENJANG_LABEL[$jj] ?? $jj) ?></option>
+            <?php endforeach; ?>
+          </select>
+          <div class="hint">Acuan tingkat kelas &amp; konsep guru kelas (SD/MI).</div>
+        </div>
+      </div>
+      <div class="grid g2" style="gap:16px">
         <div>
           <label class="f" for="npsn">NPSN</label>
           <input type="text" id="npsn" name="npsn">
         </div>
+        <div>
+          <label class="f" for="nsm">NSM <span class="mut xs">(madrasah)</span></label>
+          <input type="text" id="nsm" name="nsm">
+        </div>
       </div>
       <div>
-        <label class="f" for="alamat">Alamat</label>
+        <label class="f" for="telepon">Telepon / HP</label>
+        <input type="text" id="telepon" name="telepon">
+      </div>
+      <div>
+        <label class="f" for="alamat">Alamat (Nama Jalan, Dusun)</label>
         <textarea id="alamat" name="alamat" rows="2"></textarea>
+      </div>
+      <div class="grid g2" style="gap:16px">
+        <div>
+          <label class="f" for="desa">Desa/Kelurahan</label>
+          <input type="text" id="desa" name="desa">
+        </div>
+        <div>
+          <label class="f" for="kecamatan">Kecamatan</label>
+          <input type="text" id="kecamatan" name="kecamatan">
+        </div>
+      </div>
+      <div class="grid g2" style="gap:16px">
+        <div>
+          <label class="f" for="kabupaten">Kabupaten</label>
+          <input type="text" id="kabupaten" name="kabupaten">
+        </div>
+        <div>
+          <label class="f" for="provinsi">Provinsi</label>
+          <input type="text" id="provinsi" name="provinsi">
+        </div>
       </div>
       <div class="grid g3" style="gap:16px">
         <div>
-          <label class="f" for="telepon">Telepon</label>
-          <input type="text" id="telepon" name="telepon">
-        </div>
-        <div>
           <label class="f" for="email">Email</label>
           <input type="text" id="email" name="email">
+        </div>
+        <div>
+          <label class="f" for="website">Situs/laman</label>
+          <input type="text" id="website" name="website">
         </div>
         <div>
           <label class="f" for="nip_kepala_sekolah">NIP Kepala</label>
@@ -424,6 +530,17 @@ page_top('Kelola Sekolah/Madrasah', 'Super Admin &middot; ' . count($daftar) . '
       <div>
         <label class="f" for="kepala_sekolah">Nama Kepala Sekolah/Madrasah</label>
         <input type="text" id="kepala_sekolah" name="kepala_sekolah">
+      </div>
+      <?php // v39: identitas PENGAWAS BINA (nama & NIP) — letaknya di bawah Nama/NIP Kepala Sekolah. ?>
+      <div class="grid g2" style="gap:16px">
+        <div>
+          <label class="f" for="pengawas_nama">Nama Pengawas Bina</label>
+          <input type="text" id="pengawas_nama" name="pengawas_nama" placeholder="nama &amp; gelar">
+        </div>
+        <div>
+          <label class="f" for="pengawas_nip">NIP Pengawas Bina</label>
+          <input type="text" id="pengawas_nip" name="pengawas_nip" placeholder="boleh dikosongkan">
+        </div>
       </div>
       <div class="divider"></div>
       <div class="section-title"><?= ikon('key', 15) ?> Akun Pengelola Pertama</div>
@@ -471,34 +588,74 @@ page_top('Kelola Sekolah/Madrasah', 'Super Admin &middot; ' . count($daftar) . '
           </div>
           <div class="grid g2" style="gap:16px">
             <div>
-              <label class="f" for="ejenis">Jenis</label>
+              <label class="f" for="ejenis">Jenis Lembaga</label>
               <select id="ejenis" name="jenis">
-                <option value="umum" <?= $editSekolah['jenis'] === 'umum' ? 'selected' : '' ?>>Sekolah Umum</option>
-                <option value="madrasah" <?= $editSekolah['jenis'] === 'madrasah' ? 'selected' : '' ?>>Madrasah</option>
+                <option value="umum" <?= $editSekolah['jenis'] === 'umum' ? 'selected' : '' ?>>Sekolah Umum (SD/SMP/SMA/SMK)</option>
+                <option value="madrasah" <?= $editSekolah['jenis'] === 'madrasah' ? 'selected' : '' ?>>Madrasah (MI/MTs/MA/MAK)</option>
               </select>
             </div>
+            <?php // v49: PILIHAN JENJANG pada panel ubah. Pilihannya mengikuti jenis sekolah yang
+                  // sedang diubah; nilai di luar pilihan itu dikosongkan server. ?>
+            <div>
+              <label class="f" for="ejenjang">Jenjang</label>
+              <select id="ejenjang" name="jenjang"
+                      data-jenjang="<?= e(json_encode(JENJANG_PILIHAN, JSON_UNESCAPED_UNICODE)) ?>"
+                      data-label="<?= e(json_encode(JENJANG_LABEL, JSON_UNESCAPED_UNICODE)) ?>">
+                <option value="">— belum dipilih —</option>
+                <?php foreach (jenjang_pilihan((string) $editSekolah['jenis']) as $jj): ?>
+                  <option value="<?= e($jj) ?>" <?= ((string) ($editSekolah['jenjang'] ?? '')) === $jj ? 'selected' : '' ?>><?= e(JENJANG_LABEL[$jj] ?? $jj) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+          </div>
+          <div class="grid g2" style="gap:16px">
             <div>
               <label class="f" for="enpsn">NPSN</label>
               <input type="text" id="enpsn" name="npsn" value="<?= e((string) $editSekolah['npsn']) ?>">
             </div>
+            <div>
+              <label class="f" for="ensm">NSM <span class="mut xs">(madrasah)</span></label>
+              <input type="text" id="ensm" name="nsm" value="<?= e((string) ($editSekolah['nsm'] ?? '')) ?>">
+            </div>
           </div>
           <div>
-            <label class="f" for="ealamat">Alamat</label>
+            <label class="f" for="ealamat">Alamat (Nama Jalan, Dusun)</label>
             <textarea id="ealamat" name="alamat" rows="2"><?= e((string) $editSekolah['alamat']) ?></textarea>
           </div>
           <div class="grid g2" style="gap:16px">
             <div>
-              <label class="f" for="etelepon">Telepon</label>
+              <label class="f" for="edesa">Desa/Kelurahan</label>
+              <input type="text" id="edesa" name="desa" value="<?= e((string) ($editSekolah['desa'] ?? '')) ?>">
+            </div>
+            <div>
+              <label class="f" for="ekecamatan">Kecamatan</label>
+              <input type="text" id="ekecamatan" name="kecamatan" value="<?= e((string) ($editSekolah['kecamatan'] ?? '')) ?>">
+              <div class="hint">Dipakai sebagai tempat pada baris "tempat, tanggal" tanda tangan dokumen cetak.</div>
+            </div>
+          </div>
+          <div class="grid g2" style="gap:16px">
+            <div>
+              <label class="f" for="ekabupaten">Kabupaten</label>
+              <input type="text" id="ekabupaten" name="kabupaten" value="<?= e((string) ($editSekolah['kabupaten'] ?? '')) ?>">
+            </div>
+            <div>
+              <label class="f" for="eprovinsi">Provinsi</label>
+              <input type="text" id="eprovinsi" name="provinsi" value="<?= e((string) ($editSekolah['provinsi'] ?? '')) ?>">
+            </div>
+          </div>
+          <div class="grid g3" style="gap:16px">
+            <div>
+              <label class="f" for="etelepon">Telepon / HP</label>
               <input type="text" id="etelepon" name="telepon" value="<?= e((string) $editSekolah['telepon']) ?>">
             </div>
             <div>
               <label class="f" for="eemail">Email</label>
               <input type="text" id="eemail" name="email" value="<?= e((string) $editSekolah['email']) ?>">
             </div>
-          </div>
-          <div>
-            <label class="f" for="ewebsite">Situs/laman</label>
-            <input type="text" id="ewebsite" name="website" value="<?= e((string) $editSekolah['website']) ?>">
+            <div>
+              <label class="f" for="ewebsite">Situs/laman</label>
+              <input type="text" id="ewebsite" name="website" value="<?= e((string) $editSekolah['website']) ?>">
+            </div>
           </div>
           <div class="grid g2" style="gap:16px">
             <div>
@@ -508,6 +665,15 @@ page_top('Kelola Sekolah/Madrasah', 'Super Admin &middot; ' . count($daftar) . '
             <div>
               <label class="f" for="enip">NIP Kepala</label>
               <input type="text" id="enip" name="nip_kepala_sekolah" value="<?= e((string) $editSekolah['nip_kepala_sekolah']) ?>">
+            </div>
+            <?php // v39: identitas PENGAWAS BINA (nama & NIP) — di bawah Nama/NIP Kepala. ?>
+            <div>
+              <label class="f" for="epengawas">Nama Pengawas Bina</label>
+              <input type="text" id="epengawas" name="pengawas_nama" value="<?= e((string) ($editSekolah['pengawas_nama'] ?? '')) ?>">
+            </div>
+            <div>
+              <label class="f" for="epengawasnip">NIP Pengawas Bina</label>
+              <input type="text" id="epengawasnip" name="pengawas_nip" value="<?= e((string) ($editSekolah['pengawas_nip'] ?? '')) ?>">
             </div>
           </div>
           <div class="divider"></div>
@@ -578,20 +744,6 @@ page_top('Kelola Sekolah/Madrasah', 'Super Admin &middot; ' . count($daftar) . '
         </form>
       </div>
     <?php endif; ?>
-
-    <div class="card">
-      <div class="card-head">
-        <div><h2>Daftar Sekolah/Madrasah</h2><p><?= count($daftar) ?> data ditemukan</p></div>
-      </div>
-      <form class="filterbar" method="get">
-        <div style="min-width:240px">
-          <label class="f" for="cari">Cari</label>
-          <input type="search" id="cari" name="cari" value="<?= e($cari) ?>" placeholder="nama / NPSN / alamat...">
-        </div>
-        <button class="btn btn-ghost" type="submit"><?= ikon('search', 15) ?> Cari</button>
-        <?php if ($cari !== ''): ?><a class="btn btn-ghost" href="sekolah.php">Reset</a><?php endif; ?>
-      </form>
-    </div>
   </div>
 </div>
 

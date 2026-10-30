@@ -7,7 +7,10 @@
 declare(strict_types=1);
 require_once __DIR__ . '/inc/init.php';
 
-$u = require_staf(); // Super Admin, Kepala, Admin Operator (guru tidak perlu)
+$u = require_master(); // Super Admin (dalam konteks) & Admin Operator saja
+// Permintaan pemilik: "Pada akun kepala madrasah/sekolah Hapus menu data master. Pengaturan data
+// master semua lewat akun operator madrasah." → Kepala Sekolah/Madrasah tidak lagi dapat membuka
+// halaman Tahun Ajaran & Semester (sebelumnya boleh lewat require_staf()).
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_guard();

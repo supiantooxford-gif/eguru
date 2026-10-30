@@ -165,12 +165,15 @@ if ($edit && ($lintas ? $edit['role'] !== 'super' : (int) $edit['sekolah_id'] !=
     $edit = null;
 }
 
+// Daftar akun yang DIKELOLA dari halaman ini. Akun SISWA (peran `siswa`, dibuat otomatis saat siswa
+// masuk dengan NISN) sengaja TIDAK ditampilkan — lihat gerbang_siswa() di inc/helpers.php.
 $users = $lintas
     ? all('SELECT * FROM users WHERE role = "super" ORDER BY nama')
     : all('SELECT us.*, g.nama AS guru_nama,
              (SELECT nama FROM sekolah s WHERE s.id = us.sekolah_id) AS sekolah_nama
            FROM users us LEFT JOIN guru g ON g.id = us.guru_id
-           WHERE us.sekolah_id = ? ORDER BY CASE us.role WHEN "kepala" THEN 1 WHEN "operator" THEN 2 ELSE 3 END, us.nama', [$sid]);
+           WHERE us.sekolah_id = ? AND us.role <> "siswa"
+           ORDER BY CASE us.role WHEN "kepala" THEN 1 WHEN "operator" THEN 2 ELSE 3 END, us.nama', [$sid]);
 $semuaSuper = all('SELECT * FROM users WHERE role = "super" ORDER BY nama');
 $guruTanpaAkun = $lintas ? 0 : (int) val('SELECT COUNT(*) FROM guru g WHERE g.aktif = 1 AND g.sekolah_id = ?
     AND NOT EXISTS (SELECT 1 FROM users us WHERE us.guru_id = g.id)', [$sid], 0);

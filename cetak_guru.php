@@ -19,7 +19,7 @@ require_once __DIR__ . '/inc/kop.php';
 ob_start();
 $GLOBALS['__vs_buf_level'] = ob_get_level();
 
-$u = require_master(); // super admin tanpa konteks dialihkan ke Kelola Sekolah; kepala & guru 403
+$u = require_lihat_cetak(); // super admin tanpa konteks dialihkan ke Kelola Sekolah; kepala & guru 403
 
 // ---------------------------------------------------------------- filter (sama dengan guru.php)
 $cari = trim((string) ($_GET['cari'] ?? ''));
@@ -56,6 +56,7 @@ $where = ' WHERE ' . implode(' AND ', $w);
 $rows = all('SELECT g.*,
     (SELECT GROUP_CONCAT(m.nama, "||") FROM guru_mapel gm JOIN mapel m ON m.id = gm.mapel_id WHERE gm.guru_id = g.id) AS mapel_nama,
     (SELECT GROUP_CONCAT(k.nama, "||") FROM guru_kelas gk JOIN kelas k ON k.id = gk.kelas_id WHERE gk.guru_id = g.id) AS kelas_nama,
+    (SELECT GROUP_CONCAT(t.nama, "||") FROM guru_tugas gt JOIN tugas_menu t ON t.id = gt.tugas_id WHERE gt.guru_id = g.id) AS tugas_nama,
     (SELECT username FROM users us WHERE us.guru_id = g.id LIMIT 1) AS username
     FROM guru g' . $where . ' ORDER BY g.nama', $p);
 
@@ -104,6 +105,10 @@ $autoPrint = isset($_GET['auto']);
     .sheet-meta{grid-template-columns:minmax(0,1fr)}
   }
   @media print{
+    /* PENTING: tema menetapkan body{min-height:100vh}. Saat MENCETAK, 100vh = tinggi kertas,
+       sehingga tinggi dokumen menjadi setinggi halaman dan peramban mencetak halaman KEDUA yang
+       hampir kosong. Karena itu min-height dimatikan pada media cetak. */
+    html,body{min-height:0 !important;height:auto}
     body{background:#fff;padding:0}
     .toolbar,.no-print{display:none !important}
     .sheet-wrap{max-width:none}
@@ -145,9 +150,10 @@ $autoPrint = isset($_GET['auto']);
             <th class="ctr" style="width:5%">JK</th>
             <th style="width:10%">Jabatan</th>
             <th style="width:17%">Mata Pelajaran</th>
-            <th style="width:11%">Kelas Diajar</th>
-            <th style="width:11%">Kontak</th>
-            <th style="width:9%">Akun (Nama Pengguna)</th>
+            <th style="width:10%">Kelas Diajar</th>
+            <th style="width:12%">Tugas Tambahan</th>
+            <th style="width:10%">Kontak</th>
+            <th style="width:8%">Akun (Nama Pengguna)</th>
             <th class="ctr" style="width:7%">Status</th>
           </tr>
         </thead>
@@ -155,6 +161,7 @@ $autoPrint = isset($_GET['auto']);
         <?php $n = 0; foreach ($rows as $g):
             $mapelArr = $g['mapel_nama'] ? explode('||', (string) $g['mapel_nama']) : [];
             $kelasArr = $g['kelas_nama'] ? explode('||', (string) $g['kelas_nama']) : [];
+            $tugasArr = $g['tugas_nama'] ? explode('||', (string) $g['tugas_nama']) : [];
             $kontak = [];
             if (trim((string) ($g['telepon'] ?? '')) !== '') {
                 $kontak[] = (string) $g['telepon'];
@@ -172,6 +179,7 @@ $autoPrint = isset($_GET['auto']);
             <td><?= e((string) ($g['jabatan'] ?: '-')) ?></td>
             <td><?= $mapelArr ? e(implode(', ', $mapelArr)) : '-' ?></td>
             <td><?= $kelasArr ? e(implode(', ', $kelasArr)) : '-' ?></td>
+            <td><?= $tugasArr ? e(implode(', ', $tugasArr)) : '-' ?></td>
             <td><?= $kontak ? e(implode(' / ', $kontak)) : '-' ?></td>
             <td><?= trim((string) ($g['username'] ?? '')) !== '' ? e((string) $g['username']) : '-' ?></td>
             <td class="ctr"><?= (int) $g['aktif'] === 1 ? 'Aktif' : 'Nonaktif' ?></td>
@@ -189,7 +197,7 @@ $autoPrint = isset($_GET['auto']);
 
     <!-- Tanda tangan: hanya kepala sekolah/madrasah, di sisi KANAN lembar (kelas .kanan). -->
     <div class="sheet-foot kanan">
-      <?php ttd_blok('Mengetahui, ' . jabatan_kepala(), kepala_nama(), kepala_nip(), 'sheet-sign sheet-sign-kanan'); ?>
+      <?php ttd_blok(ttd_mengetahui(), kepala_nama(), kepala_nip(), 'sheet-sign sheet-sign-kanan'); ?>
     </div>
 
     <p class="xs mut center" style="margin-top:18px">

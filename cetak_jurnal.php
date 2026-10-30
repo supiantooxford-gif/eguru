@@ -2,9 +2,10 @@
 /**
  * Lembar cetak Jurnal Harian Guru (A4 landscape).
  *
- * Kolom: No, Hari/Tanggal, Kelas, Mata Pelajaran, Jam Ke, Materi/Topik Pembelajaran,
- *        Kehadiran Siswa (S, I, A, B, T), dan Keterangan.
- * Filter mengikuti halaman jurnal, termasuk BULAN dan NAMA GURU (pencarian jurnal guru).
+ * Kolom: No, Hari/Tanggal, Uraian Kegiatan, Kelas/Tempat, Mata Pelajaran, Jam Ke,
+ *        Materi/Topik Pembelajaran, Kehadiran Siswa (S, I, A, B, T), dan Keterangan.
+ * Filter mengikuti halaman jurnal, termasuk BULAN, NAMA GURU (pencarian jurnal guru), dan
+ * URAIAN KEGIATAN (v1.37.0).
  */
 declare(strict_types=1);
 require_once __DIR__ . '/inc/init.php';
@@ -34,6 +35,10 @@ if ($fGuru > 0 && !guru_by_id($fGuru)) {
     $fGuru = 0;
 }
 $fCari = trim((string) ($_GET['cari'] ?? ''));
+$fUraian = (string) ($_GET['uraian'] ?? '');
+if (!in_array($fUraian, ['mengajar', 'lain'], true)) {
+    $fUraian = '';
+}
 $fSemuaPeriode = ($_GET['periode'] ?? '') === 'semua';
 $fDari = tgl_ok($_GET['dari'] ?? null);
 $fSampai = tgl_ok($_GET['sampai'] ?? null);
@@ -76,10 +81,15 @@ if ($fSampai !== null) {
     $w[] = 'j.tanggal <= ?';
     $p[] = $fSampai;
 }
+if ($fUraian === 'mengajar') {
+    $w[] = jurnal_sql_mengajar('j');
+} elseif ($fUraian === 'lain') {
+    $w[] = 'NOT ' . jurnal_sql_mengajar('j');
+}
 if ($fCari !== '') {
-    $w[] = '(j.materi LIKE ? OR j.keterangan LIKE ? OR g.nama LIKE ?)';
+    $w[] = '(j.materi LIKE ? OR j.keterangan LIKE ? OR g.nama LIKE ? OR j.uraian LIKE ? OR j.tempat LIKE ?)';
     $like = '%' . $fCari . '%';
-    array_push($p, $like, $like, $like);
+    array_push($p, $like, $like, $like, $like, $like);
 }
 $where = ' WHERE ' . implode(' AND ', $w);
 
@@ -129,6 +139,7 @@ $autoPrint = isset($_GET['auto']);
 $qPrint = array_filter([
     'kelas' => $fKelas ?: null, 'mapel' => $fMapel ?: null, 'bulan' => $fBulan ?: null,
     'guru' => $fGuru ?: null, 'cari' => $fCari ?: null, 'periode' => $fSemuaPeriode ? 'semua' : null,
+    'uraian' => $fUraian ?: null,
     'dari' => $fDari, 'sampai' => $fSampai,
     'ta' => $ta ? (int) $ta['id'] : null, 'sem' => $sem ? (int) $sem['id'] : null,
 ]);
@@ -149,13 +160,25 @@ $qPrint = array_filter([
   table.sheet.jurnal th,table.sheet.jurnal td{padding:5px 6px}
   table.sheet.jurnal td.kh{text-align:center;font-variant-numeric:tabular-nums}
   .ket-kode{font-size:.72rem;color:#635F82;margin-top:10px;line-height:1.5}
-  @media (max-width:900px){
+  /* Tata letak layar sempit HANYA untuk layar (media "screen"): kertas A4 portrait hanya
+     selebar ±695px, jadi "@media (max-width:900px)" ikut aktif saat MENCETAK dan membuat tanda
+     tangan menumpuk atas-bawah — padahal harus tetap kiri-kanan. */
+  @media screen and (max-width:900px){
     .print-sheet{padding:18px 14px}
     table.sheet.jurnal{min-width:900px}
     .sheet-meta{grid-template-columns:minmax(0,1fr)}
     .sheet-foot{flex-direction:column;gap:20px}
   }
   @media print{body{background:#fff;padding:0}.toolbar,.no-print{display:none !important}.sheet-wrap{max-width:none}.print-sheet{box-shadow:none;border:none;padding:0;border-radius:0}.sheet-scroll{overflow:visible}table.sheet.jurnal{min-width:0}}
+  /* Saat dicetak, dua blok tanda tangan WAJIB berdampingan (kiri & kanan). */
+  @media print{
+    /* PENTING: tema menetapkan body{min-height:100vh}. Saat MENCETAK, 100vh = tinggi kertas,
+       sehingga tinggi dokumen menjadi setinggi halaman dan peramban mencetak halaman KEDUA yang
+       hampir kosong. Karena itu min-height dimatikan pada media cetak. */
+    html,body{min-height:0 !important;height:auto}
+    .sheet-foot{flex-direction:row !important;flex-wrap:nowrap;justify-content:space-between}
+    .sheet-foot.dua-ttd .sheet-sign{flex:1 1 0;min-width:0}
+  }
   @page{size:A4 landscape;margin:12mm}
 </style>
 </head>
@@ -171,27 +194,38 @@ $qPrint = array_filter([
   <div class="print-sheet">
     <?php kop_cetak('Jurnal Harian Guru', ['Administrasi Pembelajaran']); ?>
 
-    <?php sheet_meta([
+    <?php
+    $metaLembar = [
         'Periode'        => $periode,
         'Tahun Ajaran'   => ta_nama($ta) . ' — Semester ' . sem_nama($sem),
-        'Kelas'          => $fKelas > 0 ? kelas_nama($fKelas) : 'Semua kelas',
+        'Kelas / Tempat' => $fKelas > 0 ? kelas_nama($fKelas) : 'Semua kelas / tempat',
         'Mata Pelajaran' => $fMapel > 0 ? mapel_nama($fMapel) : 'Semua mata pelajaran',
         'Guru'           => (string) $guruCetak,
         'Jumlah Catatan' => (string) count($rows),
-    ]); ?>
+    ];
+    // Bila lembar disaring per uraian kegiatan, penyaringnya DITULIS pada identitas supaya
+    // pembaca tahu ini bukan seluruh catatan.
+    if ($fUraian === 'mengajar') {
+        $metaLembar['Uraian Kegiatan'] = 'Hanya kegiatan mengajar (tatap muka)';
+    } elseif ($fUraian === 'lain') {
+        $metaLembar['Uraian Kegiatan'] = 'Kegiatan selain mengajar';
+    }
+    sheet_meta($metaLembar);
+    ?>
 
     <div class="sheet-scroll">
       <table class="sheet jurnal padat">
         <thead>
           <tr>
-            <th class="ctr" rowspan="2" style="width:26px">No</th>
-            <th rowspan="2" style="width:13%">Hari / Tanggal</th>
-            <th class="ctr" rowspan="2" style="width:7%">Kelas</th>
-            <th rowspan="2" style="width:13%">Mata Pelajaran</th>
-            <th class="ctr" rowspan="2" style="width:5%">Jam Ke</th>
-            <th rowspan="2" style="width:18%">Materi / Topik Pembelajaran</th>
+            <th class="ctr" rowspan="2" style="width:24px">No</th>
+            <th rowspan="2" style="width:11%">Hari / Tanggal</th>
+            <th rowspan="2" style="width:9%">Uraian Kegiatan</th>
+            <th class="ctr" rowspan="2" style="width:8%">Kelas / Tempat</th>
+            <th rowspan="2" style="width:11%">Mata Pelajaran</th>
+            <th class="ctr" rowspan="2" style="width:4%">Jam Ke</th>
+            <th rowspan="2" style="width:15%">Materi / Topik Pembelajaran</th>
             <th class="ctr" colspan="<?= count($kolomKehadiran) ?>">Kehadiran Siswa</th>
-            <th rowspan="2" style="width:17%">Keterangan</th>
+            <th rowspan="2" style="width:13%">Keterangan</th>
           </tr>
           <tr>
             <?php foreach ($kolomKehadiran as [$kode, $label]): ?>
@@ -204,10 +238,11 @@ $qPrint = array_filter([
           <tr>
             <td class="ctr"><?= $n ?></td>
             <td><?= e(tanggal_id((string) $j['tanggal'], true)) ?></td>
-            <td class="ctr"><?= e((string) ($j['kelas_nama'] ?: '-')) ?></td>
+            <td><?= e(jurnal_uraian($j)) ?></td>
+            <td class="ctr"><?= e(jurnal_kelas_tempat($j)) ?></td>
             <td><?= e((string) ($j['mapel_nama'] ?: '-')) ?></td>
             <td class="ctr"><?= e((string) ($j['jam_ke'] ?: '-')) ?></td>
-            <td><?= e((string) $j['materi']) ?></td>
+            <td><?= e((string) ($j['materi'] !== '' && $j['materi'] !== null ? $j['materi'] : '-')) ?></td>
             <?php foreach (array_keys($kolomKehadiran) as $kolom): $v = (int) ($j[$kolom] ?? 0); ?>
               <td class="kh"><?= $v > 0 ? $v : '-' ?></td>
             <?php endforeach; ?>
@@ -217,7 +252,7 @@ $qPrint = array_filter([
         </tbody>
         <tfoot>
           <tr>
-            <th colspan="6" class="ctr">Jumlah</th>
+            <th colspan="7" class="ctr">Jumlah</th>
             <?php foreach (array_keys($kolomKehadiran) as $kolom): ?>
               <th class="ctr"><?= (int) $total[$kolom] ?></th>
             <?php endforeach; ?>
@@ -228,6 +263,8 @@ $qPrint = array_filter([
     </div>
 
     <div class="ket-kode">
+      Uraian Kegiatan menunjukkan jenis kegiatan guru; hanya kegiatan <b>Mengajar</b> yang dihitung
+      sebagai tatap muka pada Laporan Rekap Jumlah Pertemuan Guru.<br>
       Keterangan kehadiran siswa:
       <?php $kodeKet = []; foreach ($kolomKehadiran as [$kode, $label]) { $kodeKet[] = '<b>' . e($kode) . '</b> = ' . e($label); } ?>
       <?= implode(', ', $kodeKet) ?>.
@@ -235,8 +272,8 @@ $qPrint = array_filter([
 
     <!-- Posisi tanda tangan: kepala sekolah/madrasah di KIRI, guru di KANAN (permintaan pemilik). -->
     <div class="sheet-foot dua-ttd">
-      <?php ttd_blok('Mengetahui, ' . jabatan_kepala(), kepala_nama(), kepala_nip(), 'sheet-sign sheet-sign-kiri'); ?>
-      <?php ttd_blok('Guru Mata Pelajaran', (string) $guruCetak, '', 'sheet-sign sheet-sign-kanan'); ?>
+      <?php ttd_blok(ttd_mengetahui(), kepala_nama(), kepala_nip(), 'sheet-sign sheet-sign-kiri'); ?>
+      <?php ttd_blok('Guru Mata Pelajaran', (string) $guruCetak, '', 'sheet-sign sheet-sign-kanan', true); ?>
     </div>
 
     <p class="xs mut center" style="margin-top:18px">

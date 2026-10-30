@@ -1,10 +1,14 @@
 <?php
 /**
- * Impor data guru dari Excel/CSV. Berkas dibaca di browser (SheetJS) lalu dikirim
- * sebagai JSON — berkas tidak disimpan di server.
+ * Impor data guru dari Excel/CSV (dibaca di browser dengan SheetJS, dikirim sebagai JSON).
+ * Nama kelas pada berkas dicocokkan dengan Data Kelas (harus sudah ada) dan mata pelajaran baru
+ * DIBUAT OTOMATIS agar impor tidak terhenti. **Tugas tambahan TIDAK dibuat otomatis** (sejak skema
+ * v30): daftarnya satu, diisi Super Admin lewat menu Kelola Tugas Tambahan — nama yang tidak ada di
+ * sana dilewati & dilaporkan.
  *
- * Kolom "Mata Pelajaran" dan "Kelas" boleh berisi beberapa nilai yang dipisahkan
- * koma / titik koma / garis miring. Mata pelajaran yang belum ada akan dibuat otomatis.
+ * Nama pengguna & kata sandi akun guru mengikuti aturan aplikasi: nama pengguna = KATA AWAL nama
+ * guru (bila sudah dipakai ditambah angka) dan kata sandi awal `guru123` — lewat helper bersama
+ * guru_username_unik() + guru_sandi_awal() (jangan menulis ulang logikanya di sini).
  */
 declare(strict_types=1);
 require_once __DIR__ . '/inc/init.php';
@@ -14,20 +18,6 @@ $u = require_master();
 $ringkasan = null;
 $galat = [];
 
-/** Pecah daftar nilai dalam satu sel menjadi array bersih. */
-function pecah_daftar($v): array
-{
-    $bagian = preg_split('/[,;|\/]+/', (string) $v) ?: [];
-    $keluar = [];
-    foreach ($bagian as $b) {
-        $b = trim($b);
-        if ($b !== '') {
-            $keluar[] = $b;
-        }
-    }
-    return array_values(array_unique($keluar));
-}
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_guard();
     $data = json_decode((string) ($_POST['payload'] ?? ''), true);
@@ -35,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $perbarui = !empty($data['perbarui']);
     $buatAkun = !empty($data['buat_akun']);
 
-    $tambah = 0; $ubah = 0; $lewat = 0; $akunBaru = 0; $mapelBaru = 0; $kelasLewat = [];
+    $tambah = 0; $ubah = 0; $lewat = 0; $mapelBaru = 0; $akunBaru = 0; $kelasLewat = []; $tugasLewat = [];
 
     if (!$rows) {
         $galat[] = 'Tidak ada baris data yang dikirim. Pastikan berkas sudah dipilih dan kolom sudah dipetakan.';
@@ -45,7 +35,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             foreach ($rows as $i => $r) {
                 $nama = trim((string) ($r['nama'] ?? ''));
-                $nip = nip_bersih($r['nip'] ?? '');
                 $baris = (int) ($r['_baris'] ?? ($i + 1));
                 if ($nama === '') {
                     $lewat++;
@@ -57,11 +46,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (strlen($nama) > 160) {
                     $nama = substr($nama, 0, 160);
                 }
+                $nip = nip_bersih($r['nip'] ?? '');       // "-" atau kosong dianggap belum punya NIP
+                $nuptk = nip_bersih($r['nuptk'] ?? '');
                 $jk = strtoupper(trim((string) ($r['jenis_kelamin'] ?? '')));
                 $jk = in_array(substr($jk, 0, 1), ['L', 'P'], true) ? substr($jk, 0, 1) : '';
                 $jabatan = trim((string) ($r['jabatan'] ?? ''));
                 $telepon = trim((string) ($r['telepon'] ?? ''));
                 $email = trim((string) ($r['email'] ?? ''));
+                if ($email !== '' && strpos($email, '@') === false) {
+                    $email = '';
+                }
 
                 $ada = $nip !== ''
                     ? one('SELECT * FROM guru WHERE nip = ? AND sekolah_id = ?', [$nip, sekolah_id()])
@@ -72,14 +66,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $lewat++;
                         continue;
                     }
-                    q('UPDATE guru SET nama=?, jabatan=CASE WHEN ? <> "" THEN ? ELSE jabatan END, telepon=CASE WHEN ? <> "" THEN ? ELSE telepon END,
-                         email=CASE WHEN ? <> "" THEN ? ELSE email END, jenis_kelamin=CASE WHEN ? <> "" THEN ? ELSE jenis_kelamin END, aktif=1 WHERE id=?',
-                        [$nama, $jabatan, $jabatan, $telepon, $telepon, $email, $email, $jk, $jk, (int) $ada['id']]);
+                    q('UPDATE guru SET nama=?, nuptk=CASE WHEN ? <> "" THEN ? ELSE nuptk END,
+                         jenis_kelamin=CASE WHEN ? <> "" THEN ? ELSE jenis_kelamin END,
+                         jabatan=CASE WHEN ? <> "" THEN ? ELSE jabatan END,
+                         telepon=CASE WHEN ? <> "" THEN ? ELSE telepon END,
+                         email=CASE WHEN ? <> "" THEN ? ELSE email END,
+                         nip=CASE WHEN ? <> "" THEN ? ELSE nip END, aktif=1
+                       WHERE id=? AND sekolah_id=?',
+                        [$nama, $nuptk, $nuptk, $jk, $jk, $jabatan, $jabatan, $telepon, $telepon,
+                         $email, $email, $nip, $nip, (int) $ada['id'], sekolah_id()]);
                     $gid = (int) $ada['id'];
                     $ubah++;
                 } else {
-                    q('INSERT INTO guru (sekolah_id, nama, nip, jenis_kelamin, jabatan, telepon, email, aktif, dibuat) VALUES (?,?,?,?,?,?,?,1,?)',
-                        [sekolah_id(), $nama, $nip, $jk, $jabatan, $telepon, $email, $now]);
+                    q('INSERT INTO guru (sekolah_id, nama, nip, nuptk, jenis_kelamin, jabatan, telepon, email, aktif, dibuat)
+                       VALUES (?,?,?,?,?,?,?,?,1,?)',
+                        [sekolah_id(), $nama, $nip, $nuptk, $jk, $jabatan, $telepon, $email, $now]);
                     $gid = (int) db()->lastInsertId();
                     $tambah++;
                 }
@@ -108,11 +109,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
 
+                // ---- tugas tambahan (HANYA dari daftar Tugas Tambahan yang diisi Super Admin) ----
+                // Sejak skema v30 operator/kepala TIDAK lagi menambah tugas: nama yang tidak ada
+                // pada daftar (atau belum diaktifkan) dilewati & dilaporkan, supaya daftar tetap
+                // satu sumber dan tidak tercemar nama asal-asalan dari berkas impor.
+                foreach (pecah_daftar($r['tugas'] ?? '') as $namaTugas) {
+                    $tid = db_val(db(), 'SELECT id FROM tugas_menu WHERE lower(nama) = lower(?) AND aktif = 1',
+                        [$namaTugas]);
+                    if (!$tid) {
+                        if (!in_array($namaTugas, $tugasLewat, true)) {
+                            $tugasLewat[] = $namaTugas;
+                        }
+                        continue;
+                    }
+                    q('INSERT OR IGNORE INTO guru_tugas (guru_id, tugas_id) VALUES (?,?)', [$gid, (int) $tid]);
+                }
+
+                // ---- akun login (nama pengguna = kata awal nama guru, sandi awal guru123) ----
                 if ($buatAkun && !one('SELECT id FROM users WHERE guru_id = ?', [$gid])) {
                     $baru = ['nama' => $nama, 'nip' => $nip];
                     $username = guru_username_unik($baru);
+                    $sandi = guru_sandi_awal($baru);
                     q('INSERT INTO users (sekolah_id, username, password_hash, nama, role, guru_id, aktif, dibuat) VALUES (?,?,?,?,?,?,1,?)',
-                        [sekolah_id(), $username, password_hash(guru_sandi_awal($baru), PASSWORD_DEFAULT), $nama, 'guru', $gid, $now]);
+                        [sekolah_id(), $username, password_hash($sandi, PASSWORD_DEFAULT), $nama, 'guru', $gid, $now]);
                     $akunBaru++;
                 }
             }
@@ -121,11 +140,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             db()->exec('ROLLBACK');
             throw $ex;
         }
-        $ringkasan = ['tambah' => $tambah, 'ubah' => $ubah, 'lewat' => $lewat, 'akun' => $akunBaru,
-                      'mapel' => $mapelBaru, 'kelas_lewat' => count($kelasLewat), 'total' => count($rows)];
+        $ringkasan = ['tambah' => $tambah, 'ubah' => $ubah, 'lewat' => $lewat, 'mapel' => $mapelBaru,
+                      'akun' => $akunBaru, 'kelas_lewat' => count($kelasLewat),
+                      'tugas_lewat' => array_values($tugasLewat), 'total' => count($rows)];
         if ($kelasLewat) {
-            $galat[] = 'Kelas berikut belum ada di Data Kelas sehingga tidak ditautkan: ' . implode(', ', array_slice($kelasLewat, 0, 8))
-                     . (count($kelasLewat) > 8 ? ' …' : '') . ' — tambahkan kelasnya lebih dulu, lalu impor ulang.';
+            $galat[] = 'Nama kelas berikut tidak ada di Data Kelas: ' . implode(', ', array_slice($kelasLewat, 0, 8))
+                     . (count($kelasLewat) > 8 ? ' …' : '') . '. Tambahkan kelasnya lebih dahulu, lalu impor ulang.';
+        }
+        if ($tugasLewat) {
+            $galat[] = 'Nama tugas tambahan berikut tidak ada pada daftar Tugas Tambahan yang diisi '
+                     . 'Super Admin (atau belum diaktifkan), jadi dilewati: '
+                     . implode(', ', array_slice($tugasLewat, 0, 8))
+                     . (count($tugasLewat) > 8 ? ' …' : '') . '. Minta Super Admin menambahkannya lewat menu '
+                     . 'Kelola Tugas Tambahan, lalu impor ulang.';
         }
     }
 }
@@ -147,7 +174,7 @@ page_top('Impor Data Guru');
     <div class="alert alert-ok">
       <?= ikon('check', 16) ?>
       <span>Impor selesai dari <?= (int) $ringkasan['total'] ?> baris: <b><?= (int) $ringkasan['tambah'] ?></b> guru baru,
-      <b><?= (int) $ringkasan['ubah'] ?></b> diperbarui, <b><?= (int) $ringkasan['lewat'] ?></b> dilewati<?= $ringkasan['akun'] > 0 ? ', <b>' . (int) $ringkasan['akun'] . '</b> akun login dibuat' : '' ?><?= $ringkasan['mapel'] > 0 ? ', <b>' . (int) $ringkasan['mapel'] . '</b> mata pelajaran baru dibuat' : '' ?>.</span>
+      <b><?= (int) $ringkasan['ubah'] ?></b> diperbarui, <b><?= (int) $ringkasan['lewat'] ?></b> dilewati<?= $ringkasan['mapel'] > 0 ? ', <b>' . (int) $ringkasan['mapel'] . '</b> mata pelajaran baru dibuat' : '' ?><?= $ringkasan['akun'] > 0 ? ', <b>' . (int) $ringkasan['akun'] . '</b> akun login dibuat' : '' ?><?= $ringkasan['tugas_lewat'] ? ', <b>' . count($ringkasan['tugas_lewat']) . '</b> nama tugas tambahan dilewati' : '' ?>.</span>
     </div>
   <?php endif; ?>
   <?php foreach ($galat as $g): ?>
@@ -168,7 +195,7 @@ page_top('Impor Data Guru');
     <div class="butir" style="margin:0">
       <div class="butir-head">
         <div class="butir-no">2</div>
-        <div><div class="butir-komponen">Cocokkan kolom</div><div class="butir-indikator">Kolom Mata Pelajaran &amp; Kelas boleh berisi beberapa nilai (pisahkan koma).</div></div>
+        <div><div class="butir-komponen">Cocokkan kolom</div><div class="butir-indikator">Pilih kolom yang berisi data guru.</div></div>
       </div>
       <div class="mt16 grid" style="gap:10px">
         <div>
@@ -182,14 +209,17 @@ page_top('Impor Data Guru');
     <div class="butir" style="margin:0">
       <div class="butir-head">
         <div class="butir-no">3</div>
-        <div><div class="butir-komponen">Pilihan &amp; simpan</div><div class="butir-indikator">Atur penanganan data yang sudah ada.</div></div>
+        <div><div class="butir-komponen">Pilihan impor</div><div class="butir-indikator">Mata pelajaran baru dibuat otomatis; tugas tambahan memakai daftar yang diisi Super Admin.</div></div>
       </div>
       <div class="mt16 grid" style="gap:10px">
         <label class="f" style="display:flex;gap:9px;align-items:center;font-weight:600">
           <input type="checkbox" id="opsiPerbarui" checked style="width:16px;height:16px;accent-color:var(--accent)"> Perbarui guru yang NIP-nya sudah ada
         </label>
-        <label class="f" style="display:flex;gap:9px;align-items:center;font-weight:600">
-          <input type="checkbox" id="opsiAkun" style="width:16px;height:16px;accent-color:var(--accent)"> Sekaligus buatkan akun login guru
+        <label class="f" style="display:flex;gap:9px;align-items:flex-start;font-weight:600">
+          <input type="checkbox" id="opsiAkun" style="width:16px;height:16px;accent-color:var(--accent);margin-top:2px">
+          <span>Sekaligus buatkan akun login guru<br>
+            <span class="hint">Nama pengguna = <b>nama awal guru</b> (bila sudah dipakai ditambah angka),
+            kata sandi awal <b>guru123</b>.</span></span>
         </label>
         <button class="btn btn-primary" id="btnImpor" type="button" disabled><?= ikon('upload', 16) ?> Impor Sekarang</button>
         <button class="btn btn-ghost" id="btnContoh" type="button">Unduh contoh format CSV</button>
@@ -217,14 +247,15 @@ page_top('Impor Data Guru');
 <script>
 (function () {
   var FIELDS = [
-    { k: 'nama',          l: 'Nama Guru *',      keys: ['nama', 'name', 'guru', 'namaguru'] },
-    { k: 'nip',           l: 'NIP / NUPTK',      keys: ['nip', 'nuptk', 'noinduk', 'idguru'] },
-    { k: 'jenis_kelamin', l: 'Jenis Kelamin',    keys: ['jeniskelamin', 'jk', 'gender', 'lp'] },
-    { k: 'jabatan',       l: 'Jabatan',          keys: ['jabatan', 'golongan', 'pangkat'] },
-    { k: 'telepon',       l: 'No. HP',           keys: ['telepon', 'hp', 'wa', 'whatsapp', 'nohp', 'telp'] },
-    { k: 'email',         l: 'Email',            keys: ['email', 'surel'] },
-    { k: 'mapel',         l: 'Mata Pelajaran',   keys: ['mapel', 'matapelajaran', 'pelajaran', 'mata'] },
-    { k: 'kelas',         l: 'Kelas Diajar',     keys: ['kelas', 'rombel', 'wali', 'walikelas'] }
+    { k: 'nama',          l: 'Nama Guru *',         keys: ['nama', 'namaguru', 'guru', 'name'] },
+    { k: 'nip',           l: 'NIP / NUPTK',         keys: ['nip', 'nuptk', 'nik'] },
+    { k: 'jenis_kelamin', l: 'Jenis Kelamin',       keys: ['jeniskelamin', 'jk', 'gender', 'lp'] },
+    { k: 'jabatan',       l: 'Jabatan',             keys: ['jabatan', 'posisi', 'status'] },
+    { k: 'mapel',         l: 'Mata Pelajaran',      keys: ['mapel', 'matapelajaran', 'pelajaran', 'mata'] },
+    { k: 'kelas',         l: 'Kelas Diajar',        keys: ['kelas', 'rombel', 'kelasdiajar'] },
+    { k: 'tugas',         l: 'Tugas Tambahan',      keys: ['tugastambahan', 'tugas', 'wakasek', 'pembina'] },
+    { k: 'telepon',       l: 'No. HP',              keys: ['telepon', 'hp', 'wa', 'whatsapp', 'nohp', 'telp'] },
+    { k: 'email',         l: 'Email',               keys: ['email', 'surel'] }
   ];
   var wb = null, rows = [], header = [], map = {};
   var fInput = document.getElementById('fileInput');
@@ -338,8 +369,9 @@ page_top('Impor Data Guru');
     body.forEach(function (r, i) {
       var o = {
         nama: valueOf(r, 'nama'), nip: valueOf(r, 'nip'), jenis_kelamin: valueOf(r, 'jenis_kelamin'),
-        jabatan: valueOf(r, 'jabatan'), telepon: valueOf(r, 'telepon'), email: valueOf(r, 'email'),
-        mapel: valueOf(r, 'mapel'), kelas: valueOf(r, 'kelas'), _baris: i + Number(hSelect.value) + 2
+        jabatan: valueOf(r, 'jabatan'), mapel: valueOf(r, 'mapel'), kelas: valueOf(r, 'kelas'),
+        tugas: valueOf(r, 'tugas'), telepon: valueOf(r, 'telepon'), email: valueOf(r, 'email'),
+        _baris: i + Number(hSelect.value) + 2
       };
       if (o.nama === '' && o.nip === '') return;
       data.push(o);
@@ -350,10 +382,11 @@ page_top('Impor Data Guru');
       prevArea.innerHTML = '<div class="empty"><h3>Belum ada baris data</h3><p>Periksa baris judul kolom dan pemetaan kolom Nama Guru.</p></div>';
       return;
     }
-    var html = '<div class="table-wrap"><table class="tbl"><thead><tr><th>#</th><th>Nama</th><th>NIP</th><th>JK</th><th>Jabatan</th><th>No. HP</th><th>Mata Pelajaran</th><th>Kelas</th><th class="ctr">Status</th></tr></thead><tbody>';
+    var html = '<div class="table-wrap"><table class="tbl"><thead><tr><th>#</th><th>Nama</th><th>NIP</th><th>JK</th><th>Jabatan</th><th>Mata Pelajaran</th><th>Kelas</th><th>Tugas Tambahan</th><th>No. HP</th><th class="ctr">Status</th></tr></thead><tbody>';
     data.slice(0, 25).forEach(function (o, i) {
-      html += '<tr><td>' + (i + 1) + '</td><td><b>' + esc(o.nama || '-') + '</b></td><td>' + esc(o.nip || '-') + '</td><td>' + esc(o.jenis_kelamin || '-') + '</td>'
-        + '<td>' + esc(o.jabatan || '-') + '</td><td>' + esc(o.telepon || '-') + '</td><td>' + esc(o.mapel || '-') + '</td><td>' + esc(o.kelas || '-') + '</td>'
+      html += '<tr><td>' + (i + 1) + '</td><td><b>' + esc(o.nama || '-') + '</b></td><td>' + esc(o.nip || '-') + '</td>'
+        + '<td>' + esc(o.jenis_kelamin || '-') + '</td><td>' + esc(o.jabatan || '-') + '</td><td>' + esc(o.mapel || '-') + '</td>'
+        + '<td>' + esc(o.kelas || '-') + '</td><td>' + esc(o.tugas || '-') + '</td><td>' + esc(o.telepon || '-') + '</td>'
         + '<td class="ctr">' + (o.nama !== '' ? '<span class="pill pill-ok">Siap</span>' : '<span class="pill pill-D">Nama kosong</span>') + '</td></tr>';
     });
     html += '</tbody></table></div>';
@@ -374,9 +407,9 @@ page_top('Impor Data Guru');
   });
 
   document.getElementById('btnContoh').addEventListener('click', function () {
-    var csv = 'Nama,NIP,Jenis Kelamin,Jabatan,No HP,Email,Mata Pelajaran,Kelas\n'
-      + 'Dra. Siti Aminah,197804122006041002,P,Guru Madya,081200000001,siti@example.com,"Bahasa Indonesia,PPKn","VII-A,VIII-B"\n'
-      + 'Budi Santoso S.Pd.,198203152008011003,L,Guru Muda,081200000002,budi@example.com,"Matematika,IPA",VII-A\n';
+    var csv = 'Nama,NIP,Jenis Kelamin,Jabatan,Mata Pelajaran,Kelas,Tugas Tambahan,No HP,Email\n'
+      + 'Ahmad Fauzi,199001012015011001,L,Guru Mata Pelajaran,Matematika,VII-A,Wakasek Kesiswaan,081200000010,ahmad@example.com\n'
+      + 'Nur Aisyah,199202022016012002,P,Guru Mata Pelajaran,Bahasa Indonesia,VII-A,Pembina Pramuka,081200000011,nur@example.com\n';
     var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);

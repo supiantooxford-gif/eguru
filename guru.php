@@ -89,6 +89,7 @@ $where = ' WHERE ' . implode(' AND ', $w);
 $rows = all('SELECT g.*,
     (SELECT GROUP_CONCAT(m.nama, "||") FROM guru_mapel gm JOIN mapel m ON m.id = gm.mapel_id WHERE gm.guru_id = g.id) AS mapel_nama,
     (SELECT GROUP_CONCAT(k.nama, "||") FROM guru_kelas gk JOIN kelas k ON k.id = gk.kelas_id WHERE gk.guru_id = g.id) AS kelas_nama,
+    (SELECT GROUP_CONCAT(t.nama, "||") FROM guru_tugas gt JOIN tugas_menu t ON t.id = gt.tugas_id WHERE gt.guru_id = g.id) AS tugas_nama,
     (SELECT username FROM users us WHERE us.guru_id = g.id LIMIT 1) AS username,
     (SELECT foto FROM users us WHERE us.guru_id = g.id AND us.foto IS NOT NULL AND us.foto <> "" LIMIT 1) AS foto,
     (SELECT COUNT(*) FROM jurnal j WHERE j.guru_id = g.id) AS jml_jurnal
@@ -134,8 +135,14 @@ page_top('Data Guru');
       <?php if ($bolehUbah): ?>
         <a class="btn btn-primary" href="guru_edit.php"><?= ikon('plus', 16) ?> Tambah Guru</a>
         <a class="btn btn-ghost" href="guru_import.php"><?= ikon('upload', 16) ?> Impor Excel/CSV</a>
-        <?php // Cetak Data Guru: Super Admin (dalam konteks sekolah) & Admin Operator. Mengikuti filter aktif. ?>
+      <?php endif; ?>
+      <?php // Cetak data guru: pengelola, KEPALA sekolah/madrasah (permintaan pemilik v1.19.0),
+            // dan pengawas. Ekspor CSV tetap hanya untuk pengelola (operator/Super Admin). ?>
+      <?php if ($bolehUbah || is_kepala() || is_pengawas()): ?>
         <a class="btn btn-ghost" href="cetak_guru.php?<?= e(http_build_query($qCetak)) ?>"><?= ikon('print', 16) ?> Cetak Data Guru</a>
+      <?php endif; ?>
+      <?php if ($bolehUbah): ?>
+        <a class="btn btn-ghost" href="guru_export.php?<?= e(http_build_query($qCetak)) ?>"><?= ikon('download', 16) ?> Ekspor Data Guru</a>
       <?php endif; ?>
     </div>
   </div>
@@ -200,11 +207,12 @@ page_top('Data Guru');
   <?php else: ?>
     <div class="table-wrap">
       <table class="tbl" id="tblGuru">
-        <thead><tr><th>Nama</th><th>NIP / NUPTK</th><th>Mata Pelajaran</th><th>Kelas Diajar</th><th class="ctr">Jurnal</th><th class="ctr">Akun</th><th class="ctr">Status</th><th></th></tr></thead>
+        <thead><tr><th>Nama</th><th>NIP / NUPTK</th><th>Mata Pelajaran</th><th>Kelas Diajar</th><th>Tugas Tambahan</th><th class="ctr">Jurnal</th><th class="ctr">Akun</th><th class="ctr">Status</th><th></th></tr></thead>
         <tbody>
         <?php foreach ($rows as $g):
             $mapelArr = $g['mapel_nama'] ? explode('||', (string) $g['mapel_nama']) : [];
             $kelasArr = $g['kelas_nama'] ? explode('||', (string) $g['kelas_nama']) : [];
+            $tugasArr = $g['tugas_nama'] ? explode('||', (string) $g['tugas_nama']) : [];
         ?>
           <tr>
             <td>
@@ -213,6 +221,9 @@ page_top('Data Guru');
                 <span>
                   <b><?= e((string) $g['nama']) ?></b>
                   <span class="tbl-sub"><?= e((string) ($g['jabatan'] ?: '-')) ?><?= $g['jenis_kelamin'] ? ' &middot; ' . e((string) $g['jenis_kelamin']) : '' ?></span>
+                  <?php // v49: penanda GURU KELAS (jenjang SD/MI) — guru memegang banyak mapel pada
+                        // satu kelas dan otomatis menjadi wali kelasnya. ?>
+                  <?php if ((int) ($g['guru_kelas'] ?? 0) === 1): ?><span class="pill pill-gold">Guru Kelas</span><?php endif; ?>
                 </span>
               </span>
             </td>
@@ -222,6 +233,9 @@ page_top('Data Guru');
             </td>
             <td>
               <?php if ($kelasArr): foreach ($kelasArr as $kl): ?><span class="tagmini"><?= e($kl) ?></span><?php endforeach; else: ?><span class="mut xs">belum ditentukan</span><?php endif; ?>
+            </td>
+            <td>
+              <?php if ($tugasArr): foreach ($tugasArr as $tg): ?><span class="tagmini"><?= e($tg) ?></span><?php endforeach; else: ?><span class="mut xs">belum ada</span><?php endif; ?>
             </td>
             <td class="ctr"><?= (int) $g['jml_jurnal'] ?></td>
             <td class="ctr">

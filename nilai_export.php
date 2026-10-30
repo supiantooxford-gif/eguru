@@ -29,8 +29,10 @@ if (!boleh_mapel($mapelId)) {
     tolak403('Mata pelajaran itu tidak Anda ampu.');
 }
 
-$jf = jumlah_formatif();
-$js = jumlah_sumatif();
+// Pengaturan yang berlaku (guru menimpa sekolah untuk mapel ini).
+$konteksNilai = nilai_konteks($mapelId, $kelasId);
+$jf = (int) $konteksNilai['jf'];
+$js = (int) $konteksNilai['js'];
 $siswa = siswa_kelas($kelasId, true);
 $nilai = nilai_map($kelasId, $mapelId, (int) $ta['id'], (int) $sem['id']);
 
@@ -52,9 +54,10 @@ foreach ($siswa as $s) {
     $no++;
     $d = $nilai[(int) $s['id']] ?? ['formatif' => [], 'sumatif' => [], 'asas' => null];
     $isian = [$no, (string) ($s['nis'] ?: ''), (string) $s['nama']];
+    // Kolom Formatif boleh berisi angka, huruf, atau tanda centang (v1.36.0) → ditulis APA ADANYA
+    // (angka tetap "85,50", huruf/centang apa adanya).
     for ($k = 1; $k <= $jf; $k++) {
-        $v = $d['formatif'][$k] ?? null;
-        $isian[] = $v === null ? '' : r1($v);
+        $isian[] = nilai_tampil($d['formatif'][$k] ?? null);
     }
     $sumArr = [];
     for ($k = 1; $k <= $js; $k++) {
@@ -68,7 +71,7 @@ foreach ($siswa as $s) {
     $isian[] = $rataS === null ? '' : r1($rataS);
     $akhir = nilai_akhir($sumArr, $asas);
     $isian[] = $akhir === null ? '' : r1($akhir);
-    $isian[] = predikat_dari($akhir);
+    $isian[] = predikat_dari_k($konteksNilai, $akhir);
     $baris[] = $isian;
 }
 
@@ -77,7 +80,7 @@ $namaBerkas = 'nilai-' . preg_replace('/[^A-Za-z0-9]+/', '-', kelas_nama($kelasI
 
 // Baris keterangan agar pemilik berkas tahu asal datanya.
 array_unshift($baris, []);
-array_unshift($baris, ['Nilai akhir = (rata-rata Sumatif Lingkup Materi x ' . r0(bobot_sumatif()) . '%) + (ASAS x ' . r0(bobot_asas()) . '%). Nilai Formatif hanya penilaian proses.']);
+array_unshift($baris, ['Nilai akhir = (rata-rata Sumatif Lingkup Materi x ' . r0(100.0 - (float) $konteksNilai['bobot_asas']) . '%) + (ASAS x ' . r0((float) $konteksNilai['bobot_asas']) . '%). Nilai Formatif hanya penilaian proses (boleh angka, huruf, atau tanda centang).']);
 array_unshift($baris, [nama_sekolah() . ' — ' . kelas_nama($kelasId) . ' — ' . mapel_nama($mapelId) . ' — T.A. ' . ta_nama($ta) . ' Semester ' . sem_nama($sem)]);
 
 csv_kirim($namaBerkas, $header, $baris);

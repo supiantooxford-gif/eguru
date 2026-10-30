@@ -3,9 +3,14 @@
  * Pendaftaran sekolah/madrasah MANDIRI (halaman publik) — tata letak mengikuti halaman
  * pendaftaran aplikasi Supervisi Guru (kepala halaman, langkah 1-2-3, bagian bertajuk, kartu sukses).
  *
- * Alur: sekolah mengisi formulir → dibuat dengan status `menunggu` dan `aktif = 0`
- * (login ditolak sampai Super Admin menyetujui di pendaftaran.php) → setelah disetujui,
- * aplikasi langsung dapat dipakai (mata pelajaran awal, tahun ajaran, dan semester disiapkan otomatis).
+ * Alur (permintaan pemilik): sekolah mengisi formulir → sekolah LANGSUNG disetujui otomatis
+ * (`verifikasi = disetujui`, `aktif = 1`) tetapi berstatus **MASA UJI COBA** (`PENDAFTARAN_HARI_AKTIF`,
+ * sekarang 15 hari) — pendaftar dapat langsung masuk dan mencoba seluruh fitur, tanpa
+ * menunggu persetujuan Admin. Setelah masa itu berakhir, aplikasi terkunci sampai KODE AKTIVASI
+ * lembaga dimasukkan (mekanisme aktivasi yang sudah ada). Mata pelajaran awal, tahun ajaran, dan
+ * semester disiapkan otomatis lewat provision_sekolah().
+ * Super Admin tetap dapat mengubah statusnya menjadi AKTIF PERMANEN di halaman Pendaftaran /
+ * Kelola Sekolah.
  *
  * Penjaga: captcha penjumlahan, maksimal 3 pendaftaran per sesi, pernyataan data benar, CSRF,
  * dan validasi kontak.
@@ -24,8 +29,16 @@ $err = [];
 $sukses = null;
 
 $nilai = [
-    'nama' => '', 'jenis' => 'madrasah', 'npsn' => '', 'alamat' => '', 'telepon' => '', 'email' => '',
+    // v37: identitas lembaga memuat NSM + alamat per wilayah (menyesuaikan Identitas & Pengaturan).
+    // Semua kunci di sini otomatis dibaca dari POST lewat foreach di bawah.
+    // v49: `jenjang` = PILIHAN JENJANG (SD/SMP/SMA/SMK atau MI/MTs/MA/MAK) yang wajib dipilih
+    // pendaftar; nilainya harus sesuai dengan jenis lembaga yang dipilih.
+    'nama' => '', 'jenis' => 'madrasah', 'jenjang' => '', 'npsn' => '', 'nsm' => '', 'alamat' => '',
+    'desa' => '', 'kecamatan' => '', 'kabupaten' => '', 'provinsi' => '',
+    'telepon' => '', 'email' => '', 'website' => '',
     'kepala_sekolah' => '', 'nip_kepala_sekolah' => '', 'kontak_nama' => '', 'kontak_telepon' => '',
+    // v39: identitas PENGAWAS BINA (nama & NIP) — permintaan pemilik.
+    'pengawas_nama' => '', 'pengawas_nip' => '',
     'kontak_email' => '', 'username' => '',
 ];
 
@@ -58,10 +71,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $harap = (int) ($_SESSION['daftar_captcha'] ?? 0) + (int) ($_SESSION['daftar_captcha2'] ?? 0);
 
     if ((int) $_SESSION['daftar_jumlah'] >= 3) {
-        $err[] = 'Anda sudah mengirim 3 pendaftaran pada sesi ini. Hubungi Super Admin bila perlu menambah lagi.';
+        $err[] = 'Anda sudah mengirim 3 pendaftaran pada sesi ini. Hubungi Admin bila perlu menambah lagi.';
     }
     if ($nilai['nama'] === '') {
         $err[] = 'Nama sekolah/madrasah wajib diisi.';
+    }
+    // v49: jenjang yang dikirim HARUS berlaku untuk jenis lembaga yang dipilih
+    // (Sekolah Umum → SD/SMP/SMA/SMK · Madrasah → MI/MTs/MA/MAK). Jenjang kosong dibiarkan
+    // "belum dipilih" (pilihan di formulir sudah bertanda wajib, jadi pengunjung memilihnya) —
+    // sekolah seperti itu tetap berjalan seperti sebelumnya & dapat dilengkapi pengelola nanti.
+    if ($nilai['jenjang'] !== '' && !jenjang_sah($nilai['jenjang'], $nilai['jenis'])) {
+        $err[] = 'Jenjang yang dipilih tidak berlaku untuk jenis lembaga tersebut. Untuk Sekolah Umum: '
+            . implode(', ', jenjang_pilihan('umum')) . '; untuk Madrasah: '
+            . implode(', ', jenjang_pilihan('madrasah')) . '.';
     }
     if ($nilai['kontak_nama'] === '') {
         $err[] = 'Nama penanggung jawab (yang dapat dihubungi) wajib diisi.';
@@ -95,7 +117,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $err[] = 'Nama pengguna "' . $nilai['username'] . '" sudah dipakai akun lain. Pilih nama pengguna lain.';
     }
     if (!$err && one('SELECT id FROM sekolah WHERE lower(nama) = lower(?)', [$nilai['nama']])) {
-        $err[] = 'Sekolah/madrasah dengan nama itu sudah terdaftar. Hubungi Super Admin bila ini kekeliruan.';
+        $err[] = 'Sekolah/madrasah dengan nama itu sudah terdaftar. Hubungi Admin bila ini kekeliruan.';
+    }
+
+    // NSM hanya milik MADRASAH (permintaan pemilik): medan ini TIDAK ditampilkan pada jenis
+    // "Sekolah Umum", jadi nilainya pun tidak disimpan — sekolah umum memang tidak punya NSM.
+    // (Penjagaannya di SERVER supaya tetap berlaku walau JavaScript gagal dimuat.)
+    if ($nilai['jenis'] === 'umum') {
+        $nilai['nsm'] = '';
     }
 
     if ($err) {
@@ -104,13 +133,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $now = date('Y-m-d H:i:s');
         db()->exec('BEGIN IMMEDIATE');
         try {
-            q('INSERT INTO sekolah (nama, npsn, alamat, telepon, email, kepala_sekolah, nip_kepala_sekolah, jenis,
-                    verifikasi, aktif, kontak_nama, kontak_telepon, kontak_email, didaftar, dibuat)
-               VALUES (?,?,?,?,?,?,?,?,"menunggu",0,?,?,?,?,?)',
-                [$nilai['nama'], $nilai['npsn'], $nilai['alamat'], $nilai['telepon'], $nilai['email'],
+            // Permintaan pemilik: pendaftar langsung DISETUJUI (aktif) dengan MASA UJI COBA
+            // (PENDAFTARAN_HARI_AKTIF, sekarang 15 hari),
+            // jadi tidak ada lagi pendaftaran yang menunggu keputusan Admin.
+            // v37: identitas lembaga memuat NSM + alamat per wilayah (menyesuaikan Identitas & Pengaturan).
+            // v39: identitas memuat NAMA + NIP PENGAWAS BINA (permintaan pemilik) — diposisikan
+            // tepat di bawah Nama/NIP Kepala Sekolah pada formulir.
+            q('INSERT INTO sekolah (nama, npsn, nsm, alamat, desa, kecamatan, kabupaten, provinsi,
+                    telepon, email, website, kepala_sekolah, nip_kepala_sekolah,
+                    pengawas_nama, pengawas_nip, jenis, jenjang,
+                    verifikasi, aktif, kontak_nama, kontak_telepon, kontak_email, didaftar, dibuat, ditinjau)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,"disetujui",1,?,?,?,?,?,?)',
+                [$nilai['nama'], $nilai['npsn'], $nilai['nsm'], $nilai['alamat'], $nilai['desa'],
+                 $nilai['kecamatan'], $nilai['kabupaten'], $nilai['provinsi'],
+                 $nilai['telepon'], $nilai['email'], $nilai['website'],
                  $nilai['kepala_sekolah'], nip_bersih($nilai['nip_kepala_sekolah']),
-                 $nilai['jenis'] === 'umum' ? 'umum' : 'madrasah',
-                 $nilai['kontak_nama'], $nilai['kontak_telepon'], $nilai['kontak_email'], $now, $now]);
+                 $nilai['pengawas_nama'], nip_bersih($nilai['pengawas_nip']),
+                 $nilai['jenis'] === 'umum' ? 'umum' : 'madrasah', $nilai['jenjang'],
+                 $nilai['kontak_nama'], $nilai['kontak_telepon'], $nilai['kontak_email'], $now, $now, $now]);
             $sid = (int) db()->lastInsertId();
             q('INSERT INTO users (sekolah_id, username, password_hash, nama, role, aktif, dibuat) VALUES (?,?,?,?,?,1,?)',
                 [$sid, $nilai['username'], password_hash($sandi, PASSWORD_DEFAULT),
@@ -120,13 +160,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             db()->exec('ROLLBACK');
             throw $ex;
         }
+        // DI LUAR transaksi (fungsi-fungsi ini menulis sendiri): siapkan mapel/tahun ajaran/semester
+        // lalu beri masa aktif PENDAFTARAN_HARI_AKTIF hari supaya pendaftar bisa langsung memakai aplikasi.
+        provision_sekolah(db(), $sid);
+        aktivasi_uji_coba($sid, PENDAFTARAN_HARI_AKTIF);
+        // Permintaan pemilik: nama pengawas bina yang diisi pendaftar OTOMATIS dibuatkan akun pengawas
+        // (nonaktif, menunggu ditinjau Super Admin) sekaligus ditetapkan sebagai binaan sekolah ini.
+        // Akunnya TIDAK dapat dipakai masuk sampai Super Admin meninjau & mengaktifkannya.
+        $pengawasBaru = pengawas_dari_pendaftaran($sid, (string) $nilai['pengawas_nama']);
         $_SESSION['daftar_jumlah'] = (int) $_SESSION['daftar_jumlah'] + 1;
         unset($_SESSION['daftar_captcha'], $_SESSION['daftar_captcha2']);
         $sukses = [
             'nama' => $nilai['nama'],
             'username' => $nilai['username'],
-            'jenis' => $nilai['jenis'] === 'umum' ? 'Sekolah Umum' : 'Madrasah',
+            'jenis' => ($nilai['jenis'] === 'umum' ? 'Sekolah Umum' : 'Madrasah')
+                . ($nilai['jenjang'] !== '' ? ' — jenjang ' . $nilai['jenjang'] : ''),
             'kontak' => $nilai['kontak_telepon'] !== '' ? $nilai['kontak_telepon'] : $nilai['kontak_email'],
+            'hari' => PENDAFTARAN_HARI_AKTIF,
+            'sampai' => (string) val('SELECT uji_coba_selesai FROM sekolah WHERE id = ?', [$sid], ''),
+            // Hanya nama pengawas yang dipakai di kartu sukses — kata sandi akun TIDAK pernah dicetak.
+            'pengawas' => $pengawasBaru !== null ? (string) $pengawasBaru['nama'] : '',
         ];
     }
 }
@@ -150,7 +203,12 @@ $sisa = max(0, 3 - (int) $_SESSION['daftar_jumlah']);
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pendaftaran Sekolah/Madrasah &middot; <?= e(APP_NAME) ?></title>
 <link rel="stylesheet" href="assets/style.css?v=<?= e(APP_VERSION) ?>">
+<?php // Favicon & logo memakai LOGO APLIKASI bila Super Admin sudah mengunggahnya (menu "Logo Aplikasi"). ?>
+<?php if (ada_logo_aplikasi()): ?>
+<link rel="icon" href="<?= e(logo_aplikasi()) ?>">
+<?php else: ?>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128218;</text></svg>">
+<?php endif; ?>
 </head>
 <body>
 <div class="bg-deco" aria-hidden="true"><span class="b1"></span><span class="b2"></span><span class="b3"></span></div>
@@ -159,7 +217,13 @@ $sisa = max(0, 3 - (int) $_SESSION['daftar_jumlah']);
   <div class="daftar-inner">
 
     <div class="daftar-head">
-      <div class="daftar-logo"><?= ikon('mosque', 28) ?></div>
+      <?php // Logo aplikasi (menu Super Admin "Logo Aplikasi") bila sudah diunggah; kalau belum tetap
+            // lambang bawaan. Kelas `daftar-logo` dipertahankan supaya tata letaknya tidak berubah. ?>
+      <?php if (ada_logo_aplikasi()): ?>
+        <div class="daftar-logo daftar-logo-img"><img src="<?= e(logo_aplikasi()) ?>" alt="Logo <?= e(APP_NAME) ?>"></div>
+      <?php else: ?>
+        <div class="daftar-logo"><?= ikon('mosque', 28) ?></div>
+      <?php endif; ?>
       <div>
         <h1>Pendaftaran Sekolah/Madrasah</h1>
         <p><?= e(APP_NAME) ?> &middot; <?= e(APP_SUB) ?> &middot; satu aplikasi melayani banyak sekolah/madrasah</p>
@@ -173,23 +237,31 @@ $sisa = max(0, 3 - (int) $_SESSION['daftar_jumlah']);
       <div class="card">
         <div class="empty" style="padding:26px 18px 20px">
           <?= ikon('check', 42) ?>
-          <h3>Pendaftaran terkirim</h3>
+          <h3>Pendaftaran berhasil &amp; langsung aktif</h3>
           <p>Terima kasih. Pendaftaran <b><?= e($sukses['nama']) ?></b> (<?= e($sukses['jenis']) ?>) sudah kami terima
-            dan sekarang <b>menunggu persetujuan Super Admin</b>.</p>
+            dan <b>langsung aktif selama <?= (int) $sukses['hari'] ?> hari</b> — Anda dapat masuk
+            <b>sekarang</b> memakai akun yang baru didaftarkan, tanpa menunggu persetujuan.</p>
+        </div>
+
+        <div class="alert alert-ok" style="margin-bottom:16px">
+          <?= ikon('clock', 16) ?>
+          <span>Masa aktif: <b><?= (int) $sukses['hari'] ?> hari</b><?= $sukses['sampai'] !== '' ? ', sampai <b>' . e(tanggal_id((string) $sukses['sampai'], true)) . '</b>' : '' ?>.
+            Setelah masa itu berakhir, aplikasi terkunci sampai <b>kode aktivasi lembaga</b> dimasukkan
+            (Admin aplikasi menyediakannya).</span>
         </div>
 
         <div class="grid g3" style="gap:12px">
           <div class="langkah">
             <i>1</i>
-            <div><b>Data diperiksa</b><span>Super Admin memeriksa kelengkapan data sekolah/madrasah Anda.</span></div>
+            <div><b>Masuk sekarang</b><span>Gunakan nama pengguna &amp; kata sandi yang baru Anda isi.</span></div>
           </div>
           <div class="langkah">
             <i>2</i>
-            <div><b>Persetujuan</b><span>Setelah disetujui, status sekolah menjadi aktif dan aplikasi siap dipakai.</span></div>
+            <div><b>Lihat fiturnya</b><span>Dashboard, data guru &amp; siswa, nilai, daftar hadir, jurnal, notulen.</span></div>
           </div>
           <div class="langkah">
             <i>3</i>
-            <div><b>Masuk &amp; mulai</b><span><?= count(mapel_awal()) ?> mata pelajaran, tahun ajaran, dan semester
+            <div><b>Siap dipakai</b><span><?= count(mapel_awal()) ?> mata pelajaran, tahun ajaran, dan semester
               sudah disiapkan otomatis.</span></div>
           </div>
         </div>
@@ -206,16 +278,26 @@ $sisa = max(0, 3 - (int) $_SESSION['daftar_jumlah']);
               <div class="b">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull; <span class="xs mut">(yang Anda isi tadi)</span></div>
             </div>
           </div>
-          <p class="hint" style="margin-bottom:0">Simpan nama pengguna dan kata sandi Anda. Bila lupa, minta Super Admin
+          <p class="hint" style="margin-bottom:0">Simpan nama pengguna dan kata sandi Anda. Bila lupa, minta Admin
             mengatur ulang.</p>
         </div>
 
         <div class="divider"></div>
         <p class="sm mut" style="margin:0">
-          Login Anda masih ditolak selama pendaftaran belum disetujui — Anda akan melihat pesan
-          <b>menunggu persetujuan</b> saat mencoba masuk. Bila dalam beberapa hari belum ada kabar,
-          hubungi Super Admin<?= $sukses['kontak'] !== '' ? ' (kontak pendaftaran Anda: ' . e($sukses['kontak']) . ')' : '' ?>.
+          <b>Pendaftaran Gratis (Aktif <?= (int) PENDAFTARAN_HARI_AKTIF ?> Hari).</b> Setelah melakukan pendaftaran silahkan masuk menggunakan
+          akun yang telah anda daftarkan untuk melihat secara langsung berbagai fitur yang tersedia.
+          Bila ada kendala, hubungi Admin<?= $sukses['kontak'] !== '' ? ' (kontak pendaftaran Anda: ' . e($sukses['kontak']) . ')' : '' ?>.
         </p>
+        <?php // Permintaan pemilik: nama pengawas bina diteruskan menjadi akun pengawas yang menunggu
+              // ditinjau Admin. Keterangannya memakai istilah "sekolah/madrasah" (aturan halaman ini)
+              // dan TIDAK menyebut kata sandi akun pengawas tersebut. ?>
+        <?php if ($sukses['pengawas'] !== ''): ?>
+          <p class="sm mut" style="margin:8px 0 0">
+            <b>Nama Pengawas Bina</b> yang Anda isi (<b><?= e($sukses['pengawas']) ?></b>) sudah diteruskan
+            ke Admin untuk ditinjau. Akun pengawas bina tersebut baru dapat dipakai setelah Admin
+            meninjau dan mengaktifkannya.
+          </p>
+        <?php endif; ?>
 
         <div class="flex mt16" style="justify-content:center">
           <a class="btn btn-primary" href="login.php"><?= ikon('lock', 16) ?> Ke Halaman Masuk</a>
@@ -230,24 +312,35 @@ $sisa = max(0, 3 - (int) $_SESSION['daftar_jumlah']);
         </div>
       <?php endif; ?>
 
+      <?php // Permintaan pemilik: keterangan masa aktif (PENDAFTARAN_HARI_AKTIF, sekarang 15 hari)
+            // ditampilkan mencolok pada halaman pendaftaran (pendaftar langsung disetujui otomatis
+            // dengan masa uji coba). ?>
+      <div class="alert alert-ok daftar-gratis" style="margin-bottom:18px">
+        <?= ikon('star', 16) ?>
+        <span><b>Pendaftaran Gratis (Aktif <?= (int) PENDAFTARAN_HARI_AKTIF ?> Hari).</b>
+          Setelah melakukan pendaftaran silahkan masuk menggunakan akun yang telah anda daftarkan untuk
+          melihat secara langsung berbagai fitur yang tersedia.</span>
+      </div>
+
       <div class="card">
         <div class="card-head">
           <div>
             <h2>Formulir Pendaftaran</h2>
-            <p>Isi data sekolah/madrasah dan akun pengelolanya. Login dapat dipakai setelah pendaftaran disetujui Admin.</p>
+            <p>Isi data sekolah/madrasah dan akun pengelolanya. Setelah dikirim, akun
+              <b>langsung dapat dipakai</b> selama <?= (int) PENDAFTARAN_HARI_AKTIF ?> hari.</p>
           </div>
         </div>
 
         <div class="grid g3 mb16" style="gap:12px">
           <div class="langkah"><i>1</i><div><b>Isi formulir</b><span>Data sekolah/madrasah + akun pengelola</span></div></div>
-          <div class="langkah"><i>2</i><div><b>Diperiksa Super Admin</b><span>Persetujuan penggunaan aplikasi</span></div></div>
+          <div class="langkah"><i>2</i><div><b>Aktif otomatis</b><span>Langsung aktif <?= (int) PENDAFTARAN_HARI_AKTIF ?> hari, tanpa menunggu persetujuan</span></div></div>
           <div class="langkah"><i>3</i><div><b>Masuk &amp; mulai</b><span>Mapel, tahun ajaran &amp; semester disiapkan</span></div></div>
         </div>
 
         <?php if ($sisa <= 0): ?>
           <div class="alert alert-warn" style="margin-bottom:0">
             <?= ikon('alert', 16) ?>
-            <span>Batas 3 pendaftaran per sesi sudah tercapai. Hubungi Super Admin untuk pendaftaran berikutnya.</span>
+            <span>Batas 3 pendaftaran per sesi sudah tercapai. Hubungi Admin untuk pendaftaran berikutnya.</span>
           </div>
         <?php else: ?>
           <form method="post" class="grid" style="gap:18px" autocomplete="off">
@@ -264,27 +357,74 @@ $sisa = max(0, 3 - (int) $_SESSION['daftar_jumlah']);
                 <div>
                   <label class="f" for="jenis">Jenis *</label>
                   <select id="jenis" name="jenis">
-                    <option value="madrasah" <?= $nilai['jenis'] === 'madrasah' ? 'selected' : '' ?>>Madrasah (MI/MTs/MA)</option>
+                    <option value="madrasah" <?= $nilai['jenis'] === 'madrasah' ? 'selected' : '' ?>>Madrasah (MI/MTs/MA/MAK)</option>
                     <option value="umum" <?= $nilai['jenis'] === 'umum' ? 'selected' : '' ?>>Sekolah Umum (SD/SMP/SMA/SMK)</option>
                   </select>
                   <div class="hint">Menentukan istilah pada aplikasi &amp; dokumen cetak sekolah tersebut.</div>
                 </div>
+                <?php // v49: PILIHAN JENJANG — pilihannya mengikuti jenis lembaga yang dipilih
+                      // (Sekolah Umum → SD/SMP/SMA/SMK · Madrasah → MI/MTs/MA/MAK). Server memeriksa
+                      // keabsahannya, dan initJenisJenjang() menyusun ulang pilihan saat jenis diganti
+                      // sehingga tetap benar walau JavaScript gagal dimuat (pilihan awal dari server). ?>
+                <div>
+                  <label class="f" for="jenjang">Jenjang</label>
+                  <select id="jenjang" name="jenjang"
+                          data-jenjang="<?= e(json_encode(JENJANG_PILIHAN, JSON_UNESCAPED_UNICODE)) ?>"
+                          data-label="<?= e(json_encode(JENJANG_LABEL, JSON_UNESCAPED_UNICODE)) ?>">
+                    <option value="">— pilih jenjang —</option>
+                    <?php foreach (jenjang_pilihan($nilai['jenis']) as $jj): ?>
+                      <option value="<?= e($jj) ?>" <?= $nilai['jenjang'] === $jj ? 'selected' : '' ?>><?= e(JENJANG_LABEL[$jj] ?? $jj) ?></option>
+                    <?php endforeach; ?>
+                  </select>
+                  <div class="hint">Menentukan acuan tingkat kelas &amp; konsep guru kelas (SD/MI).
+                    Boleh dikosongkan dan dilengkapi kemudian oleh pengelola lembaga.</div>
+                </div>
                 <div>
                   <label class="f" for="npsn">NPSN</label>
                   <input type="text" id="npsn" name="npsn" value="<?= e($nilai['npsn']) ?>" placeholder="8 digit">
+                </div>
+                <?php // NSM hanya dimiliki MADRASAH — medan ini disembunyikan saat jenisnya
+                      // "Sekolah Umum" (permintaan pemilik). Atribut `hidden` sudah dicetak server
+                      // saat halaman dirender ulang dengan jenis umum, jadi tanpa JavaScript pun
+                      // keadaan awalnya tetap benar; skrip initJenisNsm() hanya mengikuti pilihan. ?>
+                <div id="blokNsm"<?= $nilai['jenis'] === 'umum' ? ' hidden' : '' ?>>
+                  <label class="f" for="nsm">NSM <span class="mut xs">(madrasah)</span></label>
+                  <input type="text" id="nsm" name="nsm" value="<?= e($nilai['nsm']) ?>"
+                         placeholder="Nomor Statistik Madrasah">
                 </div>
                 <div>
                   <label class="f" for="telepon">Telepon Sekolah/Madrasah</label>
                   <input type="text" id="telepon" name="telepon" value="<?= e($nilai['telepon']) ?>" placeholder="08xxxxxxxxxx">
                 </div>
                 <div style="grid-column:1/-1">
-                  <label class="f" for="alamat">Alamat</label>
+                  <label class="f" for="alamat">Alamat (Nama Jalan, Dusun)</label>
                   <input type="text" id="alamat" name="alamat" value="<?= e($nilai['alamat']) ?>"
-                         placeholder="Jl. ..., Desa ..., Kec. ..., Kab. ...">
+                         placeholder="mis. Jl. Dusun Gandaria">
+                </div>
+                <div>
+                  <label class="f" for="desa">Desa/Kelurahan</label>
+                  <input type="text" id="desa" name="desa" value="<?= e($nilai['desa']) ?>">
+                </div>
+                <div>
+                  <label class="f" for="kecamatan">Kecamatan</label>
+                  <input type="text" id="kecamatan" name="kecamatan" value="<?= e($nilai['kecamatan']) ?>">
+                  <div class="hint">Menjadi <b>tempat</b> pada baris "tempat, tanggal" tanda tangan dokumen cetak.</div>
+                </div>
+                <div>
+                  <label class="f" for="kabupaten">Kabupaten</label>
+                  <input type="text" id="kabupaten" name="kabupaten" value="<?= e($nilai['kabupaten']) ?>">
+                </div>
+                <div>
+                  <label class="f" for="provinsi">Provinsi</label>
+                  <input type="text" id="provinsi" name="provinsi" value="<?= e($nilai['provinsi']) ?>">
                 </div>
                 <div>
                   <label class="f" for="email">Email Sekolah/Madrasah</label>
                   <input type="text" id="email" name="email" value="<?= e($nilai['email']) ?>" placeholder="nama@email.com">
+                </div>
+                <div>
+                  <label class="f" for="website">Situs/laman</label>
+                  <input type="text" id="website" name="website" value="<?= e($nilai['website']) ?>" placeholder="www.sekolah.sch.id">
                 </div>
                 <div>
                   <label class="f" for="kepala_sekolah">Nama Kepala</label>
@@ -294,6 +434,18 @@ $sisa = max(0, 3 - (int) $_SESSION['daftar_jumlah']);
                 <div>
                   <label class="f" for="nip_kepala_sekolah">NIP Kepala</label>
                   <input type="text" id="nip_kepala_sekolah" name="nip_kepala_sekolah" value="<?= e($nilai['nip_kepala_sekolah']) ?>">
+                </div>
+                <?php // v39: identitas PENGAWAS BINA (nama & NIP) — permintaan pemilik: letaknya
+                      // "dibawah nama kepala sekolah" (langsung di bawah Nama/NIP Kepala). ?>
+                <div>
+                  <label class="f" for="pengawas_nama">Nama Pengawas Bina</label>
+                  <input type="text" id="pengawas_nama" name="pengawas_nama" value="<?= e($nilai['pengawas_nama']) ?>"
+                         placeholder="nama &amp; gelar">
+                </div>
+                <div>
+                  <label class="f" for="pengawas_nip">NIP Pengawas Bina</label>
+                  <input type="text" id="pengawas_nip" name="pengawas_nip" value="<?= e($nilai['pengawas_nip']) ?>"
+                         placeholder="boleh dikosongkan">
                 </div>
               </div>
             </div>
@@ -319,7 +471,7 @@ $sisa = max(0, 3 - (int) $_SESSION['daftar_jumlah']);
                          placeholder="nama@email.com">
                 </div>
               </div>
-              <div class="hint">Isi minimal salah satu (HP/WhatsApp atau email) agar Super Admin dapat menghubungi Anda.</div>
+              <div class="hint">Isi minimal salah satu (HP/WhatsApp atau email) agar Admin dapat menghubungi Anda.</div>
             </div>
 
             <div class="divider" style="margin:0"></div>
@@ -342,8 +494,8 @@ $sisa = max(0, 3 - (int) $_SESSION['daftar_jumlah']);
                   <input type="password" id="password2" name="password2" required minlength="8">
                 </div>
               </div>
-              <div class="hint">Akun ini berperan sebagai <b>Kepala Sekolah/Madrasah</b>. Super Admin dapat menambahkan
-                akun Admin Operator setelah pendaftaran disetujui.</div>
+              <div class="hint">Akun ini berperan sebagai <b>Kepala Sekolah/Madrasah</b>. Setelah masuk,
+                akun <b>Admin Operator</b> dapat ditambahkan dari dalam aplikasi (menu Akun Operator).</div>
             </div>
 
             <div class="divider" style="margin:0"></div>
@@ -369,31 +521,12 @@ $sisa = max(0, 3 - (int) $_SESSION['daftar_jumlah']);
               <button class="btn btn-primary" type="submit"><?= ikon('check', 16) ?> Kirim Pendaftaran</button>
               <a class="btn btn-ghost" href="login.php">Saya sudah punya akun</a>
             </div>
-            <p class="hint" style="margin:0">Pendaftaran diperiksa Super Admin. Login baru dapat dipakai setelah
+            <p class="hint" style="margin:0">Pendaftaran diperiksa Admin. Login baru dapat dipakai setelah
               pendaftaran <b>disetujui</b>.</p>
           </form>
         <?php endif; ?>
       </div>
 
-      <div class="card">
-        <div class="card-head">
-          <div><h2>Apa yang Anda dapatkan</h2><p>Satu aplikasi untuk administrasi guru, dipakai banyak sekolah/madrasah.</p></div>
-        </div>
-        <div class="grid g3" style="gap:12px">
-          <div class="langkah">
-            <span class="langkah-ico"><?= ikon('users', 16) ?></span>
-            <div><b>Data guru &amp; siswa</b><span>Kelas yang diajar, mapel yang dipegang, impor Excel/CSV</span></div>
-          </div>
-          <div class="langkah">
-            <span class="langkah-ico"><?= ikon('chart', 16) ?></span>
-            <div><b>Daftar nilai &amp; hadir</b><span>Formatif, Sumatif Lingkup Materi, dan ASAS berbobot</span></div>
-          </div>
-          <div class="langkah">
-            <span class="langkah-ico"><?= ikon('book', 16) ?></span>
-            <div><b>Jurnal &amp; catatan pelanggaran</b><span>Jurnal harian (S/I/A/B/T) dan catatan pelanggaran siswa</span></div>
-          </div>
-        </div>
-      </div>
     <?php endif; ?>
 
     <div class="daftar-foot">
@@ -402,5 +535,10 @@ $sisa = max(0, 3 - (int) $_SESSION['daftar_jumlah']);
     </div>
   </div>
 </div>
+<?php // Halaman pendaftaran ikut memuat assets/app.js (sama seperti login.php) karena dipakai
+      // untuk menyembunyikan medan NSM saat jenis "Sekolah Umum" (initJenisNsm()). Skripnya hanya
+      // bekerja pada elemen yang ada di halaman, dan tanpa JavaScript pun keadaan awal tetap benar
+      // karena atribut `hidden` sudah dicetak server. ?>
+<script src="assets/app.js?v=<?= e(APP_VERSION) ?>"></script>
 </body>
 </html>

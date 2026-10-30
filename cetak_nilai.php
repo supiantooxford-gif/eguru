@@ -36,9 +36,12 @@ if (!boleh_mapel($mapelId)) {
     tolak403('Mata pelajaran itu tidak Anda ampu.');
 }
 
-$jf = jumlah_formatif();
-$js = jumlah_sumatif();
-$bobotAsas = bobot_asas();
+// Pengaturan yang BERLAKU untuk mapel ini: pengaturan GURU bila sudah dibuat, kalau belum →
+// pengaturan SEKOLAH (permintaan pemilik: guru menyetel sendiri kolom & ambang predikatnya).
+$konteksNilai = nilai_konteks($mapelId, $kelasId);
+$jf = (int) $konteksNilai['jf'];
+$js = (int) $konteksNilai['js'];
+$bobotAsas = (float) $konteksNilai['bobot_asas'];
 $siswa = siswa_kelas($kelasId, true);
 $nilai = nilai_map($kelasId, $mapelId, (int) $ta['id'], (int) $sem['id']);
 $guru = guru_pengampu($kelasId, $mapelId);
@@ -64,13 +67,25 @@ $kolNA = [];
   .sheet-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
   .sheet-foot{justify-content:space-between}
   .ket{font-size:.72rem;color:#635F82;margin-top:10px;line-height:1.5}
-  @media (max-width:900px){
+  /* Tata letak layar sempit HANYA untuk layar (media "screen"): kertas A4 portrait hanya
+     selebar ±695px, jadi "@media (max-width:900px)" ikut aktif saat MENCETAK dan membuat tanda
+     tangan menumpuk atas-bawah — padahal harus tetap kiri-kanan. */
+  @media screen and (max-width:900px){
     .print-sheet{padding:18px 14px}
     table.sheet.nilai{min-width:900px}
     .sheet-meta{grid-template-columns:minmax(0,1fr)}
     .sheet-foot{flex-direction:column;gap:20px}
   }
   @media print{body{background:#fff;padding:0}.toolbar,.no-print{display:none !important}.sheet-wrap{max-width:none}.print-sheet{box-shadow:none;border:none;padding:0;border-radius:0}.sheet-scroll{overflow:visible}table.sheet.nilai{min-width:0}}
+  /* Saat dicetak, dua blok tanda tangan WAJIB berdampingan (kiri & kanan). */
+  @media print{
+    /* PENTING: tema menetapkan body{min-height:100vh}. Saat MENCETAK, 100vh = tinggi kertas,
+       sehingga tinggi dokumen menjadi setinggi halaman dan peramban mencetak halaman KEDUA yang
+       hampir kosong. Karena itu min-height dimatikan pada media cetak. */
+    html,body{min-height:0 !important;height:auto}
+    .sheet-foot{flex-direction:row !important;flex-wrap:nowrap;justify-content:space-between}
+    .sheet-foot.dua-ttd .sheet-sign{flex:1 1 0;min-width:0}
+  }
   @page{size:A4 landscape;margin:12mm}
 </style>
 </head>
@@ -93,7 +108,7 @@ $kolNA = [];
         'Tahun Ajaran'   => ta_nama($ta) . ' — Semester ' . sem_nama($sem),
         'Guru Pengampu'  => $guru ? (string) $guru['nama'] : '-',
         'Jumlah Siswa'   => (string) count($siswa),
-        'Pembobotan'     => 'Sumatif Lingkup Materi ' . r0(bobot_sumatif()) . '% + ASAS ' . r0($bobotAsas) . '%',
+        'Pembobotan'     => 'Sumatif Lingkup Materi ' . r0(100.0 - $bobotAsas) . '% + ASAS ' . r0($bobotAsas) . '%',
     ]); ?>
 
     <div class="sheet-scroll">
@@ -128,8 +143,14 @@ $kolNA = [];
             <td class="ctr"><?= $no ?></td>
             <td><?= e((string) $s['nama']) ?></td>
             <td class="ctr"><?= e((string) ($s['nis'] ?: '-')) ?></td>
-            <?php for ($k = 1; $k <= $jf; $k++): $v = $d['formatif'][$k] ?? null; if ($v !== null) { $kolF[$k][] = (float) $v; } ?>
-              <td class="ctr"><?= $v === null ? '-' : e(r1($v)) ?></td>
+            <?php // Formatif boleh berisi angka, huruf, atau tanda centang (v1.36.0): ditampilkan apa
+                  // adanya, dan hanya sel BERISI ANGKA yang ikut rata-rata kelas kolom itu.
+                  for ($k = 1; $k <= $jf; $k++):
+                      $v = $d['formatif'][$k] ?? null;
+                      $angkaF = nilai_angka($v);
+                      if ($angkaF !== null) { $kolF[$k][] = $angkaF; }
+            ?>
+              <td class="ctr"><?= $v === null || $v === '' ? '-' : e(nilai_tampil($v)) ?></td>
             <?php endfor; ?>
             <?php for ($k = 1; $k <= $js; $k++): $v = $d['sumatif'][$k] ?? null; $sumArr[$k] = $v; if ($v !== null) { $kolS[$k][] = (float) $v; } ?>
               <td class="ctr"><?= $v === null ? '-' : e(r1($v)) ?></td>
@@ -138,7 +159,7 @@ $kolNA = [];
                   $akhir = nilai_akhir($sumArr, $asas); if ($akhir !== null) { $kolNA[] = $akhir; } ?>
             <td class="ctr"><?= $asas === null ? '-' : e(r1($asas)) ?></td>
             <td class="ctr"><b><?= $akhir === null ? '-' : e(r1($akhir)) ?></b></td>
-            <td class="ctr"><?= $akhir === null ? '-' : e(predikat_dari($akhir)) ?></td>
+            <td class="ctr"><?= $akhir === null ? '-' : e(predikat_dari_k($konteksNilai, $akhir)) ?></td>
           </tr>
         <?php endforeach; ?>
         <?php if ($no === 0): ?>
@@ -152,23 +173,24 @@ $kolNA = [];
             <?php for ($k = 1; $k <= $js; $k++): $r = rata($kolS[$k]); ?><th class="ctr"><?= $r === null ? '-' : e(r1($r)) ?></th><?php endfor; ?>
             <th class="ctr"><?= ($r = rata($kolA)) === null ? '-' : e(r1($r)) ?></th>
             <th class="ctr"><?= ($r = rata($kolNA)) === null ? '-' : e(r1($r)) ?></th>
-            <th class="ctr"><?= $r === null ? '-' : e(predikat_dari($r)) ?></th>
+            <th class="ctr"><?= $r === null ? '-' : e(predikat_dari_k($konteksNilai, $r)) ?></th>
           </tr>
         </tfoot>
       </table>
     </div>
 
     <div class="ket">
-      Keterangan: F = Nilai Formatif (penilaian proses, tidak dihitung ke nilai akhir),
-      S = Sumatif Lingkup Materi (bobot <?= e(r0(bobot_sumatif())) ?>%), ASAS = Sumatif Akhir Semester (bobot <?= e(r0($bobotAsas)) ?>%).<br>
-      Nilai Akhir = (rata-rata Sumatif Lingkup Materi &times; <?= e(r0(bobot_sumatif())) ?>%) + (ASAS &times; <?= e(r0($bobotAsas)) ?>%).
-      Predikat: A &ge; <?= e(r0(thresholds()['batas_a'])) ?>, B &ge; <?= e(r0(thresholds()['batas_b'])) ?>, C &ge; <?= e(r0(thresholds()['batas_c'])) ?>, D di bawahnya.
+      Keterangan: F = Nilai Formatif (penilaian proses, tidak dihitung ke nilai akhir; boleh berupa
+      angka, huruf, atau tanda centang ✓ — rata-rata kelas kolom ini hanya menghitung sel berisi angka),
+      S = Sumatif Lingkup Materi (bobot <?= e(r0(100.0 - $bobotAsas)) ?>%), ASAS = Sumatif Akhir Semester (bobot <?= e(r0($bobotAsas)) ?>%).<br>
+      Nilai Akhir = (rata-rata Sumatif Lingkup Materi &times; <?= e(r0(100.0 - $bobotAsas)) ?>%) + (ASAS &times; <?= e(r0($bobotAsas)) ?>%).
+      <b>Predikat:</b> <?= e(predikat_keterangan_k($konteksNilai)) ?>.
     </div>
 
     <!-- Posisi tanda tangan: kepala sekolah/madrasah di KIRI, guru di KANAN (permintaan pemilik). -->
     <div class="sheet-foot dua-ttd">
-      <?php ttd_blok('Mengetahui, ' . jabatan_kepala(), kepala_nama(), kepala_nip(), 'sheet-sign sheet-sign-kiri'); ?>
-      <?php ttd_blok('Guru Mata Pelajaran', $guru ? (string) $guru['nama'] : '-', '', 'sheet-sign sheet-sign-kanan'); ?>
+      <?php ttd_blok(ttd_mengetahui(), kepala_nama(), kepala_nip(), 'sheet-sign sheet-sign-kiri'); ?>
+      <?php ttd_blok('Guru Mata Pelajaran', $guru ? (string) $guru['nama'] : '-', '', 'sheet-sign sheet-sign-kanan', true); ?>
     </div>
 
     <p class="xs mut center" style="margin-top:18px">

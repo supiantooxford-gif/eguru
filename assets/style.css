@@ -31,6 +31,12 @@
   --accent2:var(--emas);
 }
 *{box-sizing:border-box}
+/* Elemen ber-atribut `hidden` WAJIB benar-benar tersembunyi. Banyak wadah di tema ini memakai
+   display:grid/flex, dan karena aturan penulis (author) selalu mengalahkan gaya bawaan peramban,
+   `[hidden]{display:none}` dari UA stylesheet bisa IKUT KALAH sehingga elemen yang seharusnya
+   disembunyikan tetap tampil (pernah terjadi pada navigasi slider portal). Dipakai mis. oleh medan
+   NSM pada halaman pendaftaran saat jenisnya "Sekolah Umum" (sekolah umum tidak punya NSM). */
+[hidden]{display:none !important}
 html,body{margin:0;padding:0}
 body{
   font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,sans-serif;
@@ -104,6 +110,66 @@ svg.ic{flex:0 0 auto}
   font-weight:700;border-color:rgba(255,255,255,.4);box-shadow:0 8px 18px -12px rgba(0,0,0,.8);
 }
 .nav-item.on svg{color:#3a2c05}
+
+/* ----- SUB MENU sidebar (permintaan pemilik, v1.57.0) -----
+   "menu posisi dirubah dan dijadikan sub menu dengan urutan baru … bagian tugas tambahan buat
+   sub menu Ketika di klik baru muncul".
+   Memakai <details>/<summary> sehingga buka-tutupnya bekerja TANPA JavaScript; judulnya bergaya
+   seperti .nav-item dan isinya menjorok dengan garis emas tipis di kiri. */
+.nav-grup > summary{list-style:none;cursor:pointer}
+.nav-grup > summary::-webkit-details-marker{display:none}
+.nav-grup > summary::marker{content:''}
+.nav-grup[open] > summary{background:rgba(255,255,255,.10);border-color:rgba(201,162,39,.4)}
+.nav-caret{
+  margin-left:auto;font-size:.7rem;line-height:1;color:rgba(234,243,238,.85);
+  transition:transform .16s;flex:0 0 auto;
+}
+.nav-caret::before{content:'\25BE'}   /* ▾ */
+.nav-grup[open] > summary .nav-caret{transform:rotate(180deg)}
+.nav-sub{
+  display:flex;flex-direction:column;gap:2px;margin:3px 0 3px 15px;padding-left:11px;
+  border-left:1px solid rgba(201,162,39,.38);
+}
+.nav-sub .nav-item{padding:7px 10px;font-size:.835rem}
+.nav-sub .nav-item svg{width:15px;height:15px;opacity:.9}
+.nav-sub .nav-item .pill{font-size:.62rem}
+
+/* ----- TANDA "NEW" BERKEDIP pada menu sidebar (permintaan pemilik, v1.59.0) -----
+   *"Pada menu ujian online tambahkan tulisan new berkedip seperti pada aplikasi smart teacher"*.
+   Dipakai `daftar_apps_badge_new()`/`daftar_apps_nama_sidebar()` (inc/daftar_apps.php) untuk menu
+   daftar aplikasi yang memakai fitur ini (kini: "Ujian Online" dan "Smart Teacher"). Lencananya
+   berbunyi **Bonus** (`DAFTAR_APPS_BARU_TEKS`) dan diletakkan **SEBARIS DI ATAS nama menu** lewat
+   wadah `.nav-nama`.
+   Kedipan memakai `opacity` (bukan warna) supaya kontras huruf tetap terjaga, dan dimatikan bagi
+   pengguna yang mengaktifkan "kurangi gerakan" pada perangkatnya. */
+@keyframes newKedip{
+  0%,100%{opacity:1}
+  50%{opacity:.32}
+}
+.new-tag{
+  display:inline-block;padding:1px 7px;border-radius:999px;width:max-content;
+  /* Merah sengaja TIDAK memakai #ef4444: huruf putih di atasnya berkontras 3,76:1 (di bawah
+     standar 4,5:1). #dc2626 = 4,83:1 dan #991b1b = 8,31:1 sehingga teks tetap terbaca. */
+  background:linear-gradient(145deg,#dc2626,#991b1b);color:#fff;
+  font-size:.54rem;font-weight:800;letter-spacing:.07em;line-height:1.45;white-space:nowrap;
+  box-shadow:0 4px 10px -6px rgba(185,28,28,.85);
+  animation:newKedip 1.15s ease-in-out infinite;
+}
+/* Wadah nama menu pada sidebar: lencana Bonus berada SEBARIS DI ATAS nama menu. */
+.nav-nama{display:flex;flex-direction:column;align-items:flex-start;gap:1px;min-width:0}
+.nav-nama>.new-tag{margin-bottom:1px}
+/* Kotak setelan "Tandai sebagai bonus" pada formulir aplikasi (hanya menu yang memakai lencana
+   ini: Ujian Online & Smart Teacher). */
+.apps-baru{
+  padding:12px 14px;border:1px solid rgba(185,28,28,.28);border-left:4px solid #dc2626;
+  border-radius:var(--radius-sm);background:#fef5f5;
+}
+.apps-baru-setelan{display:flex;gap:10px;align-items:flex-start;font-weight:600;cursor:pointer}
+.apps-baru-setelan .new-tag{vertical-align:middle;margin:0 4px}
+.apps-baru-setelan .xs{display:inline;font-weight:500}
+@media (prefers-reduced-motion: reduce){
+  .new-tag{animation:none}
+}
 .sidebar-foot{margin-top:auto;display:flex;flex-direction:column;gap:10px;border-top:1px solid rgba(201,162,39,.35);padding-top:14px}
 .who{display:flex;align-items:center;gap:10px;padding:0 4px}
 .who-txt{min-width:0}
@@ -206,6 +272,52 @@ table.tbl tbody tr:hover td{background:var(--emas-muda)}
 .tbl .ctr{text-align:center}
 .tbl-sub{display:block;color:var(--muted);font-size:.74rem;margin-top:2px}
 .row-actions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+/* Baris JUMLAH pada tabel ringkasan (permintaan pemilik): total kelas/guru/siswa/mapel/jurnal/nilai
+   dari seluruh sekolah/madrasah yang terdaftar di atasnya — dibuat menonjol dengan latar emas muda. */
+table.tbl tfoot td{
+  background:var(--emas-muda);font-weight:800;color:var(--hijau-tua);
+  border-top:2px solid var(--emas);border-bottom:none;
+}
+table.tbl tfoot td.kiri{text-align:left}
+table.tbl tfoot .tbl-sub{font-weight:400}
+
+/* ===== KARTU "PENGAWAS BINA" pada dashboard (v1.45.0, permintaan pemilik) =====
+   Menampilkan foto + nama pengawas yang membina sekolah/madrasah itu, di bagian ATAS dashboard akun
+   Kepala Sekolah/Madrasah & akun Guru. Kartu memakai kelas `.card` yang sudah ada (glassmorphic);
+   yang ditambahkan hanya tata letak isinya. Kartu tetap dicetak walau belum ada pengawas (keterangan
+   ramah), supaya pengguna tahu keadaannya. */
+.card-pengawas{border-left:3px solid var(--emas)}
+.bina-grid{display:flex;flex-wrap:wrap;gap:18px}
+.bina-item{
+  display:flex;align-items:center;gap:14px;padding:12px 16px;min-width:250px;flex:1 1 250px;
+  background:rgba(255,255,255,.6);border:1px solid var(--line);border-radius:var(--radius-sm);
+}
+.bina-avatar{flex:0 0 auto;font-weight:800}
+.bina-teks{min-width:0}
+.bina-teks b{display:block;font-size:.95rem;color:var(--hijau-tua);line-height:1.25}
+.bina-ket{display:block;font-size:.74rem;color:var(--muted);margin-top:2px}
+.bina-kosong{
+  display:flex;gap:12px;align-items:center;padding:14px 16px;border-radius:var(--radius-sm);
+  background:rgba(201,162,39,.08);border:1px dashed rgba(201,162,39,.45);color:var(--muted);
+  font-size:.86rem;
+}
+.bina-kosong svg{flex:0 0 auto;color:var(--emas)}
+@media (max-width:560px){.bina-grid{gap:12px}.bina-item{min-width:0;flex:1 1 100%}}
+
+/* ===== KARTU "GABUNG GRUP e-GURU" pada dashboard (v1.47.0, permintaan pemilik) =====
+   Diletakkan SEJAJAR dengan kartu "Pengawas Bina" (`index.php`, pembungkus `.grid.g2.atas-dashboard`).
+   ⚠️ `align-items:start` WAJIB: tanpa itu kedua kartu saling meregang setinggi kartu tertinggi —
+   permintaan pemilik: "kartu pengawas bina di dashboard guru dan kepala madrasah jangan
+   dipanjangkan". Kartu tetap memakai kelas `.card` yang sudah ada. */
+.atas-dashboard{align-items:start}
+.card-grup{border-left:3px solid #25D366}
+.card-grup .card-head{margin-bottom:12px}
+/* Tombol gabung grup: hijau WhatsApp (aksen tambahan khusus kartu ini, tombol utama tetap indigo). */
+.btn-wa{
+  background:#25D366;color:#0b2e13;border:1px solid #1da851;font-weight:700;
+}
+.btn-wa:hover{background:#1da851;color:#06210d}
+@media (max-width:900px){.atas-dashboard{grid-template-columns:minmax(0,1fr)}}
 
 /* ===== Badge / pill ===== */
 .pill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:.73rem;font-weight:700;border:1px solid transparent}
@@ -231,7 +343,7 @@ table.tbl tbody tr:hover td{background:var(--emas-muda)}
 /* ===== Form ===== */
 .form-grid{display:grid;gap:16px}
 label.f{display:block;font-size:.77rem;font-weight:700;color:var(--hijau-tua);margin-bottom:6px}
-input[type=text],input[type=password],input[type=date],input[type=month],input[type=number],input[type=search],select,textarea{
+input[type=text],input[type=password],input[type=date],input[type=month],input[type=number],input[type=search],input[type=url],input[type=email],select,textarea{
   width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(11,74,51,.28);
   background:#fff;font:inherit;font-size:.88rem;color:var(--ink);outline:none;transition:.16s;
 }
@@ -294,6 +406,20 @@ details.editbox > summary:hover{text-decoration:underline}
   background:#fff;display:grid;place-items:center;overflow:hidden;flex:0 0 auto;
 }
 .logo-kotak img{width:100%;height:100%;object-fit:contain;display:block}
+
+/* ----- LOGO APLIKASI (hasil unggahan Super Admin lewat menu "Logo Aplikasi") -----
+   Ketiga tempat di bawah memakai lambang bawaan (ikon SVG) bila logo belum diunggah, dan gambar
+   logo bila sudah. Ukuran/kelas dasarnya TIDAK diubah supaya tata letak halaman tidak bergeser;
+   varian `*-img` hanya menambahkan latar putih + gambar yang muat di dalam kotaknya. */
+.brand-logo-img,
+.portal-logo-img,
+.daftar-logo-img{background:#fff;padding:3px;overflow:hidden}
+.brand-logo-img img,
+.portal-logo-img img,
+.daftar-logo-img img{width:100%;height:100%;object-fit:contain;display:block;border-radius:10px}
+.logo-contoh{background:var(--hijau-muda);border-radius:12px;padding:14px;display:flex;
+  flex-direction:column;gap:14px;align-items:center}
+.contoh-baris{display:flex;flex-direction:column;align-items:center;gap:6px}
 .logo-kosong{width:104px;height:104px;border-radius:12px;border:1px dashed rgba(11,74,51,.45);
   background:rgba(231,242,236,.6);display:grid;place-items:center;color:var(--muted);flex:0 0 auto}
 .foto-baris{display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap}
@@ -309,6 +435,16 @@ details.editbox > summary:hover{text-decoration:underline}
 .mini-avatar{display:inline-flex;align-items:center;gap:9px}
 .mini-avatar .avatar{font-size:.78rem}
 .foto-cetak{width:28mm;height:38mm;border:1px solid #b9b6a8;object-fit:cover;display:block}
+
+/* ---------- Pas foto siswa 3 x 4 (form Tambah/Ubah Data Siswa) ----------
+   Kotak pratinjau 96 x 128 px = rasio 3:4 persis, gambar di-crop dari ATAS supaya
+   kepala/wajah tidak terpotong (foto siswa umumnya berformat potret). */
+.pasfoto-baris{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap}
+.pasfoto-sisi{flex:0 0 auto}
+.pasfoto-kotak{width:96px;height:128px;border-radius:10px;overflow:hidden;border:2px solid var(--emas);
+  background:#faf8f0;display:grid;place-items:center;text-align:center;line-height:1.4;padding:6px}
+.pasfoto-kotak img{width:100%;height:100%;object-fit:cover;object-position:center top;display:block}
+.pasfoto-form{flex:1 1 300px;min-width:240px}
 
 /* ===== Log Aktivitas: penanda online ===== */
 .dot-online{
@@ -395,19 +531,26 @@ tfoot td.kiri{text-align:left;padding-left:12px}
 .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.75rem;color:var(--muted)}
 .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-2px}
 
-/* ===== Daftar hadir (H/S/I/A) ===== */
+/* ===== Daftar hadir (H/S/I/A) =====
+   Permintaan pemilik: keempat tombol tampil SAMA pada keadaan awal — kotak putih-krem dengan huruf
+   hitam — supaya tidak menyiratkan arti, lalu berubah HIJAU ketika dipilih.
+   Karena itu aturan warna PER KODE (sel-H/sel-S/sel-I/sel-A) DIHAPUS dari CSS: kelas dasarnya tetap
+   ada di markup (absensi_form.php) karena assets/app.js `tandai()` memakainya sebagai penanda —
+   jangan dihapus dari markup, cukup warnanya yang tidak diatur lagi di sini.
+   Tombol H sudah terpilih otomatis saat formulir dibuka (default 'H' dari absensi_form.php). */
 .st{display:inline-flex;gap:5px;position:relative}
 .st label{
   width:34px;height:34px;display:grid;place-items:center;border-radius:8px;border:1px solid var(--line);
-  background:#fff;font-weight:800;font-size:.8rem;cursor:pointer;transition:.14s;color:var(--hijau-tua);
+  background:#fcf9ef;font-weight:800;font-size:.8rem;cursor:pointer;transition:.14s;color:#111827;
 }
 .st input{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px}
 .st label:hover{transform:translateY(-1px);border-color:var(--emas)}
-.st label.sel{color:#fff;border-color:transparent;box-shadow:0 8px 16px -10px rgba(0,0,0,.7)}
-.st label.sel-H{background:linear-gradient(150deg,#178a5f,#0b5c3f)}
-.st label.sel-S{background:linear-gradient(150deg,var(--emas-terang),#a9741b);color:#3f2f05}
-.st label.sel-I{background:linear-gradient(150deg,#2b8fae,#14556b)}
-.st label.sel-A{background:linear-gradient(150deg,var(--maroon-terang),var(--maroon))}
+/* Terpilih: kotak DAN huruf berubah menjadi hijau (huruf dibuat putih agar tetap terbaca di atas
+   latar hijau — bila pemilik ingin huruf tetap hijau, ubah warna huruf pada aturan ini). */
+.st label.sel{
+  background:linear-gradient(150deg,#178a5f,#0b5c3f);color:#fff;border-color:transparent;
+  box-shadow:0 8px 16px -10px rgba(0,0,0,.7);
+}
 
 /* ===== Ringkasan kehadiran pada Jurnal Harian ===== */
 .kehadiran-kode{display:inline-flex;gap:5px;flex-wrap:wrap;justify-content:center}
@@ -419,6 +562,16 @@ tfoot td.kiri{text-align:left;padding-left:12px}
 .kehadiran-kode .kh i{font-style:normal;font-size:.69rem;opacity:.85}
 .kehadiran-kode .kh.ada{background:rgba(109,27,37,.12);border-color:rgba(109,27,37,.3);color:#7f1d28}
 
+/* ===== Jurnal Harian: "Kelas / Tempat" (permintaan pemilik, v1.37.0) =====
+   Guru memilih KELAS **atau** mengisi TEMPAT kegiatan secara manual (kegiatan di luar kelas,
+   mis. Ruang Guru, Lab IPA, Aula) — cukup salah satu. Dua isian berdampingan dan menumpuk sendiri
+   di layar sempit. Skrip initJurnalForm() (assets/app.js) hanya membantu mengosongkan/menonaktifkan
+   isian yang tidak dipakai (mengosongkannya); penjagaan "tidak boleh keduanya" di SERVER
+   (jurnal.php) — kedua isian sengaja TETAP AKTIF agar guru tidak terjebak. */
+.kelas-tempat{display:flex;gap:10px;flex-wrap:wrap}
+.kelas-tempat > select{flex:1 1 180px;min-width:0}
+.kelas-tempat > input{flex:1 1 170px;min-width:0}
+
 /* ===== Catatan & rumus ===== */
 .list-ok{margin:0;padding-left:20px;font-size:.85rem}
 .list-ok li{margin-bottom:6px}
@@ -427,6 +580,22 @@ tfoot td.kiri{text-align:left;padding-left:12px}
   padding:12px 15px;font-size:.82rem;color:#4d3f0c;line-height:1.55;
 }
 .note-rumus b{color:#3f2f05}
+
+/* ---------------------------------------------------------------------------
+   PENGATURAN PENILAIAN (guru) — kartu #cardPengaturanNilai pada halaman nilai.
+   Formulir dibungkus <details> supaya bisa dibuka-tutup TANPA JavaScript (tombolnya <summary>).
+   Permintaan pemilik: guru menyetel sendiri kolom Formatif/Sumatif, bobot ASAS, dan ambang
+   predikat A/B/C/D untuk tiap mata pelajaran yang diampu.
+--------------------------------------------------------------------------- */
+.set-nilai summary{list-style:none;display:inline-flex;align-items:center;gap:8px;cursor:pointer;
+  user-select:none}
+.set-nilai summary::-webkit-details-marker{display:none}
+.set-nilai summary::after{content:'▾';font-size:.7em;margin-left:2px;transition:transform .15s}
+.set-nilai[open] summary::after{transform:rotate(180deg)}
+.set-nilai summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.set-nilai-isi{margin-top:14px}
+.set-nilai .grid.g3{gap:16px}
+@media print{.set-nilai summary{display:none}}
 .ket{font-size:.72rem;color:var(--muted);margin-top:10px;line-height:1.5}
 .ket-kode{font-size:.72rem;color:var(--muted);margin-top:10px;line-height:1.5}
 
@@ -435,45 +604,390 @@ tfoot td.kiri{text-align:left;padding-left:12px}
 .chart-box.tall{height:330px}
 .chart-box.short{height:210px}
 
-/* ===== Portal halaman masuk (login.php) ===== */
-.portal-wrap{min-height:100vh;padding:30px 20px 44px}
-.portal-inner{max-width:1240px;margin:0 auto}
-.portal-head{
-  display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;
-  padding-bottom:16px;margin-bottom:22px;border-bottom:3px double var(--emas);
+/* ============================================================================
+   HALAMAN DEPAN (LANDING PAGE) — login.php
+   Permintaan pemilik: "Buat halaman depan aplikasi menjadi tampilan web landing page yang
+   menampilkan beranda, Slider (Judul, gambar, keterangan), fitur aplikasi, keunggulan,
+   Total Pengguna (Pengawas, Kepala Sekolah, Madrasah, Guru), testimoni, kontak. Panel login tetap
+   dipertahankan. Untuk mengisi halaman landing page di isi lewat akun super admin."
+   Tema: tetap HIJAU TUA + EMAS aplikasi ini, tetapi lebih MODERN & BERSIH (kartu lembut,
+   banyak ruang, tanpa bingkai ganda yang ramai).
+   ============================================================================ */
+.lp-wrap{max-width:1180px;margin:0 auto;padding:0 20px}
+
+/* --- bilah navigasi --- */
+.lp-nav{
+  position:sticky;top:0;z-index:50;
+  background:rgba(255,255,255,.86);backdrop-filter:blur(14px) saturate(160%);
+  -webkit-backdrop-filter:blur(14px) saturate(160%);
+  border-bottom:1px solid rgba(11,74,51,.14);
 }
+.lp-nav-isi{display:flex;align-items:center;gap:16px;min-height:72px}
+.lp-brand{display:flex;align-items:center;gap:12px;min-width:0}
+/* Lambang pada bilah navigasi: memakai kelas portal-logo, ukurannya disesuaikan di sini. */
+.lp-brand .portal-logo{
+  width:46px;height:46px;border-radius:14px;border-width:1.5px;
+  box-shadow:0 8px 18px -12px rgba(9,61,44,.9);
+}
+.lp-brand .portal-logo svg{width:24px;height:24px}
+.lp-brand-teks{min-width:0}
+.lp-brand-teks b{display:block;font-size:1.06rem;font-family:var(--serif);letter-spacing:-.01em;color:var(--hijau-tua)}
+.lp-brand-teks p{margin:3px 0 0;font-size:.76rem;color:var(--muted);line-height:1.35}
+.lp-nav-link{display:flex;align-items:center;gap:2px;margin-left:auto;flex-wrap:wrap}
+.lp-nav-link a{padding:8px 11px;border-radius:10px;font-size:.84rem;font-weight:600;color:var(--ink)}
+.lp-nav-link a:hover{background:rgba(16,107,74,.09);text-decoration:none}
+.lp-nav-link a.btn-primary{color:#fff}
+.lp-nav-toggle{
+  display:none;margin-left:auto;width:42px;height:42px;border-radius:12px;cursor:pointer;
+  background:#fff;border:1px solid rgba(11,74,51,.22);color:var(--hijau-tua);place-items:center;
+}
+
+/* --- beranda: slider (kiri) + panel masuk (kanan) --- */
+.lp-hero{padding:48px 0 8px}
+.lp-hero-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(340px,1fr);gap:34px;align-items:start}
+.lp-hero-teks{min-width:0;padding-top:4px}
+.lp-label{
+  display:inline-block;padding:6px 14px;border-radius:999px;font-size:.72rem;font-weight:800;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--hijau-tua);
+  background:var(--emas-muda);border:1px solid rgba(201,162,39,.45);
+}
+.lp-hero-side{position:sticky;top:94px}
+
+/* --- DUA TAB PANEL MASUK (v1.61.0): "Pengguna" & "Siswa" ---
+   Tabnya berupa TAUTAN (bukan radio/JS) sehingga tetap benar walau skrip gagal dimuat dan
+   keadaan tab tersimpan pada alamat halaman (?tab=siswa). */
+.lp-tab{
+  display:flex;gap:6px;padding:5px;margin:0 0 16px;border-radius:12px;
+  background:rgba(11,74,51,.07);border:1px solid rgba(11,74,51,.12);
+}
+.lp-tab-btn{
+  flex:1 1 0;display:flex;align-items:center;justify-content:center;gap:7px;
+  padding:9px 12px;border-radius:9px;font-size:.85rem;font-weight:700;color:var(--hijau-tua);
+  text-align:center;
+}
+.lp-tab-btn:hover{background:rgba(255,255,255,.7);text-decoration:none}
+.lp-tab-btn.on{
+  background:#fff;box-shadow:0 8px 18px -14px rgba(11,74,51,.8);
+  border:1px solid rgba(201,162,39,.55);
+}
+
+/* Kartu pintasan pada beranda siswa (mengikuti pola .card.stat, ditambah efek timbul halus). */
+a.sis-kartu{display:flex;gap:13px;align-items:flex-start;color:inherit;text-decoration:none}
+a.sis-kartu:hover{text-decoration:none;border-color:rgba(201,162,39,.55)}
+
+/* --- Kartu "Data Saya" (siswa_saya.php): pas foto + tabel identitas berdampingan --- */
+.sis-profil{display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start}
+.sis-foto{
+  width:126px;flex:0 0 auto;aspect-ratio:3/4;border-radius:12px;overflow:hidden;
+  display:grid;place-items:center;background:rgba(255,255,255,.7);
+  border:1px solid rgba(11,74,51,.2);
+}
+.sis-foto img{width:100%;height:100%;object-fit:cover;display:block}
+.sis-foto-kosong{display:grid;place-items:center;gap:6px;padding:8px;text-align:center;color:var(--muted)}
+.sis-foto-kosong small{font-size:.7rem}
+table.tbl th[scope],table.tbl tbody th{text-align:left}
+/* Halaman siswa: tidak ada tombol pengubahan, jadi tabel identitas memakai th sebagai label. */
+table.tbl tbody th{font-weight:700;color:var(--hijau-tua);background:rgba(231,242,236,.55)}
+
+/* --- Rincian pertemuan pada halaman Daftar Hadir siswa (<details>) --- */
+details.sis-rincian{
+  margin-top:12px;border:1px solid rgba(11,74,51,.16);border-radius:10px;
+  background:rgba(231,242,236,.45);padding:10px 12px;
+}
+details.sis-rincian summary{
+  cursor:pointer;font-size:.86rem;color:var(--hijau-tua);display:flex;gap:8px;
+  align-items:center;flex-wrap:wrap;
+}
+details.sis-rincian summary::marker{color:var(--emas)}
+details.sis-rincian > .table-wrap{margin-top:10px}
+details.sis-rincian:target{outline:2px solid var(--emas);outline-offset:2px}
+
+/* --- Kartu identitas siswa pada sidebar akun siswa --- */
+.nav-ket-siswa{
+  margin:4px 8px 8px;padding:11px 13px;border-radius:10px;
+  background:rgba(255,255,255,.12);border:1px solid rgba(233,204,120,.35);
+}
+.nav-ket-siswa b{display:block;font-size:.85rem;cursor:default}
+.nav-ket-siswa span{display:block;font-size:.74rem;opacity:.85;margin-top:3px}
+.lp-ikon{flex:0 0 auto}
+
+/* --- SLIDER BERANDA (Judul + gambar + keterangan) ---
+   TANPA JavaScript tetap bekerja: lintasan memakai overflow-x + scroll-snap sehingga bisa digeser
+   sendiri, dan seluruh slide tetap ada di HTML. */
+.lp-slider{position:relative;margin-top:16px}
+.lp-slider-track{
+  display:flex;overflow-x:auto;scroll-snap-type:x mandatory;border-radius:var(--radius);
+  scrollbar-width:none;-webkit-overflow-scrolling:touch;
+}
+.lp-slider-track::-webkit-scrollbar{display:none}
+.lp-slide{
+  flex:0 0 100%;scroll-snap-align:start;margin:0;position:relative;overflow:hidden;
+  border:1px solid rgba(11,74,51,.14);border-radius:var(--radius);
+  box-shadow:0 18px 38px -26px rgba(11,74,51,.55);background:#fff;
+}
+.lp-slide-gambar{
+  position:relative;aspect-ratio:16/10;display:grid;place-items:center;overflow:hidden;
+  background:linear-gradient(150deg,var(--hijau-tua),var(--hijau) 55%,var(--hijau-terang));
+}
+.lp-slide-gambar img{width:100%;height:100%;object-fit:cover;display:block}
+.lp-slide-kosong{display:grid;place-items:center;gap:10px;padding:20px;text-align:center;color:rgba(255,255,255,.92)}
+.lp-slide-kosong small{font-size:.76rem;font-weight:600}
+.lp-slide-teks{
+  position:absolute;left:0;right:0;bottom:0;padding:22px 24px 20px;color:#fff;
+  background:linear-gradient(180deg,rgba(11,40,29,0) 0%,rgba(11,40,29,.5) 42%,rgba(11,40,29,.88) 100%);
+}
+.lp-slide-judul{margin:0;font-size:1.45rem;line-height:1.25;color:#fff;font-family:var(--serif)}
+.lp-slide-ket{margin:9px 0 0;font-size:.87rem;line-height:1.62;color:rgba(255,255,255,.95)}
+.lp-slider-nav{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:16px}
+
+/* --- Baris "Cepat, Mudah, Praktis, Lengkap" di bawah slider beranda (v1.60.2) ---
+   Empat kotak kecil berisi ikon + kata; diletakkan di kolom kiri halaman depan. */
+.lp-cepat{
+  list-style:none;margin:22px 0 0;padding:0;
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;
+}
+.lp-cepat-item{
+  display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;
+  background:rgba(255,255,255,.82);border:1px solid rgba(11,74,51,.14);
+  box-shadow:0 12px 26px -24px rgba(11,74,51,.6);
+  font-weight:700;font-size:.86rem;color:var(--hijau-tua);
+}
+.lp-cepat-ikon{
+  width:32px;height:32px;border-radius:10px;display:grid;place-items:center;flex:0 0 auto;
+  color:#4a3906;background:linear-gradient(150deg,var(--emas-terang),var(--emas));
+}
+.lp-cepat-teks{min-width:0;overflow-wrap:break-word}
+
+/* --- bagian umum --- */
+.lp-seksi{padding:62px 0}
+.lp-seksi.lp-alt{
+  background:linear-gradient(180deg,rgba(255,255,255,.55),rgba(255,255,255,.16));
+  border-top:1px solid rgba(11,74,51,.1);border-bottom:1px solid rgba(11,74,51,.1);
+}
+.lp-seksi-head{max-width:760px;margin:0 auto 34px;text-align:center}
+.lp-seksi-head h2{font-size:1.7rem}
+.lp-seksi-head p{margin:12px 0 0;color:var(--muted);font-size:.92rem;line-height:1.72}
+.lp-seksi-head .lp-label{margin-bottom:10px}
+.lp-grid{display:grid;gap:20px}
+.lp-grid-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.lp-kartu{
+  background:rgba(255,255,255,.82);border:1px solid rgba(11,74,51,.12);border-radius:var(--radius);
+  box-shadow:0 16px 34px -28px rgba(11,74,51,.6);padding:24px;
+  transition:transform .18s ease,box-shadow .18s ease;
+}
+.lp-kartu h3{margin:15px 0 8px;font-size:1.02rem}
+.lp-kartu p{margin:0;font-size:.86rem;color:var(--muted);line-height:1.72}
+.lp-ikon{
+  width:46px;height:46px;border-radius:14px;display:grid;place-items:center;color:#fff;
+  background:linear-gradient(150deg,var(--hijau),var(--hijau-tua));
+  box-shadow:0 10px 20px -14px rgba(11,74,51,.95);
+}
+.lp-ikon-emas{background:linear-gradient(150deg,var(--emas-terang),var(--emas));color:#4a3906}
+.lp-ikon-kecil{width:34px;height:34px;border-radius:11px}
+/* Efek timbul pada kartu (halus; dihormati saat pengguna memilih gerak minimal). */
+@media (hover:hover){
+  .lp-timbul:hover{transform:translateY(-5px);box-shadow:0 22px 40px -24px rgba(11,74,51,.5)}
+}
+/* Terasa "ditekan" saat ditekan — WAJIB ditulis SESUDAH blok hover di atas. */
+.lp-timbul:active{transform:translateY(-2px) scale(.995)}
+
+/* --- TOTAL PENGGUNA (angka dihitung otomatis; lihat landing_pengguna_list()) --- */
+.lp-pengguna{
+  background:linear-gradient(150deg,var(--hijau-tua),#0e5c3f 60%,var(--hijau));
+  border-top:1px solid rgba(201,162,39,.5);border-bottom:1px solid rgba(201,162,39,.5);
+}
+.lp-pengguna .lp-seksi-head h2,.lp-pengguna .lp-seksi-head p{color:#fff}
+.lp-pengguna .lp-seksi-head p{color:rgba(255,255,255,.82)}
+.lp-pengguna-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:18px}
+.lp-pengguna-kartu{
+  background:rgba(255,255,255,.1);border:1px solid rgba(233,204,120,.42);border-radius:var(--radius);
+  padding:22px 18px;text-align:center;color:#fff;
+}
+.lp-pengguna-ikon{
+  width:44px;height:44px;border-radius:14px;display:grid;place-items:center;margin:0 auto 12px;
+  color:#3f2f05;background:linear-gradient(150deg,var(--emas-terang),var(--emas));
+}
+.lp-pengguna-angka{display:block;font-size:2rem;font-weight:800;letter-spacing:-.02em;line-height:1.1}
+.lp-pengguna-label{display:block;margin-top:6px;font-size:.8rem;color:rgba(255,255,255,.88);font-weight:600}
+/* Baris ringkasan "N sekolah/madrasah aktif · N akun pengguna aktif · N siswa aktif" DIHAPUS
+   (permintaan pemilik) — kartu Total Pengguna di atasnya sudah mewakilinya. */
+
+/* --- testimoni --- */
+.lp-testi-slider{overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:6px;
+  scrollbar-width:thin;-webkit-overflow-scrolling:touch}
+.lp-testi-track{display:flex;gap:20px}
+.lp-testi-slide{
+  flex:0 0 calc((100% - 20px) / 2);scroll-snap-align:start;margin:0;
+  background:rgba(255,255,255,.86);border:1px solid rgba(11,74,51,.12);border-radius:var(--radius);
+  box-shadow:0 16px 34px -28px rgba(11,74,51,.6);padding:24px;
+  display:flex;flex-direction:column;gap:14px;
+}
+.lp-kutip{font-size:2.4rem;line-height:.6;color:var(--emas);opacity:.75;font-family:Georgia,serif}
+.lp-testi-slide blockquote{margin:0;font-size:.9rem;line-height:1.78;color:var(--ink)}
+.lp-testi-sumber{display:flex;align-items:center;gap:12px;margin-top:auto}
+.lp-testi-foto{width:46px;height:46px;border-radius:50%;object-fit:cover;flex:0 0 auto}
+.lp-testi-inisial{
+  display:grid;place-items:center;color:#fff;font-weight:800;font-size:1.05rem;
+  background:linear-gradient(150deg,var(--hijau),var(--hijau-tua));
+}
+.lp-testi-teks{min-width:0}
+.lp-testi-teks b{display:block;font-size:.88rem;color:var(--hijau-tua)}
+.lp-testi-teks small{display:block;font-size:.76rem;color:var(--muted)}
+.lp-testi-nav{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:22px}
+/* Tombol panah & titik penunjuk dipakai BERSAMA oleh slider beranda dan slider testimoni. */
+.lp-testi-panah,.lp-slider-panah{
+  width:40px;height:40px;border-radius:50%;cursor:pointer;font-size:1.3rem;line-height:1;
+  background:#fff;border:1px solid rgba(11,74,51,.22);color:var(--hijau-tua);
+}
+.lp-testi-panah:hover,.lp-slider-panah:hover{background:var(--hijau-muda)}
+.lp-testi-titik,.lp-slider-titik{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center}
+.lp-testi-titik button,.lp-slider-titik button{width:9px;height:9px;padding:0;border-radius:50%;border:none;cursor:pointer;
+  background:rgba(11,74,51,.25)}
+.lp-testi-titik button.on,.lp-slider-titik button.on{background:var(--emas);width:24px;border-radius:999px}
+
+/* --- tentang aplikasi (satu kartu, isi dari menu "Tentang Aplikasi") --- */
+.lp-tentang-kartu{padding:30px;margin:0}
+.lp-tentang-kartu .lp-seksi-head{margin-bottom:26px}
+.lp-tentang-kartu .portal-tentang{margin:0;padding-bottom:0;border-bottom:0}
+
+/* --- kontak ---
+   Kedua kartu bagian kontak WAJIB sama lebar & sama tinggi (permintaan pemilik): grid 1fr:1fr
+   menyamakan lebarnya, dan `align-items:stretch` membuat kartu yang lebih pendek ikut meregang. */
+.lp-kontak-grid{grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch}
+.lp-kontak{display:flex;flex-direction:column}
+.lp-kontak form{display:flex;flex-direction:column;flex:1 1 auto}
+.lp-kontak form textarea{flex:1 1 auto;min-height:132px}
+.lp-kontak p{margin:0 0 14px;font-size:.86rem;color:var(--muted);line-height:1.72}
+.lp-kontak-list{list-style:none;margin:0 0 18px;padding:0;display:flex;flex-direction:column;gap:14px}
+.lp-kontak-list li{display:flex;align-items:flex-start;gap:12px}
+.lp-kontak-list small{display:block;font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--muted);font-weight:700}
+.lp-kontak-list span{font-size:.88rem}
+.lp-kontak-aksi{display:flex;flex-wrap:wrap;gap:10px;margin-top:auto}
+
+/* --- kaki halaman --- */
+.lp-foot{
+  margin-top:0;background:rgba(255,255,255,.72);border-top:1px solid rgba(11,74,51,.14);
+  padding:26px 0;
+}
+/* Kaki halaman hanya memuat keterangan versi + baris pengembang, DIPUSATKAN (permintaan pemilik:
+   blok nama aplikasi & daftar tautan bagian dihapus). */
+.lp-foot-isi{display:flex;justify-content:center;text-align:center}
+.lp-foot-ket{font-size:.78rem;color:var(--muted);line-height:1.7}
+
+/* --- halaman Super Admin "Halaman Depan (Landing)" (landing.php) --- */
+.landing-ikon-pratinjau{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:11px;
+  color:#fff;background:linear-gradient(150deg,var(--hijau),var(--hijau-tua))}
+.landing-foto-kecil{width:38px;height:38px;border-radius:50%;object-fit:cover}
+.landing-foto-pratinjau img{width:64px;height:64px;border-radius:50%;object-fit:cover;
+  border:1px solid rgba(11,74,51,.18);margin-bottom:8px}
+/* Pratinjau gambar SLIDER (mendatar) — dipakai daftar slide & formulir ubah. */
+.landing-gambar-kecil{width:88px;height:55px;border-radius:9px;object-fit:cover;
+  border:1px solid rgba(11,74,51,.18)}
+.landing-gambar-pratinjau img{width:180px;max-width:100%;aspect-ratio:16/10;object-fit:cover;
+  border-radius:11px;border:1px solid rgba(11,74,51,.18);margin-bottom:8px;display:block}
+table.tbl tr.baris-baru{background:rgba(201,162,39,.12)}
+
+@media (max-width:1000px){
+  .lp-hero-grid{grid-template-columns:minmax(0,1fr);gap:28px}
+  .lp-hero-side{position:static}
+  .lp-slide-judul{font-size:1.3rem}
+  .lp-grid-3{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .lp-pengguna-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:760px){
+  .lp-nav-toggle{display:grid}
+  .lp-nav-link{display:none;width:100%;flex-direction:column;align-items:stretch;gap:2px;padding:10px 0 14px}
+  .lp-nav-link.lp-nav-on{display:flex}
+  .lp-nav-isi{flex-wrap:wrap}
+  .lp-nav-link a{padding:11px 12px}
+  .lp-hero{padding:32px 0 6px}
+  .lp-slide-gambar{aspect-ratio:4/3}
+  .lp-slide-judul{font-size:1.16rem}
+  .lp-slide-teks{padding:16px 16px 14px}
+  .lp-slide-ket{font-size:.82rem}
+  .lp-seksi{padding:42px 0}
+  .lp-seksi-head h2{font-size:1.34rem}
+  .lp-grid-3,.lp-kontak-grid{grid-template-columns:minmax(0,1fr)}
+  .lp-pengguna-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .lp-pengguna-angka{font-size:1.6rem}
+  /* Baris "Cepat, Mudah, Praktis, Lengkap" tetap muat dua kolom di HP. */
+  .lp-cepat{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:18px}
+  .lp-cepat-item{padding:10px 12px;font-size:.82rem;gap:9px}
+  .lp-cepat-ikon{width:28px;height:28px;border-radius:9px}
+  .lp-testi-slide{flex:0 0 100%}
+  .lp-foot-isi{flex-direction:column;align-items:center}
+  /* slogan pada bilah navigasi turun ke baris sendiri agar tidak berdesakan dengan nama aplikasi */
+  .portal-tagline{display:block;margin:4px 0 0}
+}
+@media (prefers-reduced-motion:reduce){
+  .lp-timbul:hover{transform:none}
+}
+
+/* ===== Komponen "portal" yang MASIH DIPAKAI di halaman depan & halaman lain =====
+   Halaman depan kini berbentuk LANDING PAGE (lihat blok "HALAMAN DEPAN (LANDING PAGE)" di atas).
+   Yang tersisa di sini hanya kelas yang benar-benar masih dipakai:
+   `.portal-brand`/`.portal-logo`/`.portal-tagline`/`.portal-brand p` (lambang & slogan pada bilah
+   navigasi), `.portal-login`, `.portal-bantuan`, `.portal-foot`/`.portal-pengembang`,
+   `.portal-hero .portal-lead` (rata kiri-kanan), `.portal-tentang` + `.tentang-*` (dipakai
+   `login.php` dan `tentang.php`), serta `.portal-alur`/`.portal-cek` (dipakai `aktivasi.php`
+   & `akun_operator.php`). */
 .portal-brand{display:flex;align-items:center;gap:15px;min-width:0}
 .portal-logo{
   width:62px;height:62px;border-radius:17px;display:grid;place-items:center;color:#fff;flex:0 0 auto;
   background:linear-gradient(160deg,var(--hijau-tua),var(--hijau));
   border:2px solid var(--emas);box-shadow:0 12px 26px -14px rgba(9,61,44,.85);
 }
-.portal-brand h1{margin:0;font-size:1.5rem;font-family:var(--serif);color:var(--hijau-tua);letter-spacing:-.01em}
 .portal-tagline{display:inline-block;font-family:Inter,system-ui,sans-serif;font-size:.78rem;font-weight:600;
   letter-spacing:.06em;text-transform:uppercase;color:var(--maroon);vertical-align:middle;margin-left:8px}
 .portal-brand p{margin:6px 0 0;color:var(--muted);font-size:.85rem}
-.portal-head-kanan{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 
-/* dua kolom: penjelasan (kiri) + form masuk (kanan) */
-.portal-grid{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(330px,1fr);gap:22px;align-items:start}
-.portal-info{display:flex;flex-direction:column;gap:20px;min-width:0}
-.portal-side{display:flex;flex-direction:column;gap:18px;position:sticky;top:22px}
+/* ----- Isi kartu "Tentang Aplikasi" pada HALAMAN MASUK: FOTO + NAMA + KETERANGAN -----
+   Permintaan pemilik: "Pada halaman depan di bagian tentang aplikasi tambahkan tempat foto, nama
+   dan keterangan dengan posisi atau letak dibuat sama dengan aplikasi supervisi".
+   Tata letaknya MENIRU aplikasi Supervisi: DUA kotak foto 3x4 berdampingan di KIRI (nama di bawah
+   masing-masing foto) dan KETERANGAN di SISI KANANNYA (`.tentang-baris` = flex, wrap di layar
+   sempit sehingga keterangan turun ke bawah dengan sendirinya — tanpa luapan horizontal).
+   Isinya diinput Super Admin di `tentang.php`; kotak foto memakai rasio 3:4 (potret) supaya benar
+   berukuran 3x4. Paragraf keterangan memakai .portal-lead (rata KIRI-KANAN) — jangan diubah ke
+   kelas lain tanpa memeriksa uji rata kiri-kanannya. */
+.portal-tentang{margin:0 0 16px;padding-bottom:16px;border-bottom:1px solid rgba(11,74,51,.16)}
+.tentang-baris{display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start}
+.tentang-foto-grid{display:flex;flex-wrap:wrap;gap:18px;margin:0;flex:0 0 auto}
+figure.tentang-slot{margin:0}
+.tentang-slot{width:132px;flex:0 0 auto;text-align:center}
+.tentang-bingkai{
+  width:132px;aspect-ratio:3/4;border-radius:12px;overflow:hidden;display:grid;place-items:center;
+  background:rgba(255,255,255,.72);border:1px solid rgba(11,74,51,.22);
+  box-shadow:0 14px 26px -20px rgba(11,74,51,.75);
+}
+.tentang-bingkai img{width:100%;height:100%;object-fit:cover;display:block}
+.tentang-kosong{display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px;color:var(--muted);font-size:.72rem;text-align:center}
+.tentang-nama{margin-top:9px;font-size:.8rem;font-weight:700;color:var(--ink);line-height:1.35;overflow-wrap:break-word}
+/* Keterangan: di SAMPING kanan kedua foto (bukan di bawahnya). Paragraf di dalamnya memakai
+   .portal-lead supaya tetap rata kiri-kanan; hyphens/overflow-wrap menjaga celah antarkata. */
+.tentang-ket{flex:1 1 240px;min-width:190px;margin:0}
+.tentang-ket .portal-lead{margin:0 0 10px;hyphens:auto;-webkit-hyphens:auto;overflow-wrap:break-word}
+.tentang-ket .portal-lead:last-child{margin-bottom:0}
 
-.portal-hero .portal-lead{margin:0 0 10px;font-size:.92rem;line-height:1.65}
+/* Halaman Super Admin (tentang.php): pratinjau kotak foto berdampingan dengan isiannya. */
+.tentang-admin{display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start}
+.tentang-admin .tentang-slot{width:150px}
+.tentang-admin .tentang-bingkai{width:150px}
+.tentang-isi{flex:1 1 260px;min-width:0}
+
+@media (max-width:520px){
+  .tentang-foto-grid{gap:14px}
+  .tentang-slot,.tentang-bingkai,
+  .tentang-admin .tentang-slot,.tentang-admin .tentang-bingkai{width:118px}
+  .tentang-ket{min-width:0}
+}
+
+/* Paragraf "Tentang Aplikasi" rata KIRI-KANAN (permintaan pemilik: "agar terlihat rapi").
+   .portal-lead hanya dipakai pada kartu Tentang Aplikasi di login.php — jangan pakai kelas ini
+   untuk paragraf lain kalau tidak ingin ikut rata kiri-kanan. */
+.portal-hero .portal-lead{margin:0 0 10px;font-size:.93rem;line-height:1.72;text-align:justify;text-justify:inter-word}
 .portal-lead b{color:var(--hijau-tua)}
-
-/* daftar menu: dua kolom di layar lebar */
-.portal-menu{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-.portal-menu-item{
-  display:flex;gap:11px;align-items:flex-start;background:#fff;border:1px solid var(--line);
-  border-left:3px solid var(--emas);border-radius:10px;padding:11px 13px;
-}
-.portal-menu-ico{
-  width:28px;height:28px;border-radius:8px;display:grid;place-items:center;flex:0 0 auto;color:#fff;
-  background:linear-gradient(150deg,var(--hijau),var(--hijau-tua));border:1px solid var(--emas);
-}
-.portal-menu-item b{display:block;font-size:.85rem;color:var(--hijau-tua)}
-.portal-menu-item span{font-size:.77rem;color:var(--muted);line-height:1.45}
 
 .portal-alur{margin:0 0 12px;padding-left:20px;font-size:.83rem;line-height:1.6;counter-reset:none}
 .portal-alur li{margin-bottom:6px}
@@ -490,25 +1004,8 @@ tfoot td.kiri{text-align:left;padding-left:12px}
 /* Footer portal: keterangan versi + baris pengembang (paling bawah halaman). */
 .portal-pengembang{line-height:1.5;font-weight:600;color:var(--hijau-tua)}
 
-.portal-foot{
-  display:flex;justify-content:center;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:.75rem;
-  margin-top:28px;padding-top:14px;border-top:3px double var(--emas);text-align:center;
-}
-
-/* responsif: portal menjadi satu kolom */
-@media (max-width:1080px){
-  .portal-grid{grid-template-columns:minmax(0,1fr)}
-  .portal-side{position:static}
-  .portal-menu{grid-template-columns:repeat(2,minmax(0,1fr))}
-}
-@media (max-width:640px){
-  .portal-wrap{padding:20px 14px 34px}
-  .portal-head-kanan{width:100%}
-  .portal-brand h1{font-size:1.28rem}
-  .portal-tagline{display:block;margin:4px 0 0}
-  .portal-menu{grid-template-columns:minmax(0,1fr)}
-  .portal-foot{flex-direction:column}
-}
+/* Catatan: aturan `.portal-foot` sudah dihapus — kaki halaman depan sekarang memakai `.lp-foot`
+   (kelas `portal-foot` tetap dipasang pada elemennya sebagai penanda, tanpa gaya tersendiri). */
 
 /* ===== Halaman pendaftaran publik (daftar.php) ===== */
 .daftar-wrap{min-height:100vh;padding:32px 18px 46px}
@@ -535,15 +1032,20 @@ tfoot td.kiri{text-align:left;padding-left:12px}
   font-weight:800;font-size:.78rem;color:#3f2f05;flex:0 0 auto;
   background:linear-gradient(150deg,var(--emas-terang),var(--emas));border:1px solid rgba(120,92,10,.35);
 }
-.langkah-ico{
-  width:26px;height:26px;border-radius:8px;display:grid;place-items:center;flex:0 0 auto;color:#fff;
-  background:linear-gradient(150deg,var(--hijau),var(--hijau-tua));border:1px solid var(--emas);
-}
 .kredensial{border:1px dashed rgba(201,162,39,.7);background:var(--emas-muda);border-radius:11px;padding:12px 14px}
 @media (max-width:640px){
   .daftar-head-kanan{margin-left:0;width:100%}
   .daftar-wrap{padding:22px 14px 36px}
 }
+
+/* ===== Foto bukti kegiatan pada Notulen rapat ===== */
+.not-foto-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:18px}
+.not-foto-item{display:flex;flex-direction:column;gap:10px;border:1px solid var(--line);border-radius:var(--radius);
+  padding:12px;background:#fff}
+.not-foto-gambar{border:2px solid var(--emas);border-radius:12px;overflow:hidden;background:#f6f7f4}
+.not-foto-gambar img{width:100%;height:170px;object-fit:cover;display:block}
+.not-foto-ket{display:flex;gap:8px;align-items:center}
+.not-foto-ket input{flex:1 1 auto;min-width:0;padding:7px 10px;font-size:.82rem}
 
 /* ===== Cetak / dokumen ===== */
 .print-sheet{background:#fff;padding:30px 34px;border-radius:var(--radius);box-shadow:var(--shadow);
@@ -555,6 +1057,9 @@ tfoot td.kiri{text-align:left;padding-left:12px}
 .sheet-head.kop-logo .kop-teks{flex:1;text-align:center}
 .sheet-head h2{font-size:1.16rem;text-transform:uppercase;letter-spacing:.02em;color:var(--hijau-tua)}
 .sheet-head p{margin:4px 0 0;font-size:.83rem;color:var(--muted)}
+/* Nama sekolah/madrasah pada kop dibuat TEBAL (permintaan pemilik) — dipakai semua lembar cetak
+   lewat kop_cetak() di inc/kop.php. */
+.sheet-head .kop-nama{font-weight:800;font-size:.95rem;color:var(--hijau-tua);letter-spacing:.01em}
 .sheet-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 24px;font-size:.86rem;margin-bottom:18px}
 .sheet-meta b{display:inline-block;min-width:132px;color:var(--hijau-tua);font-weight:700}
 .sheet-foto{float:right;margin:0 0 14px 18px}
@@ -580,6 +1085,15 @@ table.sheet thead tr.sub th{font-size:.72rem;color:var(--muted);font-weight:700}
 .sheet-sign{text-align:center;flex:1}
 .sheet-sign .space{height:62px}
 .sheet-sign u{font-weight:700}
+/* Baris "tempat, tanggal" di atas blok tanda tangan (permintaan pemilik, v1.39.0): nama KECAMATAN
+   dari identitas lembaga disambung tanggal aktif sistem saat mencetak, mis. "Mootilango, 30
+   September 2026". Diletakkan di atas jabatan pada blok tanda tangan pihak pelaksana (kanan).
+   ⚠️ Ukuran & line-height WAJIB sama dengan SATU baris jabatan (.sheet-foot font-size:.85rem ×
+   line-height 1.55 body) dan tanpa margin, supaya jumlah tinggi baris blok KIRI ("Mengetahui," +
+   "Kepala Madrasah") sama dengan blok KANAN (tempat/tanggal + jabatan guru) sehingga
+   NAMA guru & NAMA kepala sekolah/madrasah tercetak SEJAJAR (permintaan pemilik).
+   Kelas .ttd-spacer dipakai blok kiri yang labelnya hanya satu baris. */
+.ttd-tempat{font-size:.85rem;line-height:1.55;margin-bottom:0}
 .sheet-foot.kanan{justify-content:flex-end}
 .sheet-sign-kanan{flex:0 0 auto;min-width:250px;text-align:center}
 .sheet-sign-kiri{text-align:center}
@@ -587,6 +1101,67 @@ table.sheet thead tr.sub th{font-size:.72rem;color:var(--muted);font-weight:700}
    dibuat SAMA LEBAR sehingga berlaku simetris — posisinya ditentukan oleh URUTAN di HTML,
    bukan oleh kelas. Urutan yang dipakai aplikasi ini: kepala di KIRI, guru di KANAN. */
 .sheet-foot.dua-ttd .sheet-sign{flex:1 1 0;min-width:0;text-align:center}
+
+/* ================= TANDA TANGAN LANGSUNG DI LAYAR SENTUH (notulen rapat, v1.70.0) =================
+   Permintaan pemilik: "Pada notulen rapat buat tanda tangan langsung lewat HP seperti aplikasi
+   TUSmart". Tombol "Tanda Tangan" DICETAK SERVER dengan atribut `hidden` dan hanya dimunculkan
+   skrip bila perangkat benar-benar memiliki layar sentuh, jadi komputer biasa tetap mencetak lembar
+   dengan kolom tanda tangan kosong. Semua tombol/dialog disembunyikan saat MENCETAK. */
+.sheet-sign .space{position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.ttd-sel{position:relative;padding:2px 5px}
+/* Gambar tanda tangan diskalakan menurut RUANG-nya (bukan tinggi mati) supaya tidak meluber. */
+.ttd-img{display:block;width:auto;height:auto;max-width:100%;max-height:30px;object-fit:contain;margin:0 auto}
+table.sheet.hadir td.ttd-sel{height:26px}
+.sheet-sign .space .ttd-img{max-height:58px;max-width:100%}
+.ttd-tombol{
+  display:inline-flex;align-items:center;justify-content:center;gap:4px;
+  margin:0 auto;padding:2px 8px;border-radius:8px;cursor:pointer;
+  font-family:inherit;font-size:.66rem;font-weight:600;line-height:1.3;
+  color:var(--hijau-tua);background:#fff;border:1px dashed rgba(11,74,51,.45);
+}
+.ttd-tombol:hover{background:var(--hijau-muda);border-color:var(--hijau)}
+.ttd-tombol:active{transform:translateY(1px)}
+.sheet-sign .space > .ttd-tombol{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2}
+.sheet-sign .space > .ttd-tombol:active{transform:translate(-50%,calc(-50% + 1px))}
+.sheet-sign .space > .ttd-img + .ttd-tombol{top:auto;bottom:0;transform:translate(-50%,0)}
+td.ttd-sel > .ttd-tombol{margin-top:2px}
+.ttd-catatan{
+  max-width:186mm;margin:0 auto 14px;padding:8px 12px;font-size:.8rem;
+  color:var(--hijau-tua);background:var(--hijau-muda);border:1px solid rgba(11,74,51,.22);
+  border-left:4px solid var(--emas);border-radius:10px;
+}
+/* Dialog tanda tangan */
+dialog.ttd-dialog{
+  width:min(720px,calc(100vw - 24px));max-width:720px;padding:0;border:0;
+  border-radius:16px;box-shadow:0 24px 60px -20px rgba(11,42,30,.5);
+  background:#fff;color:var(--ink);
+}
+dialog.ttd-dialog::backdrop{background:rgba(9,32,23,.55)}
+.ttd-bingkai{padding:16px 18px 18px}
+.ttd-kepala{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.ttd-kepala h3{margin:0 0 2px;font-size:1rem;color:var(--hijau-tua)}
+.ttd-ket{margin:0;font-size:.8rem;color:var(--muted)}
+.ttd-kanvas-bungkus{
+  position:relative;margin:14px 0 6px;border:2px dashed rgba(11,74,51,.35);border-radius:12px;
+  background:#fbfdfb;overflow:hidden;
+}
+#ttdKanvas{display:block;width:100%;height:240px;touch-action:none;cursor:crosshair;background:transparent}
+.ttd-garis-bantu{position:absolute;left:8%;right:8%;bottom:28%;border-bottom:1px dotted #b9cfc4;pointer-events:none}
+.ttd-petunjuk{margin:0 0 12px;font-size:.76rem;color:var(--muted)}
+.ttd-tombol-baris{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ttd-tombol-baris .btn{min-height:38px}
+.ttd-pesan{margin:10px 0 0;min-height:1.1em;font-size:.8rem;color:var(--muted)}
+.ttd-pesan.err{color:var(--maroon);font-weight:600}
+.ttd-pesan.ok{color:var(--hijau);font-weight:600}
+@media (max-width:520px){
+  #ttdKanvas{height:200px}
+  .ttd-tombol-baris .btn{flex:1 1 auto}
+}
+@media print{
+  .ttd-tombol,dialog.ttd-dialog,.ttd-catatan,.ttd-petunjuk{display:none !important}
+  .ttd-img{max-height:30px}
+  .sheet-sign .space .ttd-img{max-height:58px}
+}
 .nilai-box{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;margin:18px 0}
 .nilai-chip{min-width:132px;text-align:center;border:1px solid var(--line);border-top:3px solid var(--emas);
   border-radius:11px;padding:11px 16px;background:#fff}
@@ -617,6 +1192,30 @@ table.sheet thead tr.sub th{font-size:.72rem;color:var(--muted);font-weight:700}
   border:1px solid var(--line);font-size:.77rem;font-weight:600;color:var(--hijau-tua)}
 .chip.on{background:linear-gradient(150deg,var(--hijau),var(--hijau-tua));color:#fff;border-color:transparent}
 .chip-mati{opacity:.6}
+
+/* ===== CHIP TAB BERWARNA (permintaan pemilik v1.69.2) =====
+   Baris tab pada menu Tugas Tambahan (Wali Kelas, OSIM/OSIS, Pramuka, PMR, Sarpras, Kesiswaan,
+   Ka. Lab, Perpustakaan) dibuat BERBEDA WARNA tiap tab, tetapi tulisannya tetap GELAP di atas latar
+   cerah sehingga jelas/terbaca. Tab yang sedang dibuka memakai rona yang sama dalam versi PEKAT
+   dengan tulisan putih (kontras tinggi) — jadi tetap jelas tab mana yang aktif.
+   Pasang kelas `warna` pada pembungkusnya: <div class="chip-list warna">. Urutan warna berulang
+   setiap 6 chip, jadi baris aksi (Tabel/Bagan/Cetak/Impor/Ekspor) pun ikut berwarna berbeda. */
+.chip-list.warna > .chip:nth-child(6n+1){background:#e8f2ec;border-color:#b6d5c4;color:#0b4a33}
+.chip-list.warna > .chip:nth-child(6n+2){background:#fbf3dc;border-color:#e3cb8c;color:#6b4f05}
+.chip-list.warna > .chip:nth-child(6n+3){background:#fbe9ec;border-color:#e3b9c1;color:#6d1b25}
+.chip-list.warna > .chip:nth-child(6n+4){background:#e8f1f8;border-color:#b6d1e3;color:#14556b}
+.chip-list.warna > .chip:nth-child(6n+5){background:#efeaf9;border-color:#c6bae6;color:#43357a}
+.chip-list.warna > .chip:nth-child(6n+6){background:#f4ede1;border-color:#dbc5a4;color:#6a4a1e}
+/* Angka/keterangan kecil di dalam chip memakai warna teks chip (tetap terbaca, tidak abu-abu pudar). */
+.chip-list.warna > .chip .mut{color:inherit;opacity:.72}
+.chip-list.warna > .chip:hover{filter:brightness(.97)}
+/* Keadaan AKTIF: rona pekat + tulisan putih. */
+.chip-list.warna > .chip:nth-child(6n+1).on{background:linear-gradient(150deg,#178a5f,#0b4a33);border-color:transparent;color:#fff}
+.chip-list.warna > .chip:nth-child(6n+2).on{background:linear-gradient(150deg,#b48a10,#6b4f05);border-color:transparent;color:#fff}
+.chip-list.warna > .chip:nth-child(6n+3).on{background:linear-gradient(150deg,#9c3444,#6d1b25);border-color:transparent;color:#fff}
+.chip-list.warna > .chip:nth-child(6n+4).on{background:linear-gradient(150deg,#227792,#14556b);border-color:transparent;color:#fff}
+.chip-list.warna > .chip:nth-child(6n+5).on{background:linear-gradient(150deg,#5f4ea0,#43357a);border-color:transparent;color:#fff}
+.chip-list.warna > .chip:nth-child(6n+6).on{background:linear-gradient(150deg,#8a6329,#6a4a1e);border-color:transparent;color:#fff}
 
 /* nav toggle mobile */
 .nav-toggle{display:none;position:fixed;top:14px;left:14px;z-index:60;width:42px;height:42px;border-radius:11px;
@@ -659,4 +1258,1038 @@ table.sheet thead tr.sub th{font-size:.72rem;color:var(--muted);font-weight:700}
   table.sheet th{background:#eaf2ec !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   table.sheet tfoot th{background:#fbf4dd !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   @page{size:A4;margin:14mm}
+}
+
+/* ===== MENU DAFTAR APLIKASI (Smart Teacher & Hasil Supervisi) =====
+   Kelas diawali "apps-" karena dipakai BERSAMA oleh dua menu (modul inc/daftar_apps.php).
+   Isinya nama aplikasi + keterangan + tombol Buka Aplikasi (global, diisi Super Admin). */
+.apps-grid{gap:20px}
+.apps-kartu{display:flex;flex-direction:column;gap:14px;padding:18px;margin:0}
+.apps-kartu-head{display:flex;gap:12px;align-items:flex-start}
+.apps-ikon{
+  flex:0 0 auto;width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(150deg,var(--hijau),var(--hijau-tua));color:#fff;font-weight:800;font-size:.95rem;
+  letter-spacing:.02em;border:1px solid rgba(201,162,39,.55);box-shadow:0 3px 10px rgba(11,74,51,.18);
+}
+.apps-judul{min-width:0;flex:1}
+.apps-judul h3{font-size:1rem;line-height:1.3;color:var(--hijau-tua);overflow-wrap:break-word}
+.apps-judul .pill{margin-top:6px}
+.apps-ket-isi{font-size:.85rem;line-height:1.55;color:var(--muted);margin:0;flex:1;overflow-wrap:break-word}
+.apps-kartu-aksi{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.apps-kartu-kelola{
+  display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-top:1px dashed var(--line);padding-top:12px;margin-top:auto;
+}
+.apps-kartu-kelola form{display:flex;gap:6px;margin:0}
+.apps-kartu.apps-mati{opacity:.62;border-style:dashed}
+/* Menu BENDAHARA: tiap aplikasi punya daftar sekolah/madrasah pengaksesnya sendiri.
+   Kartu yang TIDAK boleh dibuka sekolah yang sedang masuk ditandai (bukan disembunyikan) supaya
+   pengguna tahu aplikasinya ada beserta keterangan "belum punya akses". */
+.apps-kartu.apps-kunci{background:rgba(109,27,37,.04);border-style:dashed;border-color:rgba(109,27,37,.28)}
+.apps-tanpa-akses{
+  display:flex;align-items:center;gap:8px;font-size:.8rem;font-weight:600;line-height:1.45;
+  color:var(--maroon);background:rgba(109,27,37,.07);border:1px solid rgba(109,27,37,.25);
+  border-radius:var(--radius-sm);padding:9px 12px;
+}
+.apps-akses-ringkas{
+  display:flex;align-items:center;gap:7px;font-size:.75rem;color:var(--muted);
+  border-top:1px dashed var(--line);padding-top:11px;
+}
+.apps-akses-ringkas b{color:var(--hijau-tua)}
+.apps-akses{
+  grid-column:1 / -1;border:1px solid var(--line);border-radius:var(--radius-sm);
+  background:#fff;padding:14px 16px;
+}
+.apps-akses-judul{display:flex;align-items:center;gap:9px;flex-wrap:wrap;font-size:.88rem;color:var(--hijau-tua);margin-bottom:12px}
+.apps-akses-daftar{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px 16px;
+  max-height:280px;overflow:auto;padding:2px;
+}
+.apps-akses-item{
+  display:flex;align-items:flex-start;gap:9px;font-size:.84rem;padding:7px 9px;border-radius:var(--radius-sm);
+  border:1px solid transparent;cursor:pointer;
+}
+.apps-akses-item:hover{background:var(--emas-muda);border-color:rgba(201,162,39,.45)}
+.apps-akses-item .xs{display:block}
+@media (max-width:720px){
+  .apps-akses-daftar{grid-template-columns:minmax(0,1fr);max-height:none}
+}
+.apps-form{border:1px dashed rgba(201,162,39,.6);border-radius:var(--radius-sm);padding:16px 18px;margin-bottom:20px;background:rgba(201,162,39,.05)}
+.apps-form-judul{display:flex;align-items:center;gap:8px;font-size:.9rem;color:var(--hijau-tua);margin-bottom:14px}
+.apps-form .apps-ket{grid-column:1 / -1}
+.apps-catatan{margin:0;padding-left:20px;display:grid;gap:9px;font-size:.85rem;color:var(--muted);line-height:1.55}
+.apps-catatan b{color:var(--hijau-tua)}
+@media (max-width:1080px){
+  .apps-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:720px){
+  .apps-grid{grid-template-columns:minmax(0,1fr)}
+  .apps-kartu-kelola{gap:6px}
+}
+
+/* ===== AKTIVASI sekolah/madrasah (kode aktivasi lembaga) ===== */
+.kode-kotak{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.kode-kotak code{
+  display:inline-block;padding:9px 14px;border-radius:10px;letter-spacing:.18em;font-weight:800;
+  font-size:1.05rem;color:var(--hijau-tua);background:var(--emas-muda,#fbf4dd);
+  border:1px dashed rgba(201,162,39,.85);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  user-select:all;
+}
+.pill-uji{background:rgba(201,162,39,.18);color:#7a5c06;border-color:rgba(201,162,39,.45)}
+.aktivasi-sisa{font-weight:700;color:#7a5c06}
+
+/* Hitung mundur masa uji coba pada kartu "Status Aktivasi Lembaga" (aktivasi.php).
+   Nilai awal dicetak PHP; initHitungMundur() (assets/app.js) memperbarui tiap detik. */
+.hitung-mundur{
+  border:1px dashed rgba(201,162,39,.75);border-radius:var(--radius-sm);
+  background:rgba(201,162,39,.07);padding:14px 16px;margin-bottom:16px;
+}
+.hitung-mundur-head{
+  display:flex;align-items:center;justify-content:space-between;gap:10px 16px;flex-wrap:wrap;
+  margin-bottom:12px;
+}
+.hitung-mundur-judul{
+  display:inline-flex;align-items:center;gap:8px;font-size:.86rem;font-weight:700;color:var(--hijau-tua);
+}
+.hitung-mundur-judul svg{color:var(--emas)}
+.hitung-mundur-ket{font-size:.8rem;font-weight:700;color:#7a5c06}
+.hitung-mundur-unit{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.hm-unit{
+  background:#fff;border:1px solid var(--line);border-top:2px solid var(--emas);border-radius:10px;
+  padding:9px 6px;text-align:center;
+}
+.hm-unit b{
+  display:block;font-size:1.55rem;font-weight:800;line-height:1.15;color:var(--hijau-tua);
+  font-variant-numeric:tabular-nums;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+.hm-unit span{display:block;font-size:.7rem;color:var(--muted);margin-top:2px}
+.hitung-mundur-kaki{margin-top:11px;font-size:.78rem;color:var(--muted);line-height:1.55}
+.hitung-mundur-kaki b{color:var(--hijau-tua)}
+.hitung-mundur.habis{
+  display:flex;align-items:center;gap:9px;
+  border-style:solid;border-color:rgba(109,27,37,.35);background:rgba(109,27,37,.06);
+  color:var(--maroon);font-size:.84rem;
+}
+.hitung-mundur.habis b{color:var(--maroon)}
+.hitung-mundur.habis svg{flex:0 0 auto}
+@media (max-width:560px){
+  .hm-unit b{font-size:1.2rem}
+  .hm-unit span{font-size:.63rem}
+  .hitung-mundur-unit{gap:7px}
+  .hitung-mundur{padding:12px 12px}
+}
+
+/* Formulir ringkas pilihan aktivasi pada kartu pendaftaran/kelola sekolah */
+.form-setujui{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0}
+.form-setujui select{padding:6px 9px;font-size:.76rem;border-radius:8px;max-width:150px}
+
+/* ===== Akun Pengawas: daftar pilihan sekolah binaan ===== */
+.pengawas-pilih{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.pengawas-item{
+  display:flex;gap:10px;align-items:flex-start;padding:10px 12px;background:#fff;
+  border:1px solid var(--line);border-left:3px solid var(--emas);border-radius:10px;cursor:pointer;
+}
+.pengawas-item input{margin-top:3px;width:16px;height:16px;accent-color:var(--accent);flex:0 0 auto}
+.pengawas-item b{display:block;font-size:.86rem;color:var(--hijau-tua)}
+.pengawas-item input:checked ~ span b{color:var(--hijau)}
+/* ATURAN "1 sekolah/madrasah hanya untuk 1 pengawas" (permintaan pemilik): pilihan yang sudah
+   dibina pengawas lain dinonaktifkan (kotaknya di-disable di markup) dan diberi keterangan pembina. */
+.pengawas-item.terkunci{background:rgba(92,107,99,.06);border-left-color:var(--muted);cursor:not-allowed}
+.pengawas-item.terkunci b{color:var(--muted)}
+.pengawas-item.terkunci input{accent-color:var(--muted)}
+.binaan-terkunci{display:block;margin-top:2px;color:#7a5c06;font-size:.72rem}
+@media (max-width:900px){.pengawas-pilih{grid-template-columns:minmax(0,1fr)}}
+
+/* ===== POPUP "Selamat datang" (pengumuman sambutan, diatur Super Admin di pengumuman.php) =====
+   Muncul SEKALI setiap kali pengguna masuk (Pengawas, Kepala Sekolah/Madrasah, Admin Operator,
+   Guru) — isi & urutannya dari tabel `pengumuman`. Memakai elemen <dialog> bawaan peramban
+   (Esc & klik latar gelap menutup sendiri); initSambutan() hanya pelengkap. */
+dialog.popup{
+  border:1px solid var(--line);border-radius:var(--radius);padding:0;max-width:620px;width:calc(100% - 32px);
+  background:var(--card);color:var(--ink);box-shadow:0 24px 60px rgba(11,42,30,.28);
+  font-family:inherit;font-size:1rem;line-height:1.6;
+}
+dialog.popup::backdrop{background:rgba(9,32,23,.55)}
+dialog.popup[open]{animation:popupMuncul .18s ease-out}
+@keyframes popupMuncul{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){dialog.popup[open]{animation:none}}
+dialog.popup-sambutan{border-top:3px solid var(--emas)}
+.popup-head{display:flex;gap:13px;align-items:flex-start;padding:18px 20px 14px;border-bottom:1px solid var(--line)}
+.popup-head h3{margin:0;font-size:1.1rem;color:var(--hijau-tua)}
+.popup-sub{margin:3px 0 0;font-size:.82rem;color:var(--muted)}
+.popup-sambutan-ic{
+  flex:0 0 auto;width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;
+  color:var(--emas-muda);background:linear-gradient(150deg,var(--hijau-tua),var(--hijau));border:1px solid rgba(201,162,39,.55);
+}
+.popup-sambutan-isi{padding:16px 20px;display:grid;gap:12px;max-height:min(58vh,460px);overflow-y:auto}
+.popup-foot{
+  display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;
+  padding:13px 20px;border-top:1px solid var(--line);background:rgba(201,162,39,.06);border-radius:0 0 var(--radius) var(--radius);
+}
+.pengumuman-item{
+  background:#fff;border:1px solid var(--line);border-left:3px solid var(--emas);border-radius:10px;padding:11px 13px;
+}
+.pengumuman-item-head{display:flex;gap:9px;align-items:center;margin-bottom:6px}
+.pengumuman-item-head b{font-size:.92rem;color:var(--hijau-tua)}
+.pengumuman-no{
+  flex:0 0 auto;width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;
+  font-size:.72rem;font-weight:800;color:#fff;background:linear-gradient(150deg,var(--hijau),var(--hijau-tua));
+}
+.pengumuman-teks{font-size:.86rem;color:var(--ink);line-height:1.65;overflow-wrap:anywhere}
+.pengumuman-kartu .pengumuman-teks{border-top:1px dashed var(--line);padding-top:10px}
+.pengumuman-kartu.pengumuman-mati{border-style:dashed;background:rgba(255,255,255,.7)}
+.pengumuman-kartu.pengumuman-mati .pengumuman-teks{color:var(--muted)}
+/* Pratinjau popup pada halaman pengelolaan (pengumuman.php) */
+.popup-contoh{
+  display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:var(--radius-sm);
+  border:1px dashed rgba(201,162,39,.75);background:rgba(201,162,39,.06);
+}
+.popup-contoh b{color:var(--hijau-tua)}
+.popup-contoh-isi{margin-top:12px;display:grid;gap:10px}
+
+/* ===== POPUP PERINGATAN AKTIVASI (v1.71.4 — permintaan pemilik) =====
+   Tampil di SEMUA halaman pengguna lembaga yang masa aktif/uji cobanya tersisa ≤ 7 hari
+   (lihat aktivasi_peringatan() di inc/helpers.php). Warnanya SENGAJA amber/maroon (bukan hijau)
+   supaya terasa sebagai peringatan, bukan informasi biasa. Gaya ini dipakai bersama popup
+   sambutan di atas (dialog.popup). */
+dialog.popup-peringatan{border-top:3px solid #b8860b}
+.popup-peringatan-ic{
+  flex:0 0 auto;width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;
+  color:#fff;background:linear-gradient(150deg,#b8860b,#8a5a06);border:1px solid rgba(120,92,10,.5);
+}
+.popup-peringatan-isi{padding:16px 20px;display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.peringatan-angka{
+  flex:0 0 auto;min-width:96px;text-align:center;padding:10px 14px;border-radius:var(--radius-sm);
+  background:rgba(201,162,39,.16);border:1px solid rgba(201,162,39,.5);
+}
+.peringatan-angka b{display:block;font-size:2rem;line-height:1.1;color:#7a5c06;font-family:var(--serif)}
+.peringatan-angka span{display:block;font-size:.74rem;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:#7a5c06}
+.peringatan-teks{flex:1 1 240px;min-width:0;display:grid;gap:9px}
+.peringatan-teks p{margin:0;font-size:.88rem;line-height:1.65;color:var(--ink)}
+.peringatan-teks p b{color:var(--maroon)}
+
+@media (max-width:560px){
+  .popup-head,.popup-sambutan-isi,.popup-peringatan-isi,.popup-foot{padding-left:14px;padding-right:14px}
+  .popup-foot .btn{width:100%}
+  .peringatan-angka{min-width:0;width:100%;display:flex;align-items:baseline;justify-content:center;gap:8px}
+  .peringatan-angka b{font-size:1.6rem}
+}
+@media print{dialog.popup{display:none !important}}
+
+/* ===== Pratinjau IMPOR DATA SISWA (siswa_import.php) =====
+   13 kolom (NIS, NISN, Nama, JK, Tempat Lahir, Tanggal Lahir, No. HP, Ayah, Ibu, Wali, Kelas,
+   Status) sehingga tabelnya lebih lebar daripada tabel biasa — dibuat lebih rapat agar muat
+   tanpa menggulir di desktop, dan tetap bisa digeser mendatar di layar sempit (.table-wrap). */
+table.tbl.tbl-impor th,
+table.tbl.tbl-impor td{padding:7px 8px;font-size:.78rem;vertical-align:top}
+table.tbl.tbl-impor thead th{font-size:.68rem;letter-spacing:.02em;white-space:nowrap}
+table.tbl.tbl-impor td.nowrap{white-space:nowrap}
+table.tbl.tbl-impor tbody tr:hover{background:rgba(201,162,39,.07)}
+
+/* ===== Keterangan "Pendaftaran Gratis (Aktif N Hari)" pada halaman pendaftaran (daftar.php) =====
+   Permintaan pemilik: tulisan ini harus terlihat mencolok di halaman pendaftaran publik. */
+.alert.daftar-gratis{
+  border-left-color:var(--emas);border-color:rgba(201,162,39,.55);background:rgba(201,162,39,.1);
+  color:var(--hijau-tua);font-size:.92rem;line-height:1.6;padding:15px 18px;
+}
+.alert.daftar-gratis b{color:var(--hijau-tua)}
+.alert.daftar-gratis svg{color:var(--emas);flex:0 0 auto;margin-top:2px}
+@media (max-width:560px){.alert.daftar-gratis{font-size:.86rem;padding:13px 14px}}
+
+/* ===== Tabel PROGRAM KERJA KESISWAAN (tugas.php?kode=kesiswaan) =====
+   9 kolom data (No, Jenis, Bentuk, Tujuan, Target, Tahun Ajaran, Waktu, Sumber Dana, Keterangan)
+   sehingga dirapatkan agar muat tanpa menggulir di desktop; tetap bisa digeser di layar sempit
+   (.table-wrap). */
+table.tbl.tbl-kesiswaan th,
+table.tbl.tbl-kesiswaan td{padding:7px 8px;font-size:.78rem;vertical-align:top}
+table.tbl.tbl-kesiswaan thead th{font-size:.68rem;letter-spacing:.02em}
+table.tbl.tbl-kesiswaan td.sm{font-size:.72rem;color:var(--ink)}
+table.tbl.tbl-kesiswaan tbody tr:hover{background:rgba(201,162,39,.07)}
+/* Baris rekap bulan yang tidak ada kegiatannya dibuat samar agar fokus ke bulan yang ada isinya. */
+table.tbl tr.baris-kosong{opacity:.55}
+
+/* ===== Tabel OSIM/OSIS (tugas.php?kode=osim) =====
+   Dua tabel: Susunan Organisasi (No, Jabatan/Nama Seksi, Nama) dan Program Kerja
+   (No, Nama Program, Waktu Pelaksanaan, Target, Tahun Ajaran, Terlaksana, Keterangan). */
+table.tbl.tbl-osim th,
+table.tbl.tbl-osim td{padding:7px 8px;font-size:.78rem;vertical-align:top}
+table.tbl.tbl-osim thead th{font-size:.68rem;letter-spacing:.02em}
+table.tbl.tbl-osim td.sm{font-size:.72rem}
+table.tbl.tbl-osim tbody tr:hover{background:rgba(201,162,39,.07)}
+
+/* ===== BAGAN SUSUNAN ORGANISASI OSIM/OSIS (tugas.php?kode=osim&tampilan=bagan) =====
+   Permintaan pemilik: susunan organisasi selain dalam bentuk tabel juga ditampilkan sebagai BAGAN
+   (seperti contoh struktur organisasi pada umumnya). Digambar murni dengan CSS (tanpa pustaka luar)
+   supaya tampil sama di layar maupun saat dicetak.
+
+   Struktur markup: .osim-bagan > .osim-bagan-kepala + .osim-bagan-baris (satu per tingkat)
+   > .osim-bagan-kotak. Garis penghubung dibuat oleh pseudo-element:
+   - .osim-bagan-baris::before  = garis tegak dari induk turun ke "bus" baris;
+   - .osim-bagan-kotak::before  = garis tegak pendek dari bus ke kotak;
+   - .osim-bagan-kotak::after   = garis mendatar (bus) yang menyambung antar kotak sebaris.
+   Karena bus hanya digambar pada baris BERKOTAK BANYAK (.banyak) dan panjangnya dihitung dari
+   setengah jarak (--osim-jarak / 2), posisinya tetap rapi berapa pun jumlah kotaknya. */
+.osim-bagan{
+  --osim-line:#1e4f8a;          /* biru tua seperti contoh */
+  --osim-biru:#3b6fb0;
+  --osim-jarak:18px;            /* jarak antar kotak sebaris */
+  --osim-sambung:17px;          /* setengah panjang garis penghubung antar tingkat */
+  display:flex;flex-direction:column;align-items:center;padding:18px 12px 22px;
+  background:#fff;
+}
+.osim-bagan-kepala{
+  width:100%;max-width:760px;margin:0 auto 6px;padding:14px 20px;border-radius:18px;
+  background:linear-gradient(150deg,var(--osim-biru),var(--osim-line));color:#fff;text-align:center;
+  -webkit-print-color-adjust:exact;print-color-adjust:exact;
+}
+.osim-bagan-kepala-judul{font-size:1.05rem;font-weight:800;letter-spacing:.03em;text-transform:uppercase;line-height:1.3}
+.osim-bagan-kepala-sekolah{font-size:.95rem;font-weight:700;margin-top:3px;text-transform:uppercase}
+.osim-bagan-kepala-periode{font-size:.88rem;margin-top:2px;text-transform:uppercase;opacity:.95}
+.osim-bagan-baris{
+  display:flex;justify-content:center;align-items:flex-start;flex-wrap:wrap;
+  gap:var(--osim-jarak);position:relative;width:100%;
+  padding-top:calc(var(--osim-sambung) * 2);
+}
+.osim-bagan-baris::before{
+  content:'';position:absolute;top:0;left:50%;width:2px;height:var(--osim-sambung);
+  background:var(--osim-line);transform:translateX(-1px);
+}
+.osim-bagan-kotak{
+  position:relative;background:#fff;border:2px solid var(--osim-line);border-radius:8px;
+  box-shadow:3px 3px 0 rgba(30,79,138,.35);padding:8px 14px;min-width:150px;max-width:320px;
+  text-align:center;-webkit-print-color-adjust:exact;print-color-adjust:exact;
+}
+.osim-bagan-kotak::before{
+  content:'';position:absolute;bottom:100%;left:50%;width:2px;height:var(--osim-sambung);
+  background:var(--osim-line);transform:translateX(-1px);
+}
+.osim-bagan-baris.banyak .osim-bagan-kotak::after{
+  content:'';position:absolute;bottom:calc(100% + var(--osim-sambung));height:2px;
+  background:var(--osim-line);
+}
+.osim-bagan-baris.banyak .osim-bagan-kotak:first-child::after{left:50%;right:calc(-1 * var(--osim-jarak) / 2)}
+.osim-bagan-baris.banyak .osim-bagan-kotak:last-child::after{left:calc(-1 * var(--osim-jarak) / 2);right:50%}
+.osim-bagan-baris.banyak .osim-bagan-kotak:not(:first-child):not(:last-child)::after{
+  left:calc(-1 * var(--osim-jarak) / 2);right:calc(-1 * var(--osim-jarak) / 2);
+}
+.osim-bagan-jabatan{font-weight:800;font-size:.85rem;color:var(--ink);line-height:1.25}
+.osim-bagan-nama{font-size:.82rem;color:#243b53;line-height:1.35;margin-top:1px}
+.osim-bagan-kadiv-label{font-size:.72rem;color:var(--muted);margin-top:5px;text-align:left}
+/* Tingkat SEKSI/DIVISI (7): kotak lebih lebar, judul bergaris bawah, isi rata kiri seperti contoh. */
+.osim-bagan-baris[data-tingkat="7"] .osim-bagan-kotak{text-align:left;min-width:180px;padding:9px 14px 11px}
+.osim-bagan-baris[data-tingkat="7"] .osim-bagan-jabatan{
+  border-bottom:1px solid var(--osim-line);padding-bottom:5px;margin-bottom:6px;
+}
+.osim-bagan-baris[data-tingkat="7"] .osim-bagan-nama{font-weight:700}
+.osim-bagan-baris[data-tingkat="8"] .osim-bagan-kotak{min-width:300px}
+.osim-bagan-baris[data-tingkat="8"] .osim-bagan-nama{font-weight:700}
+.osim-bagan-kosong{
+  padding:34px 20px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:12px;
+}
+/* Di layar sempit bagan dapat digeser mendatar (ukurannya harus tetap akurat saat dicetak). */
+.osim-bagan-luapan{overflow-x:auto;-webkit-overflow-scrolling:touch}
+@media print{
+  /* Bagan dirapatkan agar muat SATU halaman A4 landscape (tinggi area cetak ±703px pada lebar
+     1032px). Ukuran di atas kertas diukur ulang setiap kali tata letak bagan diubah. */
+  .osim-bagan{background:#fff;padding:0;--osim-sambung:5px;--osim-jarak:9px}
+  .osim-bagan-luapan{overflow:visible}
+  .osim-bagan-kepala{padding:6px 12px;border-radius:10px;margin-bottom:0;max-width:560px}
+  .osim-bagan-kepala-judul{font-size:.78rem;line-height:1.2}
+  .osim-bagan-kepala-sekolah{font-size:.74rem;margin-top:1px}
+  .osim-bagan-kepala-periode{font-size:.7rem;margin-top:1px}
+  .osim-bagan-kotak{padding:3px 8px;min-width:108px;border-width:1.4px;border-radius:5px;
+    box-shadow:1.5px 1.5px 0 rgba(30,79,138,.45)}
+  .osim-bagan-jabatan{font-size:.68rem;line-height:1.15}
+  .osim-bagan-nama{font-size:.66rem;line-height:1.2;margin-top:0}
+  .osim-bagan-kadiv-label{font-size:.6rem;margin-top:2px}
+  .osim-bagan-baris[data-tingkat="7"] .osim-bagan-kotak{padding:4px 8px 5px;min-width:140px}
+  .osim-bagan-baris[data-tingkat="7"] .osim-bagan-jabatan{padding-bottom:2px;margin-bottom:3px}
+  .osim-bagan-baris[data-tingkat="8"] .osim-bagan-kotak{min-width:200px}
+}
+
+/* ===== Tabel LAPORAN PERPUSTAKAAN hasil impor e-PERPUS (tugas.php?kode=kepala_perpus) =====
+   Jumlah kolomnya MENGIKUTI berkas laporan e-PERPUS yang diimpor (tidak tetap: 9-12 kolom),
+   jadi tabel ini dibuat ringkas, bisa digeser mendatar (.table-wrap), dan tiap selnya dipotong
+   satu baris dengan teks lengkap pada atribut title — supaya barisnya tetap rapi berapa pun
+   banyaknya kolom. Baris JUMLAH (tfoot) hanya muncul untuk kolom angka yang bermakna dijumlahkan. */
+table.tbl.tbl-perpus th,
+table.tbl.tbl-perpus td{padding:6px 8px;font-size:.78rem;vertical-align:top}
+table.tbl.tbl-perpus thead th{font-size:.68rem;letter-spacing:.02em;white-space:nowrap}
+table.tbl.tbl-perpus td.potong{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+table.tbl.tbl-perpus tbody tr:hover{background:rgba(201,162,39,.07)}
+table.tbl.tbl-perpus tfoot th{
+  background:rgba(11,74,51,.07);color:var(--hijau-tua);font-weight:800;white-space:nowrap;
+}
+
+/* ===== Tabel KEPALA LAB — inventaris barang & program kerja (tugas.php?kode=kepala_lab|tata_usaha) =====
+   Hanya 5 kolom (No, Nama Barang/Program Kerja, Jumlah/Alokasi Waktu, Keadaan/Status Realisasi,
+   Keterangan) sehingga tabelnya lega; dirapatkan sedikit agar banyak baris tetap terbaca. */
+table.tbl.tbl-lab th,
+table.tbl.tbl-lab td{padding:7px 9px;font-size:.79rem;vertical-align:top}
+table.tbl.tbl-lab thead th{font-size:.68rem;letter-spacing:.02em}
+table.tbl.tbl-lab td.sm{font-size:.73rem}
+table.tbl.tbl-lab tbody tr:hover{background:rgba(201,162,39,.07)}
+table.tbl.tbl-lab tfoot th{
+  background:rgba(11,74,51,.07);color:var(--hijau-tua);font-weight:800;
+}
+
+/* ===== DOKUMEN KURIKULUM — kartu "inbox" dokumen pada akun guru =====
+   Permintaan pemilik: dokumen dari menu Kurikulum masuk ke akun guru (kartu di dashboard +
+   halaman "Dokumen Saya"). Gaya kartunya sengaja memakai keluarga tampilan yang sama dengan kartu
+   daftar aplikasi (`.apps-kartu`) supaya konsisten, tetapi dengan warna per JENIS berkas agar
+   guru cepat mengenali isinya. */
+.dok-grid{gap:16px}
+.card-dokumen{margin-top:18px}
+.dok-kartu{margin:0;display:flex;flex-direction:column;gap:11px}
+.dok-kartu-head{display:flex;gap:12px;align-items:flex-start}
+.dok-ikon{
+  flex:0 0 auto;width:40px;height:40px;border-radius:11px;display:flex;align-items:center;justify-content:center;
+  color:#fff;background:linear-gradient(150deg,#2b7bb9,#1b5c8f);box-shadow:0 3px 10px rgba(27,92,143,.22);
+}
+.dok-ikon.dok-gambar{background:linear-gradient(150deg,#1e9e77,#0f7a53);box-shadow:0 3px 10px rgba(15,122,83,.22)}
+.dok-ikon.dok-video{background:linear-gradient(150deg,#7b3fb0,#57308a);box-shadow:0 3px 10px rgba(87,48,138,.22)}
+.dok-judul{min-width:0}
+.dok-kartu .dok-judul h3{
+  margin:0 0 5px;font-size:.98rem;line-height:1.3;color:var(--hijau-tua);
+  overflow-wrap:anywhere;
+}
+.dok-catatan{margin:0;font-size:.83rem;color:var(--muted);line-height:1.55;overflow-wrap:anywhere}
+.dok-kaki{border-top:1px dashed var(--line);padding-top:9px}
+.dok-aksi{margin-top:auto}
+.dok-aksi .btn{width:100%;justify-content:center}
+/* Tabel daftar dokumen pada halaman Kurikulum */
+table.tbl.tbl-dokumen th,table.tbl.tbl-dokumen td{padding:7px 8px;font-size:.78rem;vertical-align:top}
+table.tbl.tbl-dokumen thead th{font-size:.68rem;letter-spacing:.02em}
+table.tbl.tbl-dokumen td.sm{font-size:.73rem}
+table.tbl.tbl-dokumen tbody tr:hover{background:rgba(201,162,39,.07)}
+table.tbl.tbl-dokumen tfoot th{
+  background:rgba(11,74,51,.07);color:var(--hijau-tua);font-weight:800;
+}
+table.tbl.tbl-dokumen .k-judul{width:24%}
+table.tbl.tbl-dokumen .k-no{width:34px}
+/* Kolom "Binaan" hanya dipakai pada halaman Kirim Dokumen milik pengawas (lintas sekolah). */
+table.tbl.tbl-dokumen .k-binaan{width:20%}
+table.tbl.tbl-dokumen .k-jenis{width:110px}
+table.tbl.tbl-dokumen .k-ukuran{width:80px}
+table.tbl.tbl-dokumen .k-aksi{width:130px}
+@media (max-width:640px){
+  .dok-aksi .btn{width:100%}
+}
+
+/* ===== Tabel WALI KELAS (tugas.php?kode=wali_kelas) =====
+   Empat laporan kelas: struktur organisasi, program kerja, absensi harian, dan jadwal piket.
+   Tabel struktur/program/absensi/piket memakai kelas yang sama supaya tampil konsisten. */
+table.tbl.tbl-wali th,
+table.tbl.tbl-wali td{padding:7px 8px;font-size:.78rem;vertical-align:top}
+table.tbl.tbl-wali thead th{font-size:.68rem;letter-spacing:.02em}
+table.tbl.tbl-wali td.sm{font-size:.73rem}
+table.tbl.tbl-wali tbody tr:hover{background:rgba(201,162,39,.07)}
+table.tbl.tbl-wali tfoot th{
+  background:rgba(11,74,51,.07);color:var(--hijau-tua);font-weight:800;
+}
+table.tbl.tbl-wali .k-no{width:34px}
+table.tbl.tbl-wali .k-jabatan{width:34%}
+table.tbl.tbl-wali .k-nama{width:36%}
+table.tbl.tbl-wali .k-hari{width:110px}
+table.tbl.tbl-wali .k-jml{width:90px}
+table.tbl.tbl-wali .k-aksi{width:190px}
+/* REKAP NILAI / LEGER (v1.69.0) — tab keempat menu Wali Kelas.
+   Tabel leger bisa sangat lebar (satu kolom per mata pelajaran): kolom mapel dibuat sempit &
+   judulnya dipotong, angkanya tetap terbaca. Pembungkus .table-wrap sudah bisa digeser di HP. */
+table.tbl.tbl-leger th,
+table.tbl.tbl-leger td{padding:6px 6px;font-size:.76rem;vertical-align:top}
+table.tbl.tbl-leger thead th{font-size:.64rem}
+table.tbl.tbl-leger .k-siswa{width:190px}
+table.tbl.tbl-leger .k-nilai{min-width:52px}
+table.tbl.tbl-leger .k-jml{width:74px}
+table.tbl.tbl-leger .k-pred{width:66px}
+table.tbl.tbl-leger .k-peringkat{width:64px}
+table.tbl.tbl-leger tbody tr:hover{background:rgba(201,162,39,.07)}
+@media (max-width:760px){
+  table.tbl.tbl-leger{min-width:640px}
+}
+/* Tabel pilih siswa piket pada tiap hari (Senin–Minggu) */
+table.tbl.piket-pilih td,table.tbl.piket-pilih th{padding:5px 8px;font-size:.78rem}
+table.tbl.piket-pilih tbody tr:hover{background:rgba(201,162,39,.07)}
+/* JADWAL PIKET — LEMBAR CETAK berbentuk KARTU PER HARI (v1.69.2, permintaan pemilik)
+   Contoh yang dikirim: judul + kotak hari (3 kolom) berisi nama siswa piket. TANPA gambar kartun dan
+   TANPA kotak "catatan" — jangan ditambahkan kembali tanpa bertanya. */
+.piket-cetak-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:4px}
+.piket-cetak-kartu{
+  border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff;
+  display:flex;flex-direction:column;min-height:118px;break-inside:avoid;
+}
+.piket-cetak-hari{
+  background:linear-gradient(150deg,#e8f2ec,#d5e8dc);color:var(--hijau-tua);
+  border-bottom:1px solid #b6d5c4;text-align:center;font-weight:800;letter-spacing:.08em;
+  font-size:.72rem;padding:7px 6px;
+}
+.piket-cetak-isi{padding:8px 10px;font-size:.72rem;line-height:1.35;flex:1}
+.piket-cetak-isi ul{margin:0;padding-left:16px}
+.piket-cetak-isi li{margin:1px 0}
+.piket-cetak-kosong{display:block;text-align:center;color:#8b8598;font-size:.8rem;padding-top:6px}
+@media screen and (max-width:760px){
+  .piket-cetak-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media print{
+  /* Lembar piket memakai ruang A4 potrait (±695px); kartu dirapatkan agar tetap satu halaman. */
+  .piket-cetak-grid{gap:8px}
+  .piket-cetak-kartu{min-height:104px}
+  .piket-cetak-hari{padding:5px 4px;font-size:.66rem}
+  .piket-cetak-isi{padding:6px 8px;font-size:.66rem;line-height:1.3}
+}
+
+/* Lembar cetak modul Wali Kelas */
+table.sheet.wali.leger{width:100%;table-layout:auto}
+table.sheet.wali.leger th,
+table.sheet.wali.leger td{padding:3px 4px;font-size:.66rem;line-height:1.2;text-align:center}
+table.sheet.wali.leger thead th{font-size:.6rem}
+/* Judul kolom mata pelajaran dipotong rapi (nama panjang) supaya seluruh mapel tetap muat. */
+table.sheet.wali.leger th.k-mapel{
+  max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+table.sheet.wali.leger th.k-nama-siswa,
+table.sheet.wali.leger td.k-nama-siswa{text-align:left;min-width:150px}
+table.sheet.wali.leger .k-no{width:26px}
+table.sheet.wali.leger .k-nis{width:52px}
+table.sheet.wali.leger .k-total{width:52px}
+table.sheet.wali.leger .k-pred{width:44px}
+table.sheet.wali.leger .k-peringkat{width:48px}
+table.sheet.wali.leger tbody td:nth-child(2){text-align:left}
+table.sheet.wali.leger tfoot th{background:rgba(11,74,51,.07);color:var(--hijau-tua);font-weight:800}
+.leger-catatan{font-size:.66rem;line-height:1.35;margin-top:6px;color:#3f3a56}
+/* Saat MENCETAK, lembar leger dirapatkan supaya kelas berisi ±30 siswa tetap muat satu halaman A4
+   landscape (lembar ini membawa kop + identitas + keterangan + dua tanda tangan). */
+@media print{
+  table.sheet.wali.leger th,
+  table.sheet.wali.leger td{padding:2px 3px;font-size:.62rem;line-height:1.18}
+  table.sheet.wali.leger thead th{font-size:.58rem}
+  .leger-catatan{font-size:.6rem;line-height:1.28;margin-top:4px}
+}
+table.sheet.wali .k-jabatan{width:34%}
+table.sheet.wali .k-nama{width:36%}
+table.sheet.wali .k-bagan{width:11%}
+table.sheet.wali .k-hari{width:12%}
+table.sheet.wali .k-jml{width:10%}
+
+/* ---------------------------------------------------------------------------
+   PETUNJUK PENGGUNAAN (petunjuk.php) — panduan tiap menu dalam bentuk <details>
+   yang bisa dibuka-tutup TANPA JavaScript (tombolnya <summary>).
+   Permintaan pemilik: menu "Petunjuk Penggunaan" di bawah "Akun Saya", isinya
+   menyesuaikan peran, tampil sebagai daftar yang bisa dibuka-tutup.
+--------------------------------------------------------------------------- */
+.panduan-wrap{display:flex;flex-direction:column;gap:10px}
+details.panduan{
+  border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden;
+  transition:border-color .15s, box-shadow .15s;
+}
+details.panduan[open]{border-color:var(--emas);box-shadow:0 6px 18px -12px rgba(11,74,51,.45)}
+details.panduan > summary{
+  display:flex;align-items:center;gap:11px;cursor:pointer;user-select:none;
+  padding:12px 14px;list-style:none;background:linear-gradient(180deg,#fff,var(--hijau-muda));
+}
+details.panduan > summary::-webkit-details-marker{display:none}
+details.panduan > summary::after{
+  content:'\25BE';font-size:.72rem;color:var(--muted);margin-left:auto;flex:0 0 auto;
+  transition:transform .15s;
+}
+details.panduan[open] > summary::after{transform:rotate(180deg)}
+details.panduan > summary:hover{background:var(--emas-muda)}
+details.panduan > summary:focus-visible{outline:2px solid var(--hijau);outline-offset:-2px}
+.panduan-ikon{
+  width:30px;height:30px;border-radius:9px;flex:0 0 auto;display:grid;place-items:center;
+  background:linear-gradient(150deg,var(--hijau-terang),var(--hijau-tua));color:#fff;
+}
+.panduan-nama{font-weight:700;color:var(--hijau-tua);flex:0 0 auto}
+.panduan-ringkas{
+  color:var(--muted);font-size:.8rem;min-width:0;
+  display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;
+}
+.panduan-isi{padding:2px 16px 16px;border-top:1px dashed rgba(11,74,51,.18)}
+.panduan-sub{
+  display:flex;align-items:center;gap:6px;margin:14px 0 8px;
+  font-size:.76rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--hijau);
+}
+.panduan-langkah{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:7px}
+.panduan-langkah li{font-size:.86rem;line-height:1.55}
+.panduan-ket{
+  margin:14px 0 0;padding:10px 12px;border-radius:var(--radius-sm);font-size:.79rem;line-height:1.55;
+  background:var(--emas-muda);border:1px solid rgba(201,162,39,.45);color:#5d4808;
+}
+.panduan-ket svg.ic{vertical-align:-2px;margin-right:4px;color:var(--emas)}
+.panduan-aksi{margin-top:14px}
+@media (max-width:640px){
+  /* Di layar sempit ringkasannya ditata bertingkat supaya nama menu tetap terbaca utuh. */
+  details.panduan > summary{flex-wrap:wrap;gap:8px;padding:11px 12px}
+  .panduan-ringkas{-webkit-line-clamp:2;flex:1 1 100%;order:3}
+  .panduan-isi{padding:2px 12px 14px}
+  .panduan-langkah{padding-left:17px}
+}
+
+/* ===== KARTU "AKTIVASI SEKOLAH/MADRASAH" pada halaman Status & Aktivasi =====
+   Permintaan pemilik: kartu ini memuat ajakan menghubungi HD Admin + tombol permohonan yang langsung
+   membuka WhatsApp (pesan sudah disiapkan), serta NOMOR REKENING tujuan aktivasi beserta keterangannya
+   ("Pastikan anda transfer ke nomer rekening tersebut …"). Tampil juga saat aplikasi terkunci supaya
+   pengguna langsung tahu caranya memperpanjang. */
+.permohonan-aktivasi{
+  border:1px solid rgba(201,162,39,.55);border-radius:var(--radius-sm);
+  background:linear-gradient(180deg,rgba(201,162,39,.07),rgba(255,255,255,.6));
+  padding:16px 18px;
+}
+.permohonan-judul{
+  display:flex;align-items:center;gap:8px;font-weight:800;color:var(--hijau-tua);
+  font-size:1rem;margin-bottom:9px;
+}
+.permohonan-ajak{margin:0 0 14px;font-size:.86rem;line-height:1.6;color:var(--ink)}
+.btn-permohonan{width:auto}
+.rekening-aktivasi{
+  border:1px dashed rgba(11,74,51,.35);border-radius:var(--radius-sm);background:#fff;padding:13px 15px;
+}
+.rekening-baris{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.rekening-ikon{
+  width:38px;height:38px;border-radius:11px;display:grid;place-items:center;flex:0 0 auto;
+  background:linear-gradient(150deg,var(--hijau-terang),var(--hijau-tua));color:#fff;
+}
+.rekening-baris > div{flex:1 1 220px;min-width:0}
+.rekening-baris .xs{display:block;margin-bottom:2px}
+.rekening-baris b{font-size:.95rem;color:var(--hijau-tua);overflow-wrap:break-word;display:block}
+.rekening-ket{
+  margin:11px 0 0;font-size:.78rem;line-height:1.55;color:#7f1d28;
+  background:rgba(109,27,37,.07);border:1px solid rgba(109,27,37,.28);border-radius:var(--radius-sm);
+  padding:9px 11px;
+}
+.rekening-ket svg.ic{vertical-align:-2px;margin-right:4px;color:var(--maroon)}
+@media (max-width:560px){
+  .permohonan-aktivasi{padding:13px 14px}
+  .btn-permohonan{width:100%;justify-content:center}
+}
+
+/* ----- Blok NOMINAL BIAYA AKTIVASI (v1.52.0) -----
+   Permintaan pemilik: "Pada menu status dan aktifasi tampilkan nominal aktifasi … Jika aplikasi
+   sudah di aktifasi maka muncul info: biaya langganan Rp. 500.000 untuk tahun depan". */
+.biaya-aktivasi{
+  margin-top:14px;padding:14px 16px;border-radius:var(--radius-sm);
+  border:1px solid rgba(11,74,51,.28);background:#fff;
+}
+.biaya-kepala{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.biaya-ikon{
+  width:40px;height:40px;border-radius:12px;display:grid;place-items:center;flex:0 0 auto;
+  background:linear-gradient(150deg,var(--emas-terang),var(--emas));color:#3d2f06;
+}
+.biaya-kepala > div{flex:1 1 200px;min-width:0}
+.biaya-kepala .xs{display:block;margin-bottom:2px}
+.biaya-nominal{
+  display:block;font-size:1.5rem;font-weight:800;color:var(--hijau-tua);letter-spacing:-.01em;
+  font-family:var(--serif);line-height:1.2;
+}
+.biaya-kalimat{
+  margin:11px 0 0;font-size:.86rem;line-height:1.6;color:var(--ink);
+  background:var(--emas-muda);border:1px dashed rgba(201,162,39,.6);border-radius:var(--radius-sm);
+  padding:10px 12px;overflow-wrap:break-word;
+}
+.btn-bukti{width:auto;margin-top:11px}
+.biaya-tarif{margin:11px 0 0;line-height:1.5}
+.biaya-tarif b{color:var(--hijau-tua)}
+.biaya-langganan{margin-top:14px}
+@media (max-width:560px){
+  .biaya-nominal{font-size:1.28rem}
+  .btn-bukti{width:100%;justify-content:center}
+}
+
+/* ============================================================================
+   OBROLAN / CHAT sesama pengguna aplikasi (v1.51.0)
+   Permintaan pemilik: "Tambahkan fitur chat agar sesama pengguna aplikasi yang sedang online bisa
+   berkomunikasi." Pilihannya: SATU ruang bersama (lintas sekolah + Super Admin), untuk SEMUA PERAN,
+   pesan baru muncul otomatis tiap beberapa detik, dan tampil sebagai KOTAK MENGAMBANG di pojok
+   kanan bawah pada semua halaman.
+   Tombol & panel diletakkan `position:fixed` dengan z-index tinggi supaya tidak menutupi pesan
+   sistem/notifikasi halaman, dan TIDAK ikut tercetak.
+   ========================================================================== */
+.chat-kotak{position:fixed;right:20px;bottom:20px;z-index:70;font-size:.86rem}
+@media (max-width:520px){ .chat-kotak{right:12px;bottom:12px} }
+
+/* ---- tombol mengambang ---- */
+.chat-tombol{
+  width:54px;height:54px;border-radius:50%;border:2px solid var(--emas);cursor:pointer;
+  display:grid;place-items:center;position:relative;color:#fff;
+  background:linear-gradient(150deg,var(--hijau-terang),var(--hijau-tua));
+  box-shadow:0 12px 26px -12px rgba(11,74,51,.75), 0 2px 6px -2px rgba(0,0,0,.2);
+  transition:transform .15s, box-shadow .15s;
+}
+.chat-tombol:hover{transform:translateY(-2px);box-shadow:0 16px 30px -12px rgba(11,74,51,.8)}
+.chat-tombol:focus-visible{outline:3px solid var(--emas-terang);outline-offset:2px}
+.chat-lencana{
+  position:absolute;top:-4px;right:-4px;min-width:22px;height:22px;padding:0 6px;border-radius:11px;
+  background:var(--maroon);color:#fff;font-size:.7rem;font-weight:700;line-height:22px;text-align:center;
+  border:2px solid #fff;box-shadow:0 2px 6px -2px rgba(0,0,0,.4);
+}
+
+/* ---- panel obrolan ---- */
+.chat-panel{
+  position:absolute;right:0;bottom:66px;width:min(360px, calc(100vw - 40px));
+  max-height:min(520px, calc(100vh - 140px));display:flex;flex-direction:column;overflow:hidden;
+  background:var(--card);border:1px solid var(--emas);border-radius:var(--radius);
+  box-shadow:0 24px 48px -20px rgba(11,74,51,.6), 0 3px 10px -4px rgba(0,0,0,.18);
+  backdrop-filter:blur(14px) saturate(150%);
+}
+.chat-kepala{
+  display:flex;align-items:center;gap:10px;justify-content:space-between;padding:11px 13px;
+  background:linear-gradient(150deg,var(--hijau-tua),var(--hijau));color:#fff;
+}
+.chat-kepala b{display:flex;align-items:center;gap:7px;font-size:.92rem}
+.chat-kepala .xs{display:block;color:rgba(255,255,255,.8);margin-top:1px}
+.chat-kepala .xs b{display:inline;color:#fff}
+.chat-tutup{
+  background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);color:#fff;cursor:pointer;
+  width:28px;height:28px;border-radius:8px;display:grid;place-items:center;flex:0 0 auto;
+}
+.chat-tutup:hover{background:rgba(255,255,255,.25)}
+
+/* ---- daftar pesan ---- */
+.chat-isi{
+  flex:1 1 auto;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:9px;
+  min-height:180px;background:linear-gradient(180deg,#fff,var(--hijau-muda));
+}
+.chat-kosong{margin:auto;text-align:center;color:var(--muted);font-size:.82rem;padding:16px 8px}
+.chat-pesan{display:flex;flex-direction:column;align-items:flex-start;gap:2px;max-width:88%}
+.chat-pesan.saya{align-self:flex-end;align-items:flex-end}
+.chat-dari{font-size:.7rem;color:var(--muted);font-weight:600;padding-left:2px}
+.chat-gelembung{
+  display:block;padding:8px 11px;border-radius:12px;font-size:.85rem;line-height:1.45;
+  background:#fff;border:1px solid var(--line);overflow-wrap:break-word;word-break:break-word;
+}
+.chat-pesan.saya .chat-gelembung{
+  background:linear-gradient(150deg,var(--hijau-terang),var(--hijau));color:#fff;border-color:transparent;
+}
+.chat-jam{font-size:.66rem;color:var(--muted);padding:0 3px}
+
+/* ---- formulir kirim ---- */
+.chat-form{border-top:1px solid var(--line);padding:10px 12px;background:#fff}
+.chat-form textarea{
+  width:100%;resize:none;font:inherit;font-size:.85rem;padding:8px 10px;border-radius:var(--radius-sm);
+  border:1px solid var(--line);background:#fff;color:var(--ink);
+}
+.chat-form textarea:focus{outline:2px solid var(--hijau);outline-offset:-1px;border-color:var(--hijau)}
+.chat-aksi{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:7px}
+.chat-catatan{
+  margin:0;padding:0 12px 11px;background:#fff;color:var(--muted);font-size:.68rem;line-height:1.4;
+}
+@media (max-width:520px){
+  .chat-panel{width:calc(100vw - 24px);max-height:calc(100vh - 120px)}
+}
+
+/* Obrolan tidak pernah ikut tercetak (lembar cetak & PDF). */
+@media print{ .chat-kotak{display:none !important} }
+
+/* Pesan galat pada kotak obrolan (mis. gagal terkirim) — warna maroon agar jelas terlihat. */
+.chat-galat{
+  align-self:center;text-align:center;font-size:.74rem;color:#7f1d28;background:rgba(109,27,37,.08);
+  border:1px solid rgba(109,27,37,.28);border-radius:var(--radius-sm);padding:6px 10px;
+}
+
+/* =========================================================================================
+   FITUR "KIRIM PERANGKAT" (v1.67.0 / skema v48)
+
+   Permintaan pemilik: *"Menu Perangkat Guru yang ada di Super Admin dihapus saja dengan isinya. …
+   Sekarang buatkan fitur Kirim Perangkat di akun guru … File yang terkirim masuk di akun Kepala
+   sekolah … dan Pengawas (Pengawas hanya lihat dan download). Hasil tinjauan kepala sekolah
+   terkirim ke akun guru"*.
+
+   Dipakai TIGA halaman: `perangkat_saya.php` (guru), `perangkat_masuk.php` (kepala & pengawas), dan
+   `perangkat_jenis.php` (Super Admin). Kelas `.pk-*` sengaja dipakai bersama supaya tabelnya seragam.
+   Tombol/ikon memakai warna aplikasi (hijau tua + emas + maroon).
+   ========================================================================================= */
+table.tbl-perangkat{font-size:.84rem}
+table.tbl-perangkat thead th{
+  background:linear-gradient(150deg,rgba(11,74,51,.1),rgba(201,162,39,.12));
+  color:var(--hijau-tua);font-size:.74rem;letter-spacing:.02em;text-align:center;
+}
+table.tbl-perangkat td{vertical-align:middle}
+table.tbl-perangkat .pk-no{width:52px}
+table.tbl-perangkat .pk-guru{width:200px}
+table.tbl-perangkat .pk-mapel{width:165px}
+table.tbl-perangkat .pk-jenis{width:210px}
+table.tbl-perangkat .pk-jenis-sel{min-width:150px}
+table.tbl-perangkat .pk-ta{width:118px}
+table.tbl-perangkat .pk-berkas{width:210px}
+table.tbl-perangkat .pk-status{width:230px}
+table.tbl-perangkat .pk-aksi{width:190px}
+table.tbl-perangkat .pk-guru-cell{text-align:left}
+table.tbl-perangkat .pk-guru-cell b{display:block;line-height:1.3}
+table.tbl-perangkat .pk-mapel-cell{font-weight:600;color:var(--hijau-tua)}
+table.tbl-perangkat .pk-berkas-cell .tbl-sub,
+table.tbl-perangkat .pk-status-cell .tbl-sub{display:block}
+.pk-sel{text-align:center;white-space:normal}
+
+/* Ikon centang hijau (sudah dikirim) / silang merah (belum dikirim). */
+.pk-ikon{
+  display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;
+  border-radius:50%;color:#fff;vertical-align:middle;
+}
+.pk-ikon.ok{background:linear-gradient(150deg,#19a76a,#0b6e46);box-shadow:0 3px 8px rgba(11,110,70,.3)}
+.pk-ikon.no{background:linear-gradient(150deg,#d9534f,#a72b26);box-shadow:0 3px 8px rgba(167,43,38,.3)}
+.pk-link{display:block;margin-top:5px;font-size:.72rem;font-weight:700;color:var(--hijau-tua)}
+
+/* Keterangan/alasan dari peninjau (nama kepala sekolah) pada kolom Status Tinjauan. */
+.pk-catatan{
+  margin-top:5px;padding:6px 8px;border-radius:var(--radius-sm);
+  background:rgba(201,162,39,.1);border:1px solid rgba(201,162,39,.35);
+  font-size:.74rem;line-height:1.45;color:var(--hijau-tua);word-break:break-word;
+}
+
+/* Kotak "persentase kelengkapan" + bilahnya. */
+.pk-total{display:flex;align-items:center;gap:14px}
+.pk-total-angka{
+  font-family:var(--font-serif,Georgia,serif);font-size:1.7rem;font-weight:700;color:var(--hijau-tua);
+  min-width:74px;
+}
+.pk-bar{height:10px;border-radius:999px;background:rgba(11,74,51,.1);overflow:hidden}
+.pk-bar.sm{height:8px}
+.pk-bar>span{display:block;height:100%;background:linear-gradient(120deg,var(--hijau),var(--emas))}
+
+/* Formulir tinjauan per baris: <details> supaya tetap bekerja TANPA JavaScript. */
+details.pk-tinjau{display:inline-block;text-align:left}
+details.pk-tinjau summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:6px}
+details.pk-tinjau summary::-webkit-details-marker{display:none}
+details.pk-tinjau[open] summary{margin-bottom:8px}
+.pk-tinjau-form{
+  display:grid;gap:6px;min-width:236px;padding:11px 12px;border-radius:var(--radius-sm);
+  background:#fff;border:1px solid rgba(11,74,51,.16);box-shadow:0 8px 20px rgba(11,74,51,.1);
+}
+.pk-tinjau-form select,.pk-tinjau-form textarea{width:100%}
+.pk-cek{display:inline-flex;align-items:center;gap:7px;font-size:.82rem}
+
+/* Kartu hasil tinjauan pada DASHBOARD GURU (permintaan pemilik: "Hasil tinjauan kepala sekolah
+   terkirim ke akun guru"). */
+.card-perangkat{margin-top:18px}
+.pk-kartu-tinjau{border-left:3px solid var(--emas)}
+
+@media (max-width:640px){
+  table.tbl-perangkat{font-size:.78rem}
+  table.tbl-perangkat .pk-guru,
+  table.tbl-perangkat .pk-mapel,
+  table.tbl-perangkat .pk-jenis,
+  table.tbl-perangkat .pk-berkas,
+  table.tbl-perangkat .pk-status{width:auto}
+  .pk-tinjau-form{min-width:200px}
+  .pk-total{flex-direction:column;align-items:flex-start;gap:8px}
+}
+
+/* ===== KOLOM AKSI pada tabel "Daftar Sekolah/Madrasah" (Ringkasan Semua — v1.72.3) =====
+   Permintaan pemilik: *"Tambahkan fitur non aktifkan dan fitur hapus pada yang ditandai warna merah.
+   Sebelum menghapus super admin akan dimintakan sandi … agar ketika tidak sengaja di klik hapus
+   lembaga tidak langsung terhapus"*. Tiap baris berisi tombol Kelola & Nonaktifkan (berdampingan)
+   dan tombol Hapus yang membuka formulir sandi di dalam <details> (tetap bekerja tanpa JavaScript). */
+table.tbl .sekolah-aksi{min-width:296px;white-space:nowrap}
+/* v1.72.4 — KETIGA TOMBOL SEJAJAR DALAM SATU BARIS. Permintaan pemilik: *"Yang saya beri tanda
+   merah dirapikan agar fitur hapus, kelola dan nonaktifkan sejajar rapi"*. Sebelumnya Kelola +
+   Nonaktifkan berada pada .row-actions dan tombol Hapus (di dalam <details>) turun ke baris
+   berikutnya dengan rata kiri, sehingga tidak sejajar. Sekarang KETIGANYA adalah anak dari satu
+   wadah flex ini: tombol tetap sebaris & rata kanan, sedangkan formulir sandi (yang muncul saat
+   Hapus diklik) turun DI BAWAH tombol Hapus karena `align-items:flex-start` — tombol Hapus sendiri
+   tidak ikut bergeser ke bawah. */
+.sekolah-aksi-baris{
+  display:flex;align-items:flex-start;justify-content:flex-end;gap:6px;flex-wrap:nowrap;
+}
+.sekolah-aksi-baris>form{margin:0;flex:0 0 auto;display:flex}
+.sekolah-aksi-baris .btn{width:auto}
+details.sekolah-hapus{display:inline-block;text-align:left;flex:0 0 auto}
+details.sekolah-hapus>summary{
+  cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:6px;
+}
+details.sekolah-hapus>summary::-webkit-details-marker{display:none}
+details.sekolah-hapus[open]>summary{margin-bottom:8px}
+.sekolah-hapus-form{
+  display:grid;gap:6px;
+  /* Lebar DIPATOK (v1.72.4). Sejak wadah tombol memakai flex, <details> menjadi flex item
+     `flex:0 0 auto` yang mengambil lebar max-content — tanpa patokan ini formulir (grid) melebar
+     mengikuti teks terpanjangnya sehingga tidak lagi muat di layar HP. */
+  width:216px;max-width:216px;
+  padding:11px 12px;border-radius:var(--radius-sm);
+  background:#fff;border:1px solid rgba(185,28,28,.30);box-shadow:0 8px 20px rgba(11,74,51,.10);
+  white-space:normal;
+}
+.sekolah-hapus-form .f{font-size:.74rem;margin-bottom:0}
+.sekolah-hapus-form input{width:100%}
+.sekolah-hapus-form .hint{line-height:1.4}
+
+/* ===== CATATAN PENGAWAS + HALAMAN PENGAWAS "PERANGKAT GURU" (v1.72.0 / skema v52) =====
+   Permintaan pemilik: *"Pada akun pengawas tambahkan menu Perangkat Guru (Perangkat guru ditampilkan
+   per lembaga yang di dalamnya ada daftar guru + mata pelajaran dan daftar perangkatnya). Pengawas
+   bisa melihat, memberikan catatan setiap perangkat dan mendownload"*.
+   Catatan pengawas TERPISAH dari status tinjauan kepala sekolah dan dapat dibaca guru & kepala
+   sekolah/madrasah — karena itu blok `.pk-catatan-pw` dipakai di KETIGA halaman. */
+.pk-catatan-pw{
+  margin-top:6px;padding:7px 9px;border-radius:var(--radius-sm);
+  background:rgba(11,74,51,.06);border:1px solid rgba(11,74,51,.16);
+}
+.pk-catatan-pw-judul{
+  display:flex;align-items:center;gap:6px;font-size:.7rem;font-weight:800;letter-spacing:.03em;
+  text-transform:uppercase;color:var(--hijau-tua);margin-bottom:4px;
+}
+.pw-kosong{display:block;font-style:italic}
+.pw-catatan-list{display:grid;gap:6px}
+.pw-catatan-item{
+  padding:6px 8px;border-radius:var(--radius-sm);background:#fff;
+  border-left:3px solid rgba(11,74,51,.28);font-size:.76rem;line-height:1.45;
+}
+.pw-catatan-item.milik{border-left-color:var(--emas);background:rgba(201,162,39,.07)}
+.pw-catatan-kepala{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:3px}
+.pw-catatan-kepala b{color:var(--hijau-tua);font-size:.78rem}
+.pw-catatan-kepala .pill{font-size:.62rem;padding:1px 6px}
+.pw-catatan-isi{color:#26352f;word-break:break-word}
+.pw-catatan-form{display:grid;gap:6px;margin-top:8px}
+.pw-catatan-form textarea{width:100%;font-size:.8rem}
+.pw-catatan-form .f{font-size:.72rem;margin-bottom:0}
+.pw-catatan-form .hint{line-height:1.4}
+
+/* Kartu binaan pada halaman PEMILIH (pengawas). */
+.pw-binaan{border-left:3px solid var(--emas)}
+.pw-binaan-kepala{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.pw-binaan-nama{font-size:.98rem;color:var(--hijau-tua);line-height:1.3}
+
+/* Kelompok GURU → MATA PELAJARAN pada daftar perangkat pengawas. */
+.card.pw-guru{padding:0;overflow:hidden;border-left:3px solid var(--hijau)}
+.card.pw-guru + .card.pw-guru{margin-top:14px}
+.card.pw-guru details>summary{
+  cursor:pointer;list-style:none;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:12px 16px;background:linear-gradient(150deg,rgba(11,74,51,.07),rgba(201,162,39,.08));
+}
+.card.pw-guru details>summary::-webkit-details-marker{display:none}
+.card.pw-guru details>summary::after{content:"▾";margin-left:auto;color:var(--hijau-tua);font-size:.9rem}
+.card.pw-guru details[open]>summary::after{content:"▴"}
+.pw-guru-nama{display:inline-flex;align-items:center;gap:8px;font-weight:800;color:var(--hijau-tua)}
+.pw-guru-ket{font-size:.76rem;color:#5d6b64}
+.pw-guru-isi{padding:12px 16px 16px}
+.pw-mapel + .pw-mapel{margin-top:14px}
+.pw-mapel-judul{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-weight:700;font-size:.86rem;
+  color:var(--hijau-tua);margin-bottom:6px;
+}
+.pw-mapel-judul .chip{font-size:.68rem;padding:2px 8px}
+table.tbl-pw .pk-catatan-pw-kol{width:300px}
+table.tbl-pw{touch-action:auto}
+
+@media (max-width:760px){
+  table.tbl-pw .pk-catatan-pw-kol{width:auto}
+  .pw-catatan-form{padding:0}
+}
+
+/* ===== HALAMAN PUBLIK DATA LEMBAGA (sasaran kode QR kartu pelajar, v1.71.0) =====
+   Dibuka dengan memindai QR pada Kartu Pelajar. Sengaja sederhana & terbaca di HP. */
+.lembaga-wrap{max-width:720px;margin:0 auto;padding:28px 16px 40px}
+.lembaga-kartu{padding:22px 22px 18px}
+.lembaga-kepala{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+.lembaga-logo{width:64px;height:64px;object-fit:contain;border-radius:12px;background:#fff;
+  border:1px solid var(--line);padding:5px;flex:0 0 auto}
+.lembaga-emblem{width:64px;height:64px;border-radius:14px;display:flex;align-items:center;justify-content:center;
+  color:var(--emas-muda);background:linear-gradient(150deg,var(--hijau-tua),var(--hijau));
+  border:1px solid rgba(201,162,39,.55);flex:0 0 auto}
+.lembaga-judul{min-width:0;flex:1 1 240px}
+.lembaga-judul h1{margin:2px 0 8px;font-size:1.16rem;line-height:1.25;color:var(--hijau-tua);
+  font-family:var(--serif);overflow-wrap:anywhere}
+.lembaga-label{font-size:.7rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.lembaga-stat{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0 0 16px}
+.lembaga-stat-item{border:1px solid var(--line);border-top:3px solid var(--emas);border-radius:10px;
+  padding:10px 12px;text-align:center;background:rgba(201,162,39,.05)}
+.lembaga-stat-item b{display:block;font-size:1.3rem;font-weight:800;color:var(--hijau-tua)}
+.lembaga-stat-item span{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+table.lembaga-tabel{width:100%}
+table.lembaga-tabel th{width:38%;text-align:left;vertical-align:top;white-space:normal}
+table.lembaga-tabel td{overflow-wrap:anywhere}
+.lembaga-ket{font-size:.78rem;color:var(--muted);line-height:1.6;margin:14px 0 0;
+  border-top:1px dashed var(--line);padding-top:12px}
+.lembaga-kosong{text-align:center}
+.lembaga-kosong h1{font-size:1.1rem;margin:12px 0 6px;color:var(--hijau-tua)}
+.lembaga-kosong p{font-size:.86rem;color:var(--muted);margin:0 0 16px;line-height:1.6}
+.lembaga-foot{text-align:center;font-size:.74rem;color:var(--muted);margin:16px 0 0}
+@media (max-width:520px){
+  .lembaga-wrap{padding:18px 12px 30px}
+  .lembaga-kartu{padding:16px 14px}
+  .lembaga-stat{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+  .lembaga-stat-item{padding:8px 6px}
+  .lembaga-stat-item b{font-size:1.1rem}
+  table.lembaga-tabel th,table.lembaga-tabel td{display:block;width:auto}
+  table.lembaga-tabel th{border-bottom:none;padding-bottom:0}
+}
+
+/* ===== REKAP PELANGGARAN pada menu Kesiswaan (v1.71.1 — permintaan pemilik) =====
+   Tabel lebar (10 kolom) berisi SELURUH catatan pelanggaran dari setiap guru mata pelajaran,
+   dengan form TINDAK LANJUT per baris di dalam <details> (bekerja tanpa JavaScript). */
+table.tbl.tbl-pelanggaran-kesiswaan th,
+table.tbl.tbl-pelanggaran-kesiswaan td{font-size:.78rem;vertical-align:top}
+table.tbl.tbl-pelanggaran-kesiswaan thead th{font-size:.68rem;letter-spacing:.02em;vertical-align:middle}
+/* Lebar minimum tabel + kolom TINDAK LANJUT: formulir di dalamnya (pilihan + catatan + tombol)
+   harus tetap enak dipakai. Tanpa ini kolom terakhir menyempit (±194px) karena 10 kolom berbagi
+   lebar yang sama — diukur dengan Playwright. */
+table.tbl.tbl-pelanggaran-kesiswaan{min-width:1120px}
+table.tbl.tbl-pelanggaran-kesiswaan th:last-child,
+table.tbl.tbl-pelanggaran-kesiswaan td:last-child{min-width:215px}
+table.tbl.tbl-pelanggaran-kesiswaan td .tbl-sub{display:block;font-size:.7rem;color:var(--muted);margin-top:2px}
+details.tl-form{margin-top:8px;border-top:1px dashed var(--line);padding-top:6px}
+details.tl-form > summary{
+  cursor:pointer;font-size:.74rem;font-weight:700;color:var(--hijau-tua);
+  list-style:none;display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:8px;
+  border:1px dashed rgba(11,74,51,.45);background:#fff;
+}
+details.tl-form > summary::-webkit-details-marker{display:none}
+details.tl-form > summary::before{content:"+";font-weight:800;color:var(--emas)}
+details.tl-form[open] > summary::before{content:"\2212"}
+details.tl-form > summary:hover{background:var(--hijau-muda);border-color:var(--hijau)}
+details.tl-form form{margin-top:8px}
+details.tl-form .form-grid{gap:8px}
+details.tl-form textarea{min-height:56px}
+details.tl-form select,details.tl-form textarea{font-size:.78rem}
+@media (max-width:640px){
+  details.tl-form{min-width:0}
+  table.tbl.tbl-pelanggaran-kesiswaan th,
+  table.tbl.tbl-pelanggaran-kesiswaan td{padding:6px 7px}
+}
+
+/* ===== DAFTAR HADIR MEETING/PERTEMUAN PENGAWAS (v1.73.0 / skema v55) =====
+   Permintaan pemilik: *"Pada akun pengawas tambahkan menu aktifkan daftar hadir meeting
+   (pertemuan/zoom) … Ketika diaktifkan maka akan muncul di seluruh akun binaannya untuk di tanda
+   tangani secara online …"*. Gaya di sini dipakai DUA halaman: `meeting.php` (pengawas) dan
+   `meeting_hadir.php` (akun lembaga). Tanda tangan memakai gaya `.ttd-*` yang sudah ada
+   (Notulen Rapat) — jangan membuat gaya tanda tangan kedua. */
+.meeting-binaan{
+  display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+  padding:12px 13px;border-radius:var(--radius-sm);border:1px solid var(--line);
+  background:rgba(255,255,255,.70);max-height:260px;overflow:auto;
+}
+.meeting-binaan-item{display:flex;gap:9px;align-items:flex-start;font-size:.84rem;line-height:1.35}
+.meeting-binaan-item input{flex:0 0 auto;margin-top:2px}
+.meeting-pemimpin{
+  position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+  min-height:110px;padding:12px;border-radius:var(--radius-sm);border:1px dashed rgba(11,74,51,.35);
+  background:rgba(255,255,255,.75);
+}
+.meeting-pemimpin .ttd-img{max-height:70px}
+.meeting-pemimpin .ttd-tombol{position:static;transform:none}
+/* Ringkasan tanda tangan Pemimpin Meeting pada halaman akun lembaga (bukan area tanda tangan). */
+.meeting-pemimpin-bawah{
+  display:flex;justify-content:flex-end;margin-top:18px;padding-top:14px;
+  border-top:1px solid var(--line);
+}
+.meeting-pemimpin-teks{text-align:center;min-width:230px}
+.meeting-pemimpin-teks .ttd-img{max-height:60px;margin:4px auto}
+.meeting-kartu-grid{align-items:stretch}
+.meeting-kartu{display:flex;flex-direction:column;gap:12px;justify-content:space-between}
+.meeting-kartu-head{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.meeting-kartu-head h3{margin:2px 0 4px;font-size:.98rem;line-height:1.35}
+.meeting-kartu-kaki{
+  display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;
+  padding-top:10px;border-top:1px solid var(--line);
+}
+details.meeting-tanda{margin-top:6px}
+details.meeting-tanda>summary{cursor:pointer;color:var(--hijau);font-weight:600}
+ul.meeting-hadir-list{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:6px}
+ul.meeting-hadir-list>li{
+  display:flex;gap:10px;align-items:center;justify-content:space-between;
+  padding:6px 9px;border-radius:8px;background:rgba(231,242,236,.55);font-size:.82rem;
+}
+@media (max-width:560px){
+  .meeting-binaan{grid-template-columns:minmax(0,1fr);max-height:none}
+  .meeting-pemimpin-bawah{justify-content:center}
+  .meeting-kartu-kaki{flex-direction:column;align-items:stretch}
+  .meeting-kartu-kaki .btn{width:100%;justify-content:center}
 }

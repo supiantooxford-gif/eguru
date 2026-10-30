@@ -1,22 +1,33 @@
 <?php
 /**
- * Daftar Nilai Siswa — Kurikulum Merdeka.
+ * PENILAIAN SISWA — Kurikulum Merdeka.
+ *
+ * Kolom FORMATIF (penilaian proses, TIDAK dijumlahkan) menerima **angka, huruf, atau tanda centang**
+ * (permintaan pemilik, v1.36.0) lewat isian teks + daftar saran ✓/A/B/C/D; kolom Sumatif Lingkup
+ * Materi & ASAS tetap ANGKA karena dipakai perhitungan nilai akhir.
  *
  * Kolom: Nilai Formatif (penilaian proses, TIDAK dijumlahkan), Sumatif Lingkup Materi,
  * dan Sumatif Akhir Semester (ASAS). Nilai akhir = rata-rata Sumatif Lingkup Materi +
- * ASAS dengan pembobotan yang diatur pada Pengaturan (bobot ASAS, sisanya untuk SLM).
+ * ASAS dengan pembobotan (bobot ASAS, sisanya untuk SLM).
+ *
+ * PENGATURAN: selain pengaturan SEKOLAH (Identitas & Pengaturan → kepala/operator), **guru dapat
+ * mengatur sendiri** jumlah kolom Formatif/Sumatif, bobot ASAS, dan ambang predikat A/B/C/D untuk
+ * tiap MATA PELAJARAN yang diampu (tombol "Pengaturan Penilaian"). Pengaturan guru menimpa
+ * pengaturan sekolah untuk mapel itu; bila guru belum mengaturnya, pengaturan sekolah yang dipakai
+ * (lihat nilai_konteks() di inc/helpers.php).
  */
 declare(strict_types=1);
 require_once __DIR__ . '/inc/init.php';
 
 $u = require_sekolah(); // super admin tanpa konteks dialihkan ke Kelola Sekolah
-$bolehIsi = boleh_transaksi();
+// Permintaan pemilik (v1.21.0): Admin Operator hanya melihat & mencetak daftar nilai.
+$bolehIsi = boleh_isi_administrasi();
 $konteks = konteks_ajaran();
 $ta = $konteks['ta'];
 $sem = $konteks['sem'];
 
 if (!$ta || !$sem) {
-    page_top('Daftar Nilai Siswa');
+    page_top('Penilaian Siswa');
     ?>
     <div class="card">
       <div class="empty">
@@ -31,14 +42,89 @@ if (!$ta || !$sem) {
     exit;
 }
 
-$jf = jumlah_formatif();
-$js = jumlah_sumatif();
-$bobotAsas = bobot_asas();
+// Pengaturan nilai awal (sebelum mapel dipilih) → mengikuti pengaturan SEKOLAH.
+$konteksNilai = nilai_konteks(0, 0);
+$jf = (int) $konteksNilai['jf'];
+$js = (int) $konteksNilai['js'];
+$bobotAsas = (float) $konteksNilai['bobot_asas'];
+
+// ---------------------------------------------------------------- simpan PENGATURAN PENILAIAN
+// Permintaan pemilik: "Pengaturan kolom formatif, sumatif dan bobot asas tambahkan ke akun guru
+// untuk diseting sendiri. Begitu juga Pengaturan Bobot nilai dari A, B, C, D di seting sendiri oleh
+// guru." → disetel PER MATA PELAJARAN YANG DIAMPU; guru lain/kelas lain tidak terpengaruh.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string) ($_POST['aksi'] ?? '') === 'simpan_pengaturan') {
+    csrf_guard();
+    if (!is_guru()) {
+        tolak403('Pengaturan penilaian ini hanya untuk akun guru (pengaturan sekolah diatur pada menu Identitas & Pengaturan).');
+    }
+    $mapelId = (int) ($_POST['mapel'] ?? 0);
+    if ($mapelId <= 0 || !boleh_mapel($mapelId)) {
+        tolak403('Mata pelajaran itu tidak Anda ampu.');
+    }
+    $guruId = guru_id_saya();
+    if ($guruId <= 0) {
+        flash('Akun Anda belum ditautkan ke data guru, jadi pengaturan penilaian belum dapat disimpan.', 'err');
+        redirect('nilai.php');
+    }
+    $ambil = static function (string $k, float $bawaan, float $min, float $maks) : float {
+        $v = str_replace(',', '.', trim((string) ($_POST[$k] ?? '')));
+        if ($v === '' || !is_numeric($v)) {
+            return $bawaan;
+        }
+        return max($min, min($maks, (float) $v));
+    };
+    $batasA = $ambil('batas_a', 90, 0, 100);
+    $batasB = $ambil('batas_b', 80, 0, 100);
+    $batasC = $ambil('batas_c', 70, 0, 100);
+    // Kembalikan ke tampilan yang sama (mapel + kelas yang sedang dibuka).
+    $kelasKembali = (int) ($_POST['kelas'] ?? 0);
+    if ($kelasKembali > 0 && !boleh_kelas($kelasKembali)) {
+        $kelasKembali = 0;
+    }
+    $kembali = 'nilai.php' . ajaran_qs($ta, $sem) . '&mapel=' . $mapelId
+        . ($kelasKembali > 0 ? '&kelas=' . $kelasKembali : '') . '#cardPengaturanNilai';
+    if (!($batasA > $batasB && $batasB > $batasC)) {
+        flash('Ambang predikat tidak valid. Pastikan A > B > C dan berada pada rentang 0-100.', 'err');
+        redirect($kembali);
+    }
+    nilai_pengaturan_simpan($guruId, $mapelId, [
+        'jf'         => (int) $ambil('jumlah_formatif', 4, 1, 12),
+        'js'         => (int) $ambil('jumlah_sumatif', 4, 1, 12),
+        'bobot_asas' => $ambil('bobot_asas', 50, 0, 100),
+        'batas_a'    => $batasA,
+        'batas_b'    => $batasB,
+        'batas_c'    => $batasC,
+    ]);
+    flash('Pengaturan penilaian untuk mata pelajaran ' . mapel_nama($mapelId) . ' disimpan. '
+        . 'Pengaturan ini berlaku pada daftar nilai, lembar cetak, dan ekspor Anda untuk mapel tersebut.');
+    redirect($kembali);
+}
+
+// ---------------------------------------------------------------- hapus PENGATURAN PENILAIAN
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string) ($_POST['aksi'] ?? '') === 'hapus_pengaturan') {
+    csrf_guard();
+    if (!is_guru()) {
+        tolak403('Pengaturan penilaian ini hanya untuk akun guru.');
+    }
+    $mapelId = (int) ($_POST['mapel'] ?? 0);
+    if ($mapelId <= 0 || !boleh_mapel($mapelId)) {
+        tolak403('Mata pelajaran itu tidak Anda ampu.');
+    }
+    nilai_pengaturan_hapus(guru_id_saya(), $mapelId);
+    flash('Pengaturan penilaian ' . mapel_nama($mapelId) . ' dikembalikan ke pengaturan sekolah.', 'warn');
+    $kelasKembali = (int) ($_POST['kelas'] ?? 0);
+    if ($kelasKembali > 0 && !boleh_kelas($kelasKembali)) {
+        $kelasKembali = 0;
+    }
+    redirect('nilai.php' . ajaran_qs($ta, $sem) . '&mapel=' . $mapelId
+        . ($kelasKembali > 0 ? '&kelas=' . $kelasKembali : '') . '#cardPengaturanNilai');
+}
 
 // ---------------------------------------------------------------- simpan nilai
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$bolehIsi) {
-        tolak403('Pengisian nilai hanya untuk Super Admin, Admin Operator, dan Guru.');
+        tolak403('Akun Admin Operator hanya dapat melihat dan mencetak daftar nilai. Pengisiannya '
+            . 'dilakukan guru pengampu mata pelajaran.');
     }
     csrf_guard();
     $kelasId = (int) ($_POST['kelas'] ?? 0);
@@ -54,9 +140,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('nilai.php');
     }
 
+    $konteksSimpan = nilai_konteks($mapelId, $kelasId);
     $daftarSiswa = siswa_kelas($kelasId, true);
     $now = date('Y-m-d H:i:s');
     $jmlTersimpan = 0;
+    $jmlTeksFormatif = 0; // sel Formatif yang berisi huruf/tanda centang (bukan angka)
 
     db()->exec('BEGIN IMMEDIATE');
     try {
@@ -73,9 +161,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($kolom < 1) {
                         continue;
                     }
-                    $angka = nilai_sah($raw);
+                    // Permintaan pemilik (v1.36.0): kolom FORMATIF boleh berisi angka, huruf, atau
+                    // tanda centang; kolom Sumatif/ASAS tetap angka saja.
+                    $simpan = $jenis === 'formatif' ? nilai_formatif_sah($raw) : nilai_sah($raw);
                     $argsBase = [$sid, $kelasId, $mapelId, (int) $ta['id'], (int) $sem['id'], $jenis, $kolom];
-                    if ($angka === null) {
+                    if ($simpan === null) {
                         q('DELETE FROM nilai WHERE siswa_id = ? AND kelas_id = ? AND mapel_id = ? AND ta_id = ? AND semester_id = ? AND jenis = ? AND kolom = ? AND sekolah_id = ?',
                             array_merge($argsBase, [sekolah_id()]));
                         continue;
@@ -84,8 +174,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                        VALUES (?,?,?,?,?,?,?,?,?,?)
                        ON CONFLICT(siswa_id, kelas_id, mapel_id, ta_id, semester_id, jenis, kolom)
                        DO UPDATE SET nilai = excluded.nilai, diubah = excluded.diubah',
-                        [sekolah_id(), $sid, $kelasId, $mapelId, (int) $ta['id'], (int) $sem['id'], $jenis, $kolom, $angka, $now]);
+                        [sekolah_id(), $sid, $kelasId, $mapelId, (int) $ta['id'], (int) $sem['id'], $jenis, $kolom, $simpan, $now]);
                     $jmlTersimpan++;
+                    if ($jenis === 'formatif' && !nilai_angka_ya($simpan)) {
+                        $jmlTeksFormatif++;
+                    }
                 }
             }
         }
@@ -94,7 +187,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         db()->exec('ROLLBACK');
         throw $ex;
     }
-    flash('Nilai ' . kelas_nama($kelasId) . ' — ' . mapel_nama($mapelId) . ' disimpan (' . $jmlTersimpan . ' angka). Nilai akhir dihitung dari ' . r0(bobot_sumatif()) . '% Sumatif Lingkup Materi + ' . r0($bobotAsas) . '% ASAS.');
+    flash('Nilai ' . kelas_nama($kelasId) . ' — ' . mapel_nama($mapelId) . ' disimpan (' . $jmlTersimpan
+        . ' sel terisi' . ($jmlTeksFormatif > 0 ? ', termasuk ' . $jmlTeksFormatif . ' sel Formatif berisi huruf/centang' : '') . '). Nilai akhir dihitung dari ' . r0(100.0 - (float) $konteksSimpan['bobot_asas']) . '% Sumatif Lingkup Materi + ' . r0((float) $konteksSimpan['bobot_asas']) . '% ASAS.');
     redirect('nilai.php' . ajaran_qs($ta, $sem) . '&kelas=' . $kelasId . '&mapel=' . $mapelId);
 }
 
@@ -111,6 +205,15 @@ $daftarKelas = kelas_pilih();
 $daftarMapel = mapel_pilih();
 $pilihLengkap = $fKelas > 0 && $fMapel > 0 && kelas_by_id($fKelas) && mapel_by_id($fMapel);
 
+// Pengaturan yang BERLAKU: pengaturan guru untuk mapel ini bila sudah dibuat, kalau belum → sekolah.
+$konteksNilai = nilai_konteks($fMapel, $fKelas);
+$jf = (int) $konteksNilai['jf'];
+$js = (int) $konteksNilai['js'];
+$bobotAsas = (float) $konteksNilai['bobot_asas'];
+// Guru hanya boleh mengatur penilaian untuk MATA PELAJARAN yang diampu (halaman ini sudah
+// memastikan mapel terpilih memang ampuannya lewat boleh_mapel()).
+$bolehAturNilai = is_guru() && $fMapel > 0 && $konteksNilai['guru_id'] > 0;
+
 $siswa = [];
 $nilai = [];
 if ($pilihLengkap) {
@@ -118,13 +221,14 @@ if ($pilihLengkap) {
     $nilai = nilai_map($fKelas, $fMapel, (int) $ta['id'], (int) $sem['id']);
 }
 
-page_top('Daftar Nilai Siswa');
+page_top('Penilaian Siswa');
 ?>
 <div class="card">
   <div class="card-head">
     <div>
-      <h2>Pilih Kelas &amp; Mata Pelajaran</h2>
-      <p>Tahun ajaran <b><?= e(ta_nama($ta)) ?></b> &middot; Semester <b><?= e(sem_nama($sem)) ?></b></p>
+      <h2><?= ikon('chart', 16) ?> Penilaian Siswa</h2>
+      <p>Pilih kelas &amp; mata pelajaran yang Anda ampu. Tahun ajaran
+        <b><?= e(ta_nama($ta)) ?></b> &middot; Semester <b><?= e(sem_nama($sem)) ?></b></p>
     </div>
     <div class="flex">
       <?php if (count(ta_list()) > 1): ?>
@@ -142,6 +246,11 @@ page_top('Daftar Nilai Siswa');
             <?php endforeach; ?>
           </select>
         </form>
+      <?php endif; ?>
+      <?php if ($bolehAturNilai): ?>
+        <?php // Permintaan pemilik: guru menyetel sendiri kolom Formatif/Sumatif, bobot ASAS, dan
+              // ambang predikat A/B/C/D untuk mata pelajaran yang diampu (form di halaman ini). ?>
+        <a class="btn btn-ghost" href="#cardPengaturanNilai" id="btnPengaturanNilai" data-set-nilai><?= ikon('slider', 16) ?> Pengaturan Penilaian</a>
       <?php endif; ?>
       <?php if ($pilihLengkap): ?>
         <a class="btn btn-ghost" href="cetak_nilai.php?<?= e(http_build_query(['kelas' => $fKelas, 'mapel' => $fMapel, 'ta' => (int) $ta['id'], 'sem' => (int) $sem['id']])) ?>" target="_blank"><?= ikon('print', 16) ?> Cetak Daftar Nilai</a>
@@ -178,6 +287,95 @@ page_top('Daftar Nilai Siswa');
   <?php endif; ?>
 </div>
 
+<?php // ============================================================ PENGATURAN PENILAIAN (guru)
+// Permintaan pemilik: "Pengaturan kolom formatif, sumatif dan bobot asas tambahkan ke akun guru
+// untuk diseting sendiri. Begitu juga Pengaturan Bobot nilai dari A, B, C, D di seting sendiri oleh
+// guru." → PER MATA PELAJARAN yang diampu; pengaturan guru menimpa pengaturan sekolah untuk mapel
+// itu, dan bila guru belum mengaturnya, pengaturan sekolah yang dipakai.
+// ⚠️ Kartu ini WAJIB berada DI LUAR <form id="formNilai"> (HTML tidak mengizinkan form bersarang).
+$pengaturanGuru = $konteksNilai['guru_id'] > 0 ? nilai_pengaturan_guru((int) $konteksNilai['guru_id'], $fMapel) : null;
+?>
+<?php if ($bolehAturNilai): ?>
+<div class="card" id="cardPengaturanNilai">
+  <details class="set-nilai"<?= $pengaturanGuru ? ' open' : '' ?>>
+    <summary class="btn btn-ghost"><?= ikon('slider', 16) ?> Pengaturan Penilaian</summary>
+    <div class="set-nilai-isi">
+      <p class="hint">
+        Atur <b>jumlah kolom Formatif &amp; Sumatif</b>, <b>bobot ASAS</b>, dan <b>ambang predikat
+        A/B/C/D</b> untuk mata pelajaran <b><?= e(mapel_nama($fMapel)) ?></b>. Pengaturan ini berlaku
+        pada daftar nilai, lembar cetak, dan ekspor <b>Anda</b> untuk mapel tersebut — guru lain dan
+        mapel lain tidak terpengaruh.
+        <?php if ($pengaturanGuru): ?>
+          <b>Sedang dipakai: pengaturan Anda sendiri.</b>
+        <?php else: ?>
+          Anda belum mengatur mapel ini, jadi yang dipakai adalah <b>pengaturan sekolah</b>.
+        <?php endif; ?>
+      </p>
+      <form method="post" id="formSetNilai">
+        <?= csrf_field() ?>
+        <input type="hidden" name="mapel" value="<?= (int) $fMapel ?>">
+        <input type="hidden" name="kelas" value="<?= (int) $fKelas ?>">
+        <div class="grid g3" style="gap:16px">
+          <div>
+            <label class="f" for="setFormatif">Jumlah kolom Formatif</label>
+            <input type="number" id="setFormatif" name="jumlah_formatif" min="1" max="12"
+                   value="<?= (int) $konteksNilai['jf'] ?>">
+            <div class="hint">1–12 kolom. Formatif = penilaian proses (tidak dijumlahkan).</div>
+          </div>
+          <div>
+            <label class="f" for="setSumatif">Jumlah kolom Sumatif Lingkup Materi</label>
+            <input type="number" id="setSumatif" name="jumlah_sumatif" min="1" max="12"
+                   value="<?= (int) $konteksNilai['js'] ?>">
+            <div class="hint">1–12 kolom. Nilai akhir memakai rata-rata kolom ini.
+              Mengurangi jumlah kolom hanya <b>menyembunyikan</b> kolom selebihnya (angkanya tidak
+              dihapus) — bila jumlahnya dinaikkan lagi, nilai lama muncul kembali.</div>
+          </div>
+          <div>
+            <label class="f" for="setBobot">Bobot ASAS (%)</label>
+            <input type="number" id="setBobot" name="bobot_asas" min="0" max="100" step="1"
+                   value="<?= e(r0((float) $konteksNilai['bobot_asas'])) ?>">
+            <div class="hint">Sumatif Lingkup Materi otomatis <?= e(r0(100.0 - (float) $konteksNilai['bobot_asas'])) ?>%.</div>
+          </div>
+        </div>
+        <div class="note-rumus mt16">
+          <b>Rumus nilai akhir:</b> (rata-rata Sumatif Lingkup Materi &times; <?= e(r0(100.0 - (float) $konteksNilai['bobot_asas'])) ?>%)
+          + (ASAS &times; <?= e(r0((float) $konteksNilai['bobot_asas'])) ?>%)
+        </div>
+        <div class="grid g3 mt16" style="gap:16px">
+          <div>
+            <label class="f" for="setA">Predikat A (Amat Baik) mulai</label>
+            <input type="number" id="setA" name="batas_a" min="0" max="100" step="1" value="<?= e(r0((float) $konteksNilai['batas_a'])) ?>">
+          </div>
+          <div>
+            <label class="f" for="setB">Predikat B (Baik) mulai</label>
+            <input type="number" id="setB" name="batas_b" min="0" max="100" step="1" value="<?= e(r0((float) $konteksNilai['batas_b'])) ?>">
+          </div>
+          <div>
+            <label class="f" for="setC">Predikat C (Cukup) mulai</label>
+            <input type="number" id="setC" name="batas_c" min="0" max="100" step="1" value="<?= e(r0((float) $konteksNilai['batas_c'])) ?>">
+          </div>
+        </div>
+        <p class="hint" style="margin-top:-6px">Di bawah ambang C otomatis berpredikat <b>D (Kurang)</b>.
+          Pastikan A &gt; B &gt; C. Ambang ini dipakai pada daftar nilai, lembar cetak, dan ekspor Anda.</p>
+        <div class="flex mt16">
+          <button class="btn btn-primary" type="submit" name="aksi" value="simpan_pengaturan"><?= ikon('save', 16) ?> Simpan Pengaturan Penilaian</button>
+          <?php if ($pengaturanGuru): ?>
+            <?php // Tombol ini mengirim aksi=hapus_pengaturan (pengaturan guru dibuang → kembali ke sekolah). ?>
+            <button class="btn btn-ghost" type="submit" name="aksi" value="hapus_pengaturan" formnovalidate><?= ikon('prev', 16) ?> Kembalikan ke Pengaturan Sekolah</button>
+          <?php endif; ?>
+        </div>
+        <p class="hint" style="margin-bottom:0">
+          Pengaturan <b>sekolah</b> saat ini (dipakai bila mapel ini belum Anda atur):
+          <?= (int) jumlah_formatif() ?> kolom Formatif, <?= (int) jumlah_sumatif() ?> kolom Sumatif Lingkup Materi,
+          bobot ASAS <?= e(r0(bobot_asas())) ?>%, predikat <?= tetap_kata(predikat_keterangan()) ?>.
+          <?php if (is_super()): ?>Anda masuk sebagai Super Admin — pengaturan sekolah diatur pada menu <b>Identitas &amp; Pengaturan</b>.<?php endif; ?>
+        </p>
+      </form>
+    </div>
+  </details>
+</div>
+<?php endif; ?>
+
 <?php if (!$pilihLengkap && is_guru() && ($daftarKelas === [] || $daftarMapel === [])): ?>
   <?= kartu_tanpa_penugasan('Anda belum ditugaskan ke kelas atau mata pelajaran',
       'Daftar nilai diisi untuk kelas yang Anda ajar dan mata pelajaran yang Anda pegang.') ?>
@@ -194,16 +392,29 @@ page_top('Daftar Nilai Siswa');
     <div class="card-head">
       <div>
         <h2><?= e(kelas_nama($fKelas)) ?> &middot; <?= e(mapel_nama($fMapel)) ?></h2>
-        <p><?= count($siswa) ?> siswa &middot; <?= $jf ?> kolom Formatif &middot; <?= $js ?> kolom Sumatif Lingkup Materi &middot; 1 kolom ASAS</p>
+        <p><?= count($siswa) ?> siswa &middot; <?= $jf ?> kolom Formatif (angka/huruf/✓) &middot; <?= $js ?> kolom Sumatif Lingkup Materi &middot; 1 kolom ASAS</p>
       </div>
       <span class="chip" id="nilaiStat">Menghitung…</span>
     </div>
 
     <div class="legend mb16">
-      <span><i style="background:rgba(79,70,229,.5)"></i>Formatif — penilaian proses, <b>tidak</b> dihitung ke nilai akhir</span>
-      <span><i style="background:rgba(14,165,233,.5)"></i>Sumatif Lingkup Materi — bobot <?= e(r0(bobot_sumatif())) ?>%</span>
+      <span><i style="background:rgba(79,70,229,.5)"></i>Formatif — penilaian proses, boleh <b>angka</b>, <b>huruf</b>, atau <b>✓</b>; <b>tidak</b> dihitung ke nilai akhir</span>
+      <span><i style="background:rgba(14,165,233,.5)"></i>Sumatif Lingkup Materi — bobot <?= e(r0(100.0 - $bobotAsas)) ?>%</span>
       <span><i style="background:rgba(236,72,153,.5)"></i>ASAS — bobot <?= e(r0($bobotAsas)) ?>%</span>
     </div>
+
+    <?php // Keterangan predikat (permintaan pemilik): A (Amat Baik), B (Baik), C (Cukup), D (Kurang). ?>
+    <p class="hint mb16" id="ketPredikat">
+      <?php // Ambang predikat mengikuti KONTEKS mapel ini (pengaturan guru bila ada, kalau tidak pengaturan sekolah). ?>
+      <b>Predikat:</b> <?= tetap_kata(predikat_keterangan_k($konteksNilai)) ?>.
+      <?php if (is_guru()): ?>
+        Nilai ini diisi oleh guru mata pelajaran yang bersangkutan (<?= e(mapel_nama($fMapel)) ?>)
+        untuk kelas yang diampu.
+        <?= $konteksNilai['sumber'] === 'guru' ? 'Kolom &amp; ambang memakai <b>pengaturan Anda</b> untuk mapel ini.' : '' ?>
+      <?php elseif ($konteksNilai['sumber'] === 'guru'): ?>
+        Kolom &amp; ambang memakai <b>pengaturan guru pengampu</b><?= $konteksNilai['guru_nama'] !== '' ? ' (' . e($konteksNilai['guru_nama']) . ')' : '' ?> untuk mapel ini.
+      <?php endif; ?>
+    </p>
 
     <?php if (!$siswa): ?>
       <div class="empty">
@@ -270,7 +481,7 @@ page_top('Daftar Nilai Siswa');
                     $rataKolom['asas'][] = (float) $asas;
                 }
                 $akhir = nilai_akhir($sumArr, $asas);
-                $pred = predikat_dari($akhir);
+                $pred = predikat_dari_k($konteksNilai, $akhir);
                 if ($akhir !== null) {
                     $nilaiAkhirSemua[] = $akhir;
                 }
@@ -278,8 +489,16 @@ page_top('Daftar Nilai Siswa');
               <tr data-siswa="<?= $sid ?>">
                 <td class="c-no"><?= $i + 1 ?></td>
                 <td class="kiri c-nama" title="<?= e((string) $s['nama']) ?>"><b><?= e((string) $s['nama']) ?></b><?php if ($s['nis']): ?><span class="tbl-sub">NIS <?= e((string) $s['nis']) ?></span><?php endif; ?></td>
-                <?php for ($k = 1; $k <= $jf; $k++): $v = $d['formatif'][$k] ?? null; if ($v !== null) { $rataKolom['formatif'][$k][] = (float) $v; } ?>
-                  <td class="sel-nilai c-nilai<?= $k === 1 ? ' awal-grup' : '' ?>"><input class="nil" type="number" step="0.01" min="0" max="100" data-jenis="formatif" name="nf[<?= $sid ?>][<?= $k ?>]" value="<?= e(num_input($v)) ?>" aria-label="Formatif <?= $k ?> - <?= e((string) $s['nama']) ?>" <?= $bolehIsi ? '' : 'disabled' ?>></td>
+                <?php
+                // Formatif = penilaian proses: boleh ANGKA, HURUF, atau TANDA CENTANG (permintaan
+                // pemilik, v1.36.0). Isiannya teks + daftar saran (datalist) ✓/A/B/C/D, tetapi angka
+                // tetap bisa diketik langsung. Rata-rata kelas hanya menghitung sel berisi angka.
+                for ($k = 1; $k <= $jf; $k++):
+                    $v = $d['formatif'][$k] ?? null;
+                    $angkaF = nilai_angka($v);
+                    if ($angkaF !== null) { $rataKolom['formatif'][$k][] = $angkaF; }
+                ?>
+                  <td class="sel-nilai c-nilai<?= $k === 1 ? ' awal-grup' : '' ?>"><input class="nil" type="text" autocomplete="off" list="pilihanFormatif" maxlength="<?= (int) NILAI_FORMATIF_HURUF_MAKS ?>" data-jenis="formatif" name="nf[<?= $sid ?>][<?= $k ?>]" value="<?= e(nilai_formatif_input($v)) ?>" aria-label="Formatif <?= $k ?> - <?= e((string) $s['nama']) ?>" <?= $bolehIsi ? '' : 'disabled' ?>></td>
                 <?php endfor; ?>
                 <?php for ($k = 1; $k <= $js; $k++): $v = $d['sumatif'][$k] ?? null; ?>
                   <td class="sel-nilai c-nilai<?= $k === 1 ? ' awal-grup' : '' ?>"><input class="nil" type="number" step="0.01" min="0" max="100" data-jenis="sumatif" name="ns[<?= $sid ?>][<?= $k ?>]" value="<?= e(num_input($v)) ?>" aria-label="Sumatif Lingkup Materi <?= $k ?> - <?= e((string) $s['nama']) ?>" <?= $bolehIsi ? '' : 'disabled' ?>></td>
@@ -302,16 +521,31 @@ page_top('Daftar Nilai Siswa');
                 <?php endfor; ?>
                 <td class="c-nilai awal-grup"><?= ($ra = rata($rataKolom['asas'])) === null ? '-' : e(r1($ra)) ?></td>
                 <td class="na c-na awal-grup"><?= ($ra = rata($nilaiAkhirSemua)) === null ? '—' : e(r1($ra)) ?></td>
-                <td class="c-pred awal-grup"><?= $ra === null ? '-' : '<span class="pill pill-' . e(predikat_dari($ra)) . '">' . e(predikat_dari($ra)) . '</span>' ?></td>
+                <td class="c-pred awal-grup"><?= $ra === null ? '-' : '<span class="pill pill-' . e(predikat_dari_k($konteksNilai, $ra)) . '">' . e(predikat_dari_k($konteksNilai, $ra)) . '</span>' ?></td>
               </tr>
             </tfoot>
           </table>
         </div>
+        <?php // Daftar saran untuk SETIAP sel kolom Formatif (angka tetap bisa diketik langsung).
+              // Satu <datalist> dipakai bersama semua kotak isian Formatif — inilah "daftar kecil"
+              // yang muncul pada tiap sel saat kotaknya diklik/diketik. ?>
+        <datalist id="pilihanFormatif">
+          <?php foreach (NILAI_FORMATIF_PILIHAN as $p): ?><option value="<?= e($p) ?>"></option><?php endforeach; ?>
+        </datalist>
+
+        <p class="hint mt16" id="ketFormatif">
+          <b>Kolom Formatif</b> menerima <b>angka</b> (0-100), <b>huruf</b> (mis. A, B, C, D), atau
+          <b>tanda centang</b> (<b>✓</b>) — klik kotaknya untuk memilih dari daftar kecil
+          (✓, A, B, C, D) atau ketik langsung. Nilai huruf/centang <b>tidak ikut</b> perhitungan nilai
+          akhir dan <b>tidak dihitung</b> pada rata-rata kelas kolom Formatif (hanya sel berisi angka).
+          Kolom Sumatif Lingkup Materi &amp; ASAS tetap <b>angka</b>.
+        </p>
 
         <div class="alert alert-ok mt16" style="margin-bottom:0">
           <?= ikon('chart', 16) ?>
-          <span><b>Rumus nilai akhir:</b> (rata-rata Sumatif Lingkup Materi &times; <?= e(r0(bobot_sumatif())) ?>%) + (ASAS &times; <?= e(r0($bobotAsas)) ?>%).
-          Kolom Formatif hanya untuk penilaian proses sehingga tidak dijumlahkan. Kosongkan sebuah kolom bila belum ada nilainya — angka yang dikosongkan akan dihapus.</span>
+          <span><b>Rumus nilai akhir:</b> (rata-rata Sumatif Lingkup Materi &times; <?= e(r0(100.0 - $bobotAsas)) ?>%) + (ASAS &times; <?= e(r0($bobotAsas)) ?>%).
+          Kolom Formatif hanya untuk penilaian proses sehingga tidak dijumlahkan (boleh diisi angka, huruf, atau tanda centang ✓).
+          Kosongkan sebuah kolom bila belum ada nilainya — isian yang dikosongkan akan dihapus.</span>
         </div>
 
         <?php if ($bolehIsi): ?>
@@ -322,7 +556,7 @@ page_top('Daftar Nilai Siswa');
         <?php else: ?>
           <div class="alert alert-warn mt16" style="margin-bottom:0">
             <?= ikon('eye', 16) ?>
-            <span>Anda masuk sebagai <?= e(role_label()) ?> — daftar nilai dapat dilihat dan dicetak, namun pengisian dilakukan Admin Operator atau Guru pengampu.</span>
+            <span><?= pemberitahuan_hanya_lihat_administrasi('daftar nilai siswa') ?></span>
           </div>
         <?php endif; ?>
       </form>
@@ -331,7 +565,7 @@ page_top('Daftar Nilai Siswa');
 <?php endif; ?>
 <script>
 window.EG_BOBOT = <?= (float) $bobotAsas ?>;
-window.EG_TH = { a: <?= (float) thresholds()['batas_a'] ?>, b: <?= (float) thresholds()['batas_b'] ?>, c: <?= (float) thresholds()['batas_c'] ?> };
+window.EG_TH = { a: <?= (float) $konteksNilai['batas_a'] ?>, b: <?= (float) $konteksNilai['batas_b'] ?>, c: <?= (float) $konteksNilai['batas_c'] ?> };
 </script>
 <?php
 page_bottom();

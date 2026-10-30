@@ -5,7 +5,9 @@
 declare(strict_types=1);
 require_once __DIR__ . '/inc/init.php';
 
-$u = require_transaksi();
+// Pengisian daftar hadir = administrasi pembelajaran → guru pengampu (+ Super Admin dalam konteks).
+// Permintaan pemilik (v1.21.0): Admin Operator hanya melihat & mencetak.
+$u = require_isi_administrasi('daftar hadir siswa');
 $konteks = konteks_ajaran();
 $ta = $konteks['ta'];
 $sem = $konteks['sem'];

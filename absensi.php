@@ -7,8 +7,9 @@ declare(strict_types=1);
 require_once __DIR__ . '/inc/init.php';
 
 $u = require_sekolah(); // super admin tanpa konteks dialihkan ke Kelola Sekolah
-$bolehIsi = boleh_transaksi();
-$bolehKelola = boleh_master(); // menghapus catatan pertemuan
+// Permintaan pemilik (v1.21.0): Admin Operator hanya melihat & mencetak daftar hadir.
+$bolehIsi = boleh_isi_administrasi();
+$bolehKelola = boleh_hapus_administrasi(); // menghapus catatan pertemuan (sejak v1.21.0: Super Admin)
 $konteks = konteks_ajaran();
 $ta = $konteks['ta'];
 $sem = $konteks['sem'];
@@ -46,7 +47,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Guru hanya mengelola pertemuan miliknya sendiri (daftar pun hanya menampilkan itu).
             tolak403('Catatan pertemuan ini milik guru lain.');
         } elseif (!$bolehKelola) {
-            tolak403('Menghapus catatan pertemuan daftar hadir hanya untuk Super Admin dan Admin Operator.');
+            tolak403('Menghapus catatan pertemuan daftar hadir hanya untuk Super Admin. '
+                . 'Admin Operator hanya dapat melihat dan mencetak.');
         } else {
             q('DELETE FROM absensi WHERE id = ? AND sekolah_id = ?', [$id, sekolah_id()]);
             flash('Catatan pertemuan ' . tanggal_id((string) $sesi['tanggal']) . ' (' . $sesi['mapel_nama'] . ') dihapus.', 'warn');
@@ -222,6 +224,12 @@ page_top('Daftar Hadir Siswa');
     </div>
   </div>
 <?php else: ?>
+  <?php if (!$bolehIsi): ?>
+    <div class="alert alert-warn mb16">
+      <?= ikon('eye', 16) ?>
+      <span><?= pemberitahuan_hanya_lihat_administrasi('daftar hadir siswa') ?></span>
+    </div>
+  <?php endif; ?>
   <?php if ($bolehIsi): ?>
     <div class="card">
       <div class="card-head">

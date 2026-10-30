@@ -87,18 +87,37 @@ page_top('Kelas');
         <label class="f" for="nama">Nama Kelas *</label>
         <input type="text" id="nama" name="nama" value="<?= e((string) ($edit['nama'] ?? '')) ?>" placeholder="mis. VII-A" required>
       </div>
+      <?php // v49: TINGKAT memakai acuan JENJANG lembaga (permintaan pemilik). Tetap berupa isian
+            // bebas + daftar saran (datalist) supaya penulisan khusus (mis. "VII-A") tetap mungkin. ?>
+      <?php $tingkatAcuan = jenjang_tingkat_list(); ?>
       <div>
         <label class="f" for="tingkat">Tingkat</label>
-        <input type="text" id="tingkat" name="tingkat" value="<?= e((string) ($edit['tingkat'] ?? '')) ?>" placeholder="mis. VII">
+        <input type="text" id="tingkat" name="tingkat" list="tingkatJenjang"
+               value="<?= e((string) ($edit['tingkat'] ?? '')) ?>" placeholder="mis. <?= e($tingkatAcuan[0] ?? 'VII') ?>">
+        <datalist id="tingkatJenjang">
+          <?php foreach ($tingkatAcuan as $tk): ?><option value="<?= e($tk) ?>"></option><?php endforeach; ?>
+        </datalist>
+        <div class="hint">
+          <?php if ($tingkatAcuan): ?>
+            Acuan jenjang <b><?= e(jenjang_sekolah()) ?></b>: <?= e(jenjang_tingkat_teks()) ?>.
+          <?php else: ?>
+            Jenjang lembaga belum dipilih — pilih dulu pada <?= boleh_pengaturan()
+              ? '<a href="pengaturan.php">Identitas &amp; Pengaturan</a>' : 'menu Identitas &amp; Pengaturan (pengelola)' ?>
+            agar tingkat kelas punya acuan.
+          <?php endif; ?>
+        </div>
       </div>
       <div>
         <label class="f" for="wali_id">Wali Kelas</label>
         <select id="wali_id" name="wali_id">
           <option value="">— belum ditentukan —</option>
           <?php foreach ($guru as $g): ?>
-            <option value="<?= (int) $g['id'] ?>" <?= (int) ($edit['wali_id'] ?? 0) === (int) $g['id'] ? 'selected' : '' ?>><?= e((string) $g['nama']) ?></option>
+            <option value="<?= (int) $g['id'] ?>" <?= (int) ($edit['wali_id'] ?? 0) === (int) $g['id'] ? 'selected' : '' ?>><?= e((string) $g['nama']) ?><?= (int) ($g['guru_kelas'] ?? 0) === 1 ? ' (guru kelas)' : '' ?></option>
           <?php endforeach; ?>
         </select>
+        <?php if (is_guru_kelas_jenjang()): ?>
+          <div class="hint">Guru yang ditandai <b>Guru Kelas</b> pada Data Guru otomatis menjadi wali kelas kelasnya.</div>
+        <?php endif; ?>
       </div>
       <div>
         <label class="f" for="urutan">Urutan</label>

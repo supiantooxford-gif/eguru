@@ -3,8 +3,18 @@
  * Jurnal Harian Guru.
  *
  * Susunan kolom (permintaan pemilik aplikasi):
- *   Tanggal, Kelas, Mata Pelajaran, Jam Ke, Materi/Topik Pembelajaran,
+ *   Tanggal, Uraian Kegiatan, Kelas/Tempat, Mata Pelajaran, Jam Ke, Materi/Topik Pembelajaran,
  *   Kehadiran Siswa (S, I, A, B, T), Keterangan.
+ *
+ * Pembaruan v1.37.0 (permintaan pemilik): *"Pada bagian Input Jurnal Harian Baru tambahkan kolom
+ * 'Uraian Kegiatan (Pilihan Mengajar bisa juga input manual jika kegiatan selain mengajar)' setelah
+ * kolom tanggal. Pada kolom kelas berubah menjadi 'Kelas/Tempat' selain pilih kelas guru bisa
+ * menginput manual tempatnya. Mata Pelajaran dan materi/topik pembelajaran bisa dikosongkan jika
+ * kegiatan guru selain mengajar"*.
+ *   • Uraian Kegiatan — saran "Mengajar"; kegiatan lain (Rapat, Bimbingan, …) diketik manual.
+ *   • Kelas/Tempat   — pilih KELAS **atau** isi TEMPAT manual (salah satu wajib, tidak keduanya).
+ *   • Mapel & Materi — wajib HANYA bila uraiannya "Mengajar".
+ *   • Rekap Jumlah Pertemuan hanya menghitung catatan "Mengajar" (lihat jurnal_sql_mengajar()).
  *
  * Guru hanya melihat jurnalnya sendiri; Super Admin/Admin Operator/Kepala Sekolah-Madrasah
  * melihat seluruh jurnal dan dapat menyaringnya berdasarkan BULAN dan NAMA GURU
@@ -14,7 +24,8 @@ declare(strict_types=1);
 require_once __DIR__ . '/inc/init.php';
 
 $u = require_sekolah(); // super admin tanpa konteks dialihkan ke Kelola Sekolah
-$bolehIsi = boleh_transaksi();
+// Permintaan pemilik (v1.21.0): Admin Operator hanya melihat & mencetak jurnal harian.
+$bolehIsi = boleh_isi_administrasi();
 $lihatSemua = !is_guru(); // super, kepala, operator
 $konteks = konteks_ajaran();
 $ta = $konteks['ta'];
@@ -23,7 +34,8 @@ $kolomKehadiran = jurnal_kehadiran();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$bolehIsi) {
-        tolak403('Pengisian jurnal hanya untuk Super Admin, Admin Operator, dan Guru.');
+        tolak403('Akun Admin Operator hanya dapat melihat dan mencetak jurnal harian. Pengisiannya '
+            . 'dilakukan guru yang bersangkutan.');
     }
     csrf_guard();
     $aksi = (string) ($_POST['aksi'] ?? '');
@@ -43,6 +55,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $tanggal = tgl_ok($_POST['tanggal'] ?? null);
+    $uraian = jurnal_uraian_sah($_POST['uraian'] ?? '');
+    $tempat = jurnal_tempat_sah($_POST['tempat'] ?? '');
+    $mengajar = jurnal_mengajar($uraian);
     $kelasId = (int) ($_POST['kelas_id'] ?? 0);
     $mapelId = (int) ($_POST['mapel_id'] ?? 0);
     $jamKe = trim((string) ($_POST['jam_ke'] ?? ''));
@@ -59,18 +74,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($tanggal === null) {
         $galat[] = 'Tanggal jurnal wajib diisi.';
     }
-    if (!$kelasId || !kelas_by_id($kelasId)) {
-        $galat[] = 'Pilih kelas terlebih dahulu.';
-    } elseif (is_guru() && !boleh_kelas($kelasId)) {
+    // Kelas/Tempat: pilih KELAS **atau** isi TEMPAT manual — salah satu wajib, tidak boleh keduanya
+    // (pilihan pemilik, v1.37.0).
+    if ($kelasId <= 0 && $tempat === '') {
+        $galat[] = 'Pilih kelas atau isi tempat kegiatan terlebih dahulu.';
+    } elseif ($kelasId > 0 && $tempat !== '') {
+        $galat[] = 'Pilih salah satu: kelas ATAU isi tempat kegiatan (tidak boleh keduanya).';
+    } elseif ($kelasId > 0 && !kelas_by_id($kelasId)) {
+        $galat[] = 'Kelas yang dipilih tidak ditemukan.';
+    } elseif ($kelasId > 0 && is_guru() && !boleh_kelas($kelasId)) {
         tolak403('Kelas itu tidak Anda ampu.');
     }
-    if (!$mapelId || !mapel_by_id($mapelId)) {
-        $galat[] = 'Pilih mata pelajaran terlebih dahulu.';
-    } elseif (is_guru() && !boleh_mapel($mapelId)) {
-        tolak403('Mata pelajaran itu tidak Anda ampu.');
-    }
-    if ($materi === '') {
-        $galat[] = 'Materi/Topik pembelajaran wajib diisi.';
+    // Mata pelajaran & materi wajib HANYA untuk kegiatan mengajar (permintaan pemilik).
+    if ($mengajar) {
+        if (!$mapelId || !mapel_by_id($mapelId)) {
+            $galat[] = 'Pilih mata pelajaran terlebih dahulu (kegiatan mengajar).';
+        } elseif (is_guru() && !boleh_mapel($mapelId)) {
+            tolak403('Mata pelajaran itu tidak Anda ampu.');
+        }
+        if ($materi === '') {
+            $galat[] = 'Materi/Topik pembelajaran wajib diisi untuk kegiatan mengajar.';
+        }
+    } elseif ($mapelId > 0) {
+        // Kegiatan selain mengajar BOLEH memakai mata pelajaran, tetapi tetap dijaga kepemilikannya.
+        if (!mapel_by_id($mapelId)) {
+            $galat[] = 'Mata pelajaran yang dipilih tidak ditemukan.';
+        } elseif (is_guru() && !boleh_mapel($mapelId)) {
+            tolak403('Mata pelajaran itu tidak Anda ampu.');
+        }
     }
     if ($galat) {
         foreach ($galat as $g) {
@@ -88,8 +119,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (is_guru() && (int) $j['guru_id'] !== guru_id_saya()) {
             tolak403('Catatan jurnal ini bukan milik Anda.');
         }
-        q('UPDATE jurnal SET tanggal=?, kelas_id=?, mapel_id=?, jam_ke=?, materi=?, sakit=?, izin=?, alpa=?, bolos=?, terlambat=?, keterangan=? WHERE id=? AND sekolah_id=?',
-            [$tanggal, $kelasId, $mapelId, $jamKe, $materi,
+        q('UPDATE jurnal SET tanggal=?, uraian=?, tempat=?, kelas_id=?, mapel_id=?, jam_ke=?, materi=?, sakit=?, izin=?, alpa=?, bolos=?, terlambat=?, keterangan=? WHERE id=? AND sekolah_id=?',
+            [$tanggal, $uraian, $tempat !== '' ? $tempat : null,
+             $kelasId > 0 ? $kelasId : null, $mapelId > 0 ? $mapelId : null, $jamKe,
+             $materi !== '' ? $materi : null,
              $hadir['sakit'], $hadir['izin'], $hadir['alpa'], $hadir['bolos'], $hadir['terlambat'], $keterangan, $id, sekolah_id()]);
         flash('Catatan jurnal tanggal ' . tanggal_id($tanggal) . ' diperbarui.');
     } else {
@@ -98,10 +131,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash('Akun Anda belum ditautkan ke data guru sehingga jurnal tidak dapat disimpan.', 'err');
             redirect('jurnal.php');
         }
-        q('INSERT INTO jurnal (sekolah_id, tanggal, kelas_id, mapel_id, guru_id, ta_id, semester_id, jam_ke, materi,
+        q('INSERT INTO jurnal (sekolah_id, tanggal, uraian, tempat, kelas_id, mapel_id, guru_id, ta_id, semester_id, jam_ke, materi,
                                sakit, izin, alpa, bolos, terlambat, keterangan, dibuat, dibuat_oleh)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-            [sekolah_id(), $tanggal, $kelasId, $mapelId, $guruId > 0 ? $guruId : null, (int) $ta['id'], (int) $sem['id'], $jamKe, $materi,
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            [sekolah_id(), $tanggal, $uraian, $tempat !== '' ? $tempat : null,
+             $kelasId > 0 ? $kelasId : null, $mapelId > 0 ? $mapelId : null,
+             $guruId > 0 ? $guruId : null, (int) $ta['id'], (int) $sem['id'], $jamKe,
+             $materi !== '' ? $materi : null,
              $hadir['sakit'], $hadir['izin'], $hadir['alpa'], $hadir['bolos'], $hadir['terlambat'], $keterangan,
              date('Y-m-d H:i:s'), (int) $u['id']]);
         flash('Catatan jurnal tanggal ' . tanggal_id($tanggal) . ' disimpan.');
@@ -124,6 +160,13 @@ if ($fGuru > 0 && !guru_by_id($fGuru)) {
     $fGuru = 0;
 }
 $fCari = trim((string) ($_GET['cari'] ?? ''));
+// Penyaring Uraian Kegiatan (v1.37.0): '' = semua, 'mengajar' = hanya kegiatan mengajar,
+// 'lain' = selain mengajar. Tautan "Lihat Jurnal Pembelajaran" pada Rekap Pertemuan memakai
+// 'mengajar' agar jumlah barisnya sama dengan Jumlah Tatap Muka.
+$fUraian = (string) ($_GET['uraian'] ?? '');
+if (!in_array($fUraian, ['mengajar', 'lain'], true)) {
+    $fUraian = '';
+}
 $fSemuaPeriode = ($_GET['periode'] ?? '') === 'semua';
 $fDari = tgl_ok($_GET['dari'] ?? null);
 $fSampai = tgl_ok($_GET['sampai'] ?? null);
@@ -166,10 +209,17 @@ if ($fSampai !== null) {
     $w[] = 'j.tanggal <= ?';
     $p[] = $fSampai;
 }
+if ($fUraian === 'mengajar') {
+    $w[] = jurnal_sql_mengajar('j');
+} elseif ($fUraian === 'lain') {
+    $w[] = 'NOT ' . jurnal_sql_mengajar('j');
+}
 if ($fCari !== '') {
-    $w[] = '(j.materi LIKE ? OR j.keterangan LIKE ? OR g.nama LIKE ?)';
+    // Pencarian juga menjangkau Uraian Kegiatan & Tempat (v1.37.0) supaya kegiatan non-mengajar
+    // (mis. "Rapat", "Ruang Guru") mudah ditelusuri.
+    $w[] = '(j.materi LIKE ? OR j.keterangan LIKE ? OR g.nama LIKE ? OR j.uraian LIKE ? OR j.tempat LIKE ?)';
     $like = '%' . $fCari . '%';
-    array_push($p, $like, $like, $like);
+    array_push($p, $like, $like, $like, $like, $like);
 }
 $where = ' WHERE ' . implode(' AND ', $w);
 
@@ -186,10 +236,11 @@ if ($edit && is_guru() && (int) $edit['guru_id'] !== guru_id_saya()) {
 $qPrint = array_filter([
     'kelas' => $fKelas ?: null, 'mapel' => $fMapel ?: null, 'bulan' => $fBulan ?: null,
     'guru' => $fGuru ?: null, 'cari' => $fCari ?: null, 'periode' => $fSemuaPeriode ? 'semua' : null,
+    'uraian' => $fUraian ?: null,
     'dari' => $fDari, 'sampai' => $fSampai, 'ta' => $ta ? (int) $ta['id'] : null, 'sem' => $sem ? (int) $sem['id'] : null,
 ]);
 $qDasar = ['ta' => $ta ? (int) $ta['id'] : null, 'sem' => $sem ? (int) $sem['id'] : null];
-$adaFilter = $fBulan !== '' || $fGuru > 0 || $fKelas > 0 || $fMapel > 0 || $fCari !== '' || $fDari !== null || $fSampai !== null || $fSemuaPeriode;
+$adaFilter = $fBulan !== '' || $fGuru > 0 || $fKelas > 0 || $fMapel > 0 || $fCari !== '' || $fDari !== null || $fSampai !== null || $fSemuaPeriode || $fUraian !== '';
 
 /** Jumlah catatan per guru pada filter yang sedang aktif (untuk pencarian jurnal guru). */
 $perGuru = [];
@@ -213,42 +264,73 @@ page_top('Jurnal Harian Guru');
       </div>
       <?php if ($edit): ?><a class="btn btn-ghost btn-sm" href="jurnal.php<?= e(ajaran_qs($ta, $sem)) ?>">Batal</a><?php endif; ?>
     </div>
-    <form method="post" class="form-grid">
+    <form method="post" class="form-grid" id="formJurnal">
       <?= csrf_field() ?>
       <input type="hidden" name="aksi" value="simpan">
       <input type="hidden" name="id" value="<?= (int) ($edit['id'] ?? 0) ?>">
-      <div class="grid g4" style="gap:16px">
+      <?php
+      // Nilai awal formulir (mode Ubah memakai data yang tersimpan).
+      $nTanggal = (string) ($edit['tanggal'] ?? date('Y-m-d'));
+      $nUraian  = $edit ? jurnal_uraian($edit) : JURNAL_URAIAN_BAWAAN;
+      $nTempat  = $edit ? jurnal_tempat($edit) : '';
+      $nMengajar = jurnal_mengajar($nUraian);
+      ?>
+      <div class="grid g2" style="gap:16px">
         <div>
           <label class="f" for="tanggal">Tanggal *</label>
-          <input type="date" id="tanggal" name="tanggal" value="<?= e((string) ($edit['tanggal'] ?? date('Y-m-d'))) ?>" required>
+          <input type="date" id="tanggal" name="tanggal" value="<?= e($nTanggal) ?>" required>
         </div>
         <div>
-          <label class="f" for="kelas_id">Kelas *</label>
-          <select id="kelas_id" name="kelas_id" required>
-            <option value="">— pilih kelas —</option>
-            <?php foreach (kelas_pilih() as $k): ?>
-              <option value="<?= (int) $k['id'] ?>" <?= (int) ($edit['kelas_id'] ?? 0) === (int) $k['id'] ? 'selected' : '' ?>><?= e((string) $k['nama']) ?></option>
-            <?php endforeach; ?>
-          </select>
+          <?php // Uraian Kegiatan (permintaan pemilik): saran "Mengajar", kegiatan lain diketik manual. ?>
+          <label class="f" for="uraian">Uraian Kegiatan *</label>
+          <input type="text" id="uraian" name="uraian" list="pilihanUraian" autocomplete="off" maxlength="<?= (int) JURNAL_URAIAN_MAKS ?>"
+                 value="<?= e($nUraian) ?>" placeholder="mis. Mengajar, Rapat, Bimbingan">
+          <datalist id="pilihanUraian">
+            <?php foreach (jurnal_uraian_list() as $p): ?><option value="<?= e($p) ?>"></option><?php endforeach; ?>
+          </datalist>
+          <div class="hint">Pilih <b>Mengajar</b>, atau ketik kegiatan lain (mis. Rapat, Bimbingan, Dinas Luar).</div>
+        </div>
+      </div>
+
+      <div class="grid g2" style="gap:16px">
+        <div>
+          <?php // Kelas/Tempat (permintaan pemilik): pilih KELAS **atau** isi TEMPAT manual —
+                // salah satu wajib, tidak boleh keduanya. Penjagaan utamanya di server. ?>
+          <label class="f" for="kelas_id">Kelas / Tempat *</label>
+          <div class="kelas-tempat">
+            <select id="kelas_id" name="kelas_id">
+              <option value="">— pilih kelas —</option>
+              <?php foreach (kelas_pilih() as $k): ?>
+                <option value="<?= (int) $k['id'] ?>" <?= (int) ($edit['kelas_id'] ?? 0) === (int) $k['id'] ? 'selected' : '' ?>><?= e((string) $k['nama']) ?></option>
+              <?php endforeach; ?>
+            </select>
+            <input type="text" id="tempat" name="tempat" maxlength="<?= (int) JURNAL_TEMPAT_MAKS ?>"
+                   value="<?= e($nTempat) ?>" placeholder="atau isi tempat, mis. Ruang Guru / Lab IPA">
+          </div>
+          <div class="hint">Pilih <b>kelas</b> <b>atau</b> isi <b>tempat</b> kegiatan (untuk kegiatan di luar kelas) — cukup salah satu.</div>
         </div>
         <div>
-          <label class="f" for="mapel_id">Mata Pelajaran *</label>
-          <select id="mapel_id" name="mapel_id" required>
+          <label class="f" for="mapel_id">Mata Pelajaran <span data-wajib-mengajar<?= $nMengajar ? '' : ' hidden' ?>>*</span></label>
+          <select id="mapel_id" name="mapel_id" data-wajib-jurnal>
             <option value="">— pilih mata pelajaran —</option>
             <?php foreach (mapel_pilih() as $m): ?>
               <option value="<?= (int) $m['id'] ?>" <?= (int) ($edit['mapel_id'] ?? 0) === (int) $m['id'] ? 'selected' : '' ?>><?= e((string) $m['nama']) ?></option>
             <?php endforeach; ?>
           </select>
+          <div class="hint">Boleh dikosongkan bila kegiatannya <b>selain mengajar</b>.</div>
         </div>
+      </div>
+
+      <div class="grid g2" style="gap:16px">
         <div>
           <label class="f" for="jam_ke">Jam Ke-</label>
           <input type="text" id="jam_ke" name="jam_ke" value="<?= e((string) ($edit['jam_ke'] ?? '')) ?>" placeholder="mis. 3-4">
         </div>
-      </div>
-
-      <div>
-        <label class="f" for="materi">Materi / Topik Pembelajaran *</label>
-        <input type="text" id="materi" name="materi" value="<?= e((string) ($edit['materi'] ?? '')) ?>" required>
+        <div>
+          <label class="f" for="materi">Materi / Topik Pembelajaran <span data-wajib-mengajar<?= $nMengajar ? '' : ' hidden' ?>>*</span></label>
+          <input type="text" id="materi" name="materi" data-wajib-jurnal value="<?= e((string) ($edit['materi'] ?? '')) ?>">
+          <div class="hint">Boleh dikosongkan bila kegiatannya <b>selain mengajar</b>.</div>
+        </div>
       </div>
 
       <div>
@@ -288,6 +370,12 @@ page_top('Jurnal Harian Guru');
         <span class="xs mut">Periode aktif: T.A. <?= e(ta_nama($ta)) ?> &middot; Semester <?= e(sem_nama($sem)) ?></span>
       </div>
     </form>
+  </div>
+<?php elseif (!$bolehIsi): ?>
+  <?php // Permintaan pemilik v1.21.0: Admin Operator hanya melihat & mencetak jurnal harian. ?>
+  <div class="alert alert-warn">
+    <?= ikon('eye', 16) ?>
+    <span><?= pemberitahuan_hanya_lihat_administrasi('jurnal harian guru') ?></span>
   </div>
 <?php endif; ?>
 
@@ -354,6 +442,16 @@ page_top('Jurnal Harian Guru');
       <label class="f" for="dari">Dari tanggal</label>
       <input type="date" id="dari" name="dari" value="<?= e((string) $fDari) ?>">
     </div>
+    <?php // ⚠️ id penyaring DIBERI AWALAN "saring" supaya TIDAK kembar dengan isian Uraian Kegiatan
+          // pada formulir di halaman yang sama (id kembar = HTML tidak sah & skrip bisa salah sasaran). ?>
+    <div>
+      <label class="f" for="saringUraian">Uraian Kegiatan</label>
+      <select id="saringUraian" name="uraian" data-auto>
+        <option value="">Semua kegiatan</option>
+        <option value="mengajar" <?= $fUraian === 'mengajar' ? 'selected' : '' ?>>Kegiatan mengajar</option>
+        <option value="lain" <?= $fUraian === 'lain' ? 'selected' : '' ?>>Selain mengajar</option>
+      </select>
+    </div>
     <div>
       <label class="f" for="sampai">Sampai tanggal</label>
       <input type="date" id="sampai" name="sampai" value="<?= e((string) $fSampai) ?>">
@@ -384,7 +482,8 @@ page_top('Jurnal Harian Guru');
       <table class="tbl" id="tblJurnal">
         <thead>
           <tr>
-            <th>Tanggal</th><th>Kelas</th><th>Mata Pelajaran</th><th class="ctr">Jam Ke</th>
+            <th>Tanggal</th><th>Uraian Kegiatan</th><th>Kelas / Tempat</th><th>Mata Pelajaran</th>
+            <th class="ctr">Jam Ke</th>
             <th>Materi / Topik Pembelajaran</th>
             <th class="ctr">Kehadiran Siswa<br><span class="xs mut">S / I / A / B / T</span></th>
             <th>Keterangan</th><th>Guru</th><th></th>
@@ -396,10 +495,17 @@ page_top('Jurnal Harian Guru');
         ?>
           <tr>
             <td class="nowrap"><b><?= e(tanggal_id((string) $j['tanggal'])) ?></b><span class="tbl-sub"><?= e(hari_id((string) $j['tanggal'])) ?></span></td>
-            <td><span class="tagmini"><?= e((string) ($j['kelas_nama'] ?: '-')) ?></span></td>
+            <?php // Uraian Kegiatan + Kelas/Tempat (v1.37.0): kegiatan selain mengajar ditandai pill. ?>
+            <td>
+              <span class="pill <?= jurnal_mengajar($j) ? 'pill-ok' : 'pill-gray' ?>"><?= e(jurnal_uraian($j)) ?></span>
+            </td>
+            <td>
+              <span class="tagmini"><?= e(jurnal_kelas_tempat($j)) ?></span>
+              <?php if (jurnal_tempat($j) !== '' && trim((string) ($j['kelas_nama'] ?? '')) === ''): ?><span class="tbl-sub">tempat (manual)</span><?php endif; ?>
+            </td>
             <td><?= e((string) ($j['mapel_nama'] ?: '-')) ?></td>
             <td class="ctr"><?= e((string) ($j['jam_ke'] ?: '-')) ?></td>
-            <td><?= e((string) $j['materi']) ?></td>
+            <td><?= e((string) ($j['materi'] !== '' && $j['materi'] !== null ? $j['materi'] : '-')) ?></td>
             <td class="ctr">
               <span class="kehadiran-kode">
                 <?php foreach ($kolomKehadiran as $kolom => [$kode, $label]): $n = (int) ($j[$kolom] ?? 0); ?>
@@ -409,7 +515,7 @@ page_top('Jurnal Harian Guru');
               <?php if ($jmlTidakHadir > 0): ?><span class="tbl-sub"><?= $jmlTidakHadir ?> siswa</span><?php endif; ?>
             </td>
             <td class="sm mut"><?= nl2br(e((string) ($j['keterangan'] ?: '-'))) ?></td>
-            <td><?= e((string) ($j['guru_nama'] ?: '-')) ?></td>
+            <td class="td-guru"><?= e((string) ($j['guru_nama'] ?: '-')) ?></td>
             <td>
               <?php if ($bolehIsi && (!is_guru() || (int) $j['guru_id'] === guru_id_saya())): ?>
                 <div class="row-actions">

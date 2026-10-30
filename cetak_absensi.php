@@ -75,7 +75,12 @@ $autoPrint = isset($_GET['auto']);
   .sheet-wrap{max-width:900px;margin:0 auto}
   .toolbar{max-width:900px;margin:0 auto 18px;display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
   .sheet-foot{justify-content:space-between}
-  @media print{body{background:#fff;padding:0}.toolbar,.no-print{display:none !important}.print-sheet{box-shadow:none;border:none;padding:0;border-radius:0}}
+  @media print{
+    /* PENTING: tema menetapkan body{min-height:100vh}. Saat MENCETAK, 100vh = tinggi kertas,
+       sehingga tinggi dokumen menjadi setinggi halaman dan peramban mencetak halaman KEDUA yang
+       hampir kosong. Karena itu min-height dimatikan pada media cetak. */
+    html,body{min-height:0 !important;height:auto}
+body{background:#fff;padding:0}.toolbar,.no-print{display:none !important}.print-sheet{box-shadow:none;border:none;padding:0;border-radius:0}}
   @page{size:A4 portrait;margin:13mm}
 </style>
 </head>
@@ -157,8 +162,8 @@ $autoPrint = isset($_GET['auto']);
 
     <!-- Posisi tanda tangan: kepala sekolah/madrasah di KIRI, guru di KANAN (permintaan pemilik). -->
     <div class="sheet-foot dua-ttd">
-      <?php ttd_blok('Mengetahui, ' . jabatan_kepala(), kepala_nama(), kepala_nip(), 'sheet-sign sheet-sign-kiri'); ?>
-      <?php ttd_blok('Guru Mata Pelajaran', $guru ? (string) $guru['nama'] : '-', '', 'sheet-sign sheet-sign-kanan'); ?>
+      <?php ttd_blok(ttd_mengetahui(), kepala_nama(), kepala_nip(), 'sheet-sign sheet-sign-kiri'); ?>
+      <?php ttd_blok('Guru Mata Pelajaran', $guru ? (string) $guru['nama'] : '-', '', 'sheet-sign sheet-sign-kanan', true); ?>
     </div>
 
     <p class="xs mut center" style="margin-top:18px">

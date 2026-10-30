@@ -22,6 +22,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($aksi === 'setujui') {
+        // Permintaan pemilik: saat menyetujui, Super Admin memilih AKTIF PERMANEN atau
+        // MASA UJI COBA (30/60/90 hari). Tanpa pilihan (mis. formulir lama) → permanen.
+        $mode = (string) ($_POST['mode'] ?? 'permanen') === 'uji_coba' ? 'uji_coba' : 'permanen';
+        $hari = (int) ($_POST['hari'] ?? UJI_COBA_HARI_DEFAULT);
+        if (!in_array($hari, aktivasi_pilihan_hari(), true)) {
+            $hari = UJI_COBA_HARI_DEFAULT;
+        }
         db()->exec('BEGIN IMMEDIATE');
         try {
             q('UPDATE sekolah SET verifikasi = "disetujui", aktif = 1, alasan_tolak = NULL, ditinjau = ? WHERE id = ?',
@@ -33,9 +40,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             db()->exec('ROLLBACK');
             throw $ex;
         }
+        if ($mode === 'uji_coba') {
+            aktivasi_uji_coba($id, $hari);
+        } else {
+            aktivasi_permanen($id);
+        }
         $st = sekolah_stat($id);
-        flash('Pendaftaran ' . nama_sekolah_tampil($s) . ' DISETUJUI. Sekolah/madrasah dapat dipakai sekarang ('
-            . $st['mapel'] . ' mata pelajaran awal, tahun ajaran & semester sudah disiapkan).');
+        flash('Pendaftaran ' . nama_sekolah_tampil($s) . ' DISETUJUI dengan '
+            . ($mode === 'uji_coba'
+                ? 'MASA UJI COBA ' . $hari . ' hari (kode aktivasi sudah disiapkan untuk diberikan bila uji coba berakhir)'
+                : 'status AKTIF PERMANEN')
+            . '. ' . $st['mapel'] . ' mata pelajaran awal, tahun ajaran & semester sudah disiapkan.');
+        redirect('pendaftaran.php');
+    }
+
+    if ($aksi === 'aktivasi') {
+        // Pintasan dari halaman Pendaftaran: langsung ubah status aktivasi tanpa membuka Kelola Sekolah.
+        $mode = (string) ($_POST['mode'] ?? 'permanen');
+        $hari = (int) ($_POST['hari'] ?? UJI_COBA_HARI_DEFAULT);
+        if (!in_array($hari, aktivasi_pilihan_hari(), true)) {
+            $hari = UJI_COBA_HARI_DEFAULT;
+        }
+        if ($mode === 'uji_coba') {
+            aktivasi_uji_coba($id, $hari);
+            flash('Masa uji coba ' . nama_sekolah_tampil($s) . ' diberikan selama ' . $hari . ' hari.', 'warn');
+        } else {
+            aktivasi_permanen($id);
+            flash('Sekolah/madrasah ' . nama_sekolah_tampil($s) . ' diaktifkan PERMANEN.');
+        }
         redirect('pendaftaran.php');
     }
 
@@ -112,8 +144,10 @@ page_top('Pendaftaran Sekolah/Madrasah', 'Super Admin &middot; ' . $jumlah['menu
   <div class="card-head">
     <div>
       <h2>Pendaftaran Masuk</h2>
-      <p>Sekolah/madrasah yang mendaftar sendiri lewat halaman <b>daftar.php</b>. Login mereka masih ditolak
-        sampai pendaftaran disetujui.</p>
+      <p>Sekolah/madrasah yang mendaftar sendiri lewat halaman <b>daftar.php</b>.
+        Sejak pendaftaran gratis dibuka, pendaftar <b>langsung disetujui otomatis</b> dengan
+        <b>masa aktif <?= (int) PENDAFTARAN_HARI_AKTIF ?> hari</b> — Super Admin tinggal memutuskan
+        apakah lembaga itu dilanjutkan <b>AKTIF PERMANEN</b> atau dimatikan.</p>
     </div>
     <div class="flex">
       <a class="btn btn-ghost btn-sm" href="sekolah.php"><?= ikon('building', 15) ?> Kelola Sekolah</a>
@@ -135,6 +169,15 @@ page_top('Pendaftaran Sekolah/Madrasah', 'Super Admin &middot; ' . $jumlah['menu
     <?php if ($fStatus !== ''): ?><a class="btn btn-ghost" href="pendaftaran.php">Reset</a><?php endif; ?>
   </form>
 
+  <div class="alert alert-ok" style="background:rgba(201,162,39,.08);border-color:rgba(201,162,39,.5)">
+    <?= ikon('star', 16) ?>
+    <span><b>Pendaftaran Gratis (Aktif <?= (int) PENDAFTARAN_HARI_AKTIF ?> Hari).</b>
+      Pendaftar baru <b>tidak perlu disetujui lagi</b>: sekolahnya langsung aktif
+      <?= (int) PENDAFTARAN_HARI_AKTIF ?> hari, lalu otomatis terkunci sampai <b>kode aktivasi lembaga</b>
+      dimasukkan. Gunakan pilihan <b>Aktif permanen</b> pada kartu di bawah bila lembaga itu layak
+      dilanjutkan tanpa batas waktu.</span>
+  </div>
+
   <?php if (!$rows): ?>
     <div class="empty">
       <?= ikon('star', 34) ?>
@@ -153,14 +196,27 @@ page_top('Pendaftaran Sekolah/Madrasah', 'Super Admin &middot; ' . $jumlah['menu
                 <?php if ((int) $r['aktif'] !== 1): ?><span class="pill pill-gray">nonaktif</span><?php endif; ?>
               </h2>
               <p>Didaftarkan <?= e(tanggal_id((string) ($r['didaftar'] ?: $r['dibuat']), true)) ?>
-                &middot; NPSN <?= e((string) ($r['npsn'] ?: '-')) ?></p>
+                &middot; NPSN <?= e((string) ($r['npsn'] ?: '-')) ?>
+                <?php if (identitas_nilai((string) ($r['nsm'] ?? '')) !== ''): ?>
+                  &middot; NSM <?= e((string) $r['nsm']) ?>
+                <?php endif; ?></p>
             </div>
             <div class="row-actions">
               <?php if ($ver === 'menunggu'): ?>
-                <form method="post" data-confirm="Setujui pendaftaran <?= e((string) $r['nama']) ?>? Sekolah/madrasah langsung dapat dipakai.">
+                <?php // Permintaan pemilik: saat menyetujui, pilih AKTIF PERMANEN atau MASA UJI COBA 30/60/90 hari. ?>
+                <form method="post" class="form-setujui" id="setujui<?= $sid ?>">
                   <?= csrf_field() ?>
                   <input type="hidden" name="aksi" value="setujui">
                   <input type="hidden" name="id" value="<?= $sid ?>">
+                  <select name="mode" aria-label="Jenis aktivasi">
+                    <option value="permanen">Aktif permanen</option>
+                    <option value="uji_coba">Uji coba</option>
+                  </select>
+                  <select name="hari" aria-label="Lama uji coba">
+                    <?php foreach (aktivasi_pilihan_hari() as $h): ?>
+                      <option value="<?= (int) $h ?>" <?= (int) $h === UJI_COBA_HARI_DEFAULT ? 'selected' : '' ?>><?= (int) $h ?> hari</option>
+                    <?php endforeach; ?>
+                  </select>
                   <button class="btn btn-primary btn-sm" type="submit"><?= ikon('check', 14) ?> Setujui</button>
                 </form>
               <?php elseif ($ver === 'ditolak'): ?>
@@ -172,6 +228,23 @@ page_top('Pendaftaran Sekolah/Madrasah', 'Super Admin &middot; ' . $jumlah['menu
                 </form>
               <?php endif; ?>
               <?php if ($ver === 'disetujui'): ?>
+                <?php $ak = aktivasi_status($r); ?>
+                <span class="pill <?= $ak['mode'] === 'permanen' ? 'pill-ok' : ($ak['habis'] ? 'pill-D' : 'pill-uji') ?>"><?= e($ak['label']) ?></span>
+                <form method="post" class="form-setujui">
+                  <?= csrf_field() ?>
+                  <input type="hidden" name="aksi" value="aktivasi">
+                  <input type="hidden" name="id" value="<?= $sid ?>">
+                  <select name="mode" aria-label="Ubah status aktivasi">
+                    <option value="permanen">Aktif permanen</option>
+                    <option value="uji_coba" <?= $ak['mode'] === 'uji_coba' ? 'selected' : '' ?>>Uji coba</option>
+                  </select>
+                  <select name="hari" aria-label="Lama uji coba">
+                    <?php foreach (aktivasi_pilihan_hari() as $h): ?>
+                      <option value="<?= (int) $h ?>"><?= (int) $h ?> hari</option>
+                    <?php endforeach; ?>
+                  </select>
+                  <button class="btn btn-ghost btn-sm" type="submit"><?= ikon('save', 14) ?> Simpan</button>
+                </form>
                 <a class="btn btn-ghost btn-sm" href="sekolah.php?edit=<?= $sid ?>"><?= ikon('edit', 14) ?> Kelola</a>
               <?php endif; ?>
               <form method="post" data-confirm="Hapus data pendaftaran <?= e((string) $r['nama']) ?> beserta akunnya?">
@@ -183,14 +256,34 @@ page_top('Pendaftaran Sekolah/Madrasah', 'Super Admin &middot; ' . $jumlah['menu
             </div>
           </div>
 
+          <?php if ($ver === 'disetujui'): ?>
+            <?php // KODE AKTIVASI lembaga ini (unik berdasar nama sekolah) — hanya halaman Super Admin. ?>
+            <div class="kode-kotak mb16">
+              <span class="xs mut">Kode aktivasi lembaga (periode ke-<?= (int) aktivasi_periode($r) ?>,
+                hanya bisa dipakai sekali):</span>
+              <code id="kode<?= $sid ?>"><?= e(kode_aktivasi_sekolah($r)) ?></code>
+              <button class="btn btn-ghost btn-sm" type="button" data-salin="#kode<?= $sid ?>"><?= ikon('doc', 14) ?> Salin kode</button>
+            </div>
+          <?php endif; ?>
+
           <div class="grid g2" style="gap:16px">
             <div>
               <div class="sheet-meta" style="margin:0">
                 <div><b>Alamat</b>: <?= e((string) ($r['alamat'] ?: '-')) ?></div>
+                <?php // v37: wilayah ikut ditampilkan bila pendaftar mengisinya. ?>
+                <?php if (($wil = alamat_wilayah_dari($r)) !== ''): ?>
+                  <div><b>Desa/Kec./Kab./Provinsi</b>: <?= e($wil) ?></div>
+                <?php endif; ?>
                 <div><b>Telepon</b>: <?= e((string) ($r['telepon'] ?: '-')) ?></div>
+                <div><b>Situs/laman</b>: <?= e((string) ($r['website'] ?: '-')) ?></div>
                 <div><b>Email</b>: <?= e((string) ($r['email'] ?: '-')) ?></div>
                 <div><b>Kepala</b>: <?= e((string) ($r['kepala_sekolah'] ?: '-')) ?></div>
                 <div><b>NIP Kepala</b>: <?= e((string) ($r['nip_kepala_sekolah'] ?: '-')) ?></div>
+                <?php // v39: identitas pengawas bina — ditampilkan bila pendaftar mengisinya. ?>
+                <?php if (($png = identitas_nilai($r['pengawas_nama'] ?? '')) !== ''): ?>
+                  <div><b>Pengawas Bina</b>: <?= e($png) ?>
+                    <?= identitas_nilai($r['pengawas_nip'] ?? '') !== '' ? '&middot; NIP ' . e(identitas_nilai($r['pengawas_nip'])) : '' ?></div>
+                <?php endif; ?>
                 <div><b>Kontak pendaftar</b>: <?= e((string) ($r['kontak_nama'] ?: '-')) ?>
                   <?= $r['kontak_telepon'] ? '&middot; ' . e((string) $r['kontak_telepon']) : '' ?></div>
               </div>
@@ -219,9 +312,18 @@ page_top('Pendaftaran Sekolah/Madrasah', 'Super Admin &middot; ' . $jumlah['menu
                   <div><b><?= $st['siswa'] ?></b><span>Siswa</span></div>
                   <div><b><?= $st['akun'] ?></b><span>Akun</span></div>
                 </div>
-                <div class="chip-list mt8">
-                  <?php foreach (all('SELECT nama, username, role FROM users WHERE sekolah_id = ?', [$sid]) as $a): ?>
-                    <span class="chip"><?= e((string) $a['nama']) ?> &middot; <?= e((string) $a['username']) ?> &middot; <?= e(role_label((string) $a['role'])) ?></span>
+                <?php
+                // Permintaan pemilik: pada menu Pendaftaran cukup REKAPANNYA saja —
+                // nama guru / akun pengelola TIDAK ditampilkan di sini (lihat juga sekolah.php
+                // yang menyimpan daftar akun di dalam blok "Akun pengelola" yang tertutup).
+                ?>
+                <div class="xs mut mt8 mb8">Rekap akun pengelola</div>
+                <div class="chip-list">
+                  <?php // Urutan rekap: Kepala -> Operator -> Guru -> Pengawas ?>
+                  <?php foreach (all('SELECT role, COUNT(*) AS jumlah FROM users WHERE sekolah_id = ? GROUP BY role
+                                      ORDER BY CASE role WHEN \'kepala\' THEN 1 WHEN \'operator\' THEN 2 WHEN \'guru\' THEN 3 WHEN \'pengawas\' THEN 4 ELSE 5 END, role',
+                                     [$sid]) as $a): ?>
+                    <span class="chip"><?= (int) $a['jumlah'] ?> <?= e(role_label((string) $a['role'])) ?></span>
                   <?php endforeach; ?>
                 </div>
               <?php endif; ?>

@@ -24,12 +24,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($aksi === 'toggle') {
         q('UPDATE siswa SET aktif = ? WHERE id = ? AND sekolah_id = ?', [(int) $s['aktif'] === 1 ? 0 : 1, $id, sekolah_id()]);
+        // Akun siswa yang dinonaktifkan langsung kehilangan akses (sesinya diperiksa setiap request).
+        siswa_akun_bersihkan();
         flash('Status siswa ' . $s['nama'] . ' diperbarui.', 'warn');
     } elseif ($aksi === 'hapus') {
         $nilai = (int) val('SELECT COUNT(*) FROM nilai WHERE siswa_id = ? AND sekolah_id = ?', [$id, sekolah_id()], 0);
         $hadir = (int) val('SELECT COUNT(*) FROM absensi_detail WHERE siswa_id = ?', [$id], 0);
         $kasus = (int) val('SELECT COUNT(*) FROM kasus WHERE siswa_id = ? AND sekolah_id = ?', [$id, sekolah_id()], 0);
         q('DELETE FROM siswa WHERE id = ? AND sekolah_id = ?', [$id, sekolah_id()]);
+        // Akun masuk siswa (peran 'siswa') ikut dibersihkan supaya tidak ada akun yatim.
+        siswa_akun_bersihkan();
         flash('Siswa ' . $s['nama'] . ' beserta ' . $nilai . ' baris nilai, ' . $hadir . ' catatan kehadiran, dan ' . $kasus . ' catatan kasus dihapus.', 'warn');
     }
     redirect('siswa.php');
@@ -130,9 +134,14 @@ page_top('Data Siswa');
         <a class="btn btn-ghost" href="kenaikan.php"><?= ikon('switch', 16) ?> Kenaikan &amp; Kelulusan</a>
       <?php endif; ?>
       <a class="btn btn-ghost" href="absensi.php<?= $fKelas > 0 ? '?kelas=' . (int) $fKelas : '' ?>"><?= ikon('clipboard', 16) ?> Daftar Hadir</a>
-      <?php if ($bolehUbah): ?>
-        <?php // Cetak Data Siswa: Super Admin (dalam konteks sekolah) & Admin Operator, mengikuti filter aktif. ?>
+      <?php // Cetak data siswa & kartu pelajar: pengelola, KEPALA sekolah/madrasah (permintaan pemilik
+            // v1.19.0), dan pengawas. Ekspor CSV tetap hanya untuk pengelola (operator/Super Admin). ?>
+      <?php if ($bolehUbah || is_kepala() || is_pengawas()): ?>
         <a class="btn btn-ghost" href="cetak_siswa.php?<?= e(http_build_query($qCetak)) ?>"><?= ikon('print', 16) ?> Cetak Data Siswa</a>
+        <a class="btn btn-ghost" href="cetak_kartu_siswa.php?<?= e(http_build_query($qCetak)) ?>"><?= ikon('card', 16) ?> Cetak Kartu Pelajar</a>
+      <?php endif; ?>
+      <?php if ($bolehUbah): ?>
+        <a class="btn btn-ghost" href="siswa_export.php?<?= e(http_build_query($qCetak)) ?>"><?= ikon('download', 16) ?> Ekspor Data Siswa</a>
       <?php endif; ?>
     </div>
   </div>
@@ -193,13 +202,24 @@ page_top('Data Siswa');
             <td>
               <span class="mini-avatar">
                 <?= avatar_html((string) $s['nama'], 32) ?>
-                <span><b><?= e((string) $s['nama']) ?></b><span class="tbl-sub"><?= e((string) ($s['tanggal_lahir'] ? tanggal_id((string) $s['tanggal_lahir']) : '-')) ?></span></span>
+                <span><b><?= e((string) $s['nama']) ?></b><span class="tbl-sub"><?= e(
+                  trim(($s['tempat_lahir'] ? (string) $s['tempat_lahir'] . ', ' : '')
+                       . ($s['tanggal_lahir'] ? tanggal_id((string) $s['tanggal_lahir']) : ''), ', ')
+                  ?: '-') ?></span></span>
               </span>
             </td>
             <td class="nowrap"><?= e((string) ($s['nis'] ?: '-')) ?><span class="tbl-sub"><?= e((string) ($s['nisn'] ?: '-')) ?></span></td>
             <td class="ctr"><?= e((string) ($s['jenis_kelamin'] ?: '-')) ?></td>
             <td><?= $s['kelas_nama'] ? '<span class="tagmini">' . e((string) $s['kelas_nama']) . '</span>' : '<span class="mut xs">belum berkelas</span>' ?></td>
-            <td><?= e((string) ($s['nama_wali'] ?: '-')) ?><?php if ($s['telepon']): ?><span class="tbl-sub"><?= e((string) $s['telepon']) ?></span><?php endif; ?></td>
+            <td>
+              <?= e((string) ($s['nama_wali'] ?: '-')) ?>
+              <?php if ($s['nama_ayah'] || $s['nama_ibu']): ?>
+                <span class="tbl-sub"><?= e(trim(($s['nama_ayah'] ? 'Ayah: ' . $s['nama_ayah'] : '')
+                    . ($s['nama_ayah'] && $s['nama_ibu'] ? ' · ' : '')
+                    . ($s['nama_ibu'] ? 'Ibu: ' . $s['nama_ibu'] : ''))) ?></span>
+              <?php endif; ?>
+              <?php if ($s['telepon']): ?><span class="tbl-sub"><?= e((string) $s['telepon']) ?></span><?php endif; ?>
+            </td>
             <td class="ctr"><?= (int) $s['jml_nilai'] ?></td>
             <td class="ctr">
               <?php if ((int) $s['kasus_aktif'] > 0): ?>

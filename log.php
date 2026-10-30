@@ -34,14 +34,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $aksi = (string) ($_POST['aksi'] ?? '');
 
     if ($aksi === 'bersihkan') {
-        $hari = max(1, (int) ($_POST['hari'] ?? 90));
+        // DUA cara membersihkan (permintaan pemilik setelah fitur ini dikira "tidak berfungsi"):
+        //   mode=hari  → hanya yang LEBIH LAMA dari N hari (perilaku lama)
+        //   mode=semua → SELURUH riwayat masuk/keluar/gagal dihapus tanpa kecuali
+        // Sebelumnya HANYA mode "hari" yang ada dengan bawaan 90 hari, sehingga pada instalasi
+        // yang riwayatnya masih muda (mis. baru sepekan) tombol ini menghapus 0 baris dan
+        // kelihatan "tidak berfungsi" — padahal memang tidak ada baris yang lebih tua dari 90 hari.
+        $mode = (string) ($_POST['mode'] ?? 'hari') === 'semua' ? 'semua' : 'hari';
+        // Tombol cepat mengirim `hari_pilih` (nama TERPISAH dari isian `hari`) supaya nilainya tidak
+        // bertabrakan dengan isian angka pada formulir yang sama — perilaku itu berbeda antar
+        // peramban bila kedua kontrol memakai nama yang sama.
+        $hari = max(1, (int) ($_POST['hari_pilih'] ?? 0) ?: (int) ($_POST['hari'] ?? 90));
+
         if (strtoupper(trim((string) ($_POST['konfirmasi'] ?? ''))) !== 'HAPUS') {
-            flash('Ketik HAPUS untuk menghapus riwayat lama. Tidak ada data yang dihapus.', 'err');
+            flash('Ketik HAPUS untuk konfirmasi. Tidak ada data yang dihapus.', 'err');
             redirect('log.php');
         }
-        $st = q('DELETE FROM log_aktivitas WHERE waktu < ?', [date('Y-m-d H:i:s', time() - $hari * 86400)]);
-        flash($st->rowCount() . ' baris riwayat lebih lama dari ' . $hari . ' hari dihapus.', 'warn');
+
+        $totalSebelum = (int) val('SELECT COUNT(*) FROM log_aktivitas', [], 0);
+        if ($totalSebelum === 0) {
+            flash('Riwayat masuk & keluar memang masih kosong — belum ada yang perlu dibersihkan.');
+            redirect('log.php');
+        }
+
+        if ($mode === 'semua') {
+            q('DELETE FROM log_aktivitas');
+            flash('Seluruh riwayat dibersihkan: ' . $totalSebelum . ' baris dihapus '
+                . '(masuk, keluar, dan gagal masuk).', 'warn');
+            redirect('log.php');
+        }
+
+        $batas = date('Y-m-d H:i:s', time() - $hari * 86400);
+        $st = q('DELETE FROM log_aktivitas WHERE waktu < ?', [$batas]);
+        $n = $st->rowCount();
+        if ($n > 0) {
+            flash($n . ' baris riwayat lebih lama dari ' . $hari . ' hari dihapus '
+                . '(sebelum pukul ' . substr($batas, 11, 5) . ' pada ' . tanggal_id(substr($batas, 0, 10)) . ').', 'warn');
+        } else {
+            // JANGAN hanya menulis "0 baris dihapus": pengguna mengira fiturnya rusak. Jelaskan
+            // umur riwayat yang ada + beri jalan keluar yang jelas.
+            $tertua = (string) val('SELECT MIN(waktu) FROM log_aktivitas', [], '');
+            $umur = $tertua !== '' ? max(0, (int) floor((time() - (int) strtotime($tertua)) / 86400)) : 0;
+            flash('Tidak ada riwayat yang lebih lama dari ' . $hari . ' hari, jadi tidak ada yang perlu dihapus. '
+                . 'Riwayat terlama Anda baru berumur ' . $umur . ' hari. '
+                . ($umur < $hari
+                    ? 'Ketik angka hari yang lebih kecil dari ' . max(1, $umur) . ', atau pilih '
+                        . '"Seluruh riwayat" untuk mengosongkan semuanya.'
+                    : 'Pilih "Seluruh riwayat" untuk mengosongkan semuanya.'), 'warn');
+        }
         redirect('log.php');
+    }
+
+    if ($aksi === 'hapus_riwayat') {
+        // Permintaan pemilik: hapus SATU baris riwayat tertentu (mis. percobaan uji sendiri).
+        $id = (int) ($_POST['id'] ?? 0);
+        $r = $id > 0 ? one('SELECT * FROM log_aktivitas WHERE id = ?', [$id]) : null;
+        if (!$r) {
+            flash('Baris riwayat tidak ditemukan (mungkin sudah dihapus).', 'err');
+        } else {
+            q('DELETE FROM log_aktivitas WHERE id = ?', [$id]);
+            $ket = trim((string) ($r['nama'] ?? '')) !== '' ? (string) $r['nama'] : (string) ($r['username'] ?? '');
+            flash('Riwayat ' . ($ket !== '' ? $ket . ' — ' : '') . waktu_id((string) $r['waktu'])
+                . ' (' . ($AKSI[(string) $r['aktivitas']] ?? (string) $r['aktivitas']) . ') dihapus.', 'warn');
+        }
+        // Kembali ke halaman & filter yang sama supaya tidak kehilangan konteks.
+        $kembali = trim((string) ($_POST['kembali'] ?? ''));
+        redirect($kembali !== '' && strncmp($kembali, 'log.php', 7) === 0 ? $kembali : 'log.php');
     }
 
     if ($aksi === 'bersihkan_online') {
@@ -88,13 +146,22 @@ if ($fSampai !== null) {
 }
 $where = $w ? ' WHERE ' . implode(' AND ', $w) : '';
 
-// Paginasi riwayat.
-$perHal = 40;
+// Paginasi riwayat: 10 baris terakhir per halaman (permintaan pemilik), sisanya lewat
+// tombol "Selanjutnya" — supaya halaman tidak terlalu panjang.
+$perHal = 10;
 $totalRiwayat = (int) val('SELECT COUNT(*) FROM log_aktivitas' . $where, $p, 0);
 $jmlHal = max(1, (int) ceil($totalRiwayat / $perHal));
 $hal = max(1, min($jmlHal, (int) ($_GET['hal'] ?? 1)));
 $rows = all('SELECT * FROM log_aktivitas' . $where . ' ORDER BY waktu DESC, id DESC LIMIT ' . $perHal
     . ' OFFSET ' . (($hal - 1) * $perHal), $p);
+
+// Alamat halaman + filter yang sedang dilihat — dikirim balik setelah hapus satu baris supaya
+// pengguna tetap berada di halaman/filter yang sama.
+$qFilterAwal = array_filter(['cari' => $fCari, 'aktivitas' => $fAksi, 'dari' => $fDari, 'sampai' => $fSampai],
+    static fn($v) => $v !== '' && $v !== null);
+$tautanSendiri = 'log.php' . ($qFilterAwal || $hal > 1
+    ? '?' . http_build_query(array_merge($qFilterAwal, $hal > 1 ? ['hal' => $hal] : []))
+    : '');
 
 // ---------------------------------------------------------------- sedang online
 log_sesi_bersihkan(2);   // catatan sesi lama dibuang (riwayat masuk/keluar tidak disentuh)
@@ -108,6 +175,36 @@ $jumlahGagalHariIni = (int) val('SELECT COUNT(*) FROM log_aktivitas WHERE aktivi
 $jumlahKeluarHariIni = (int) val('SELECT COUNT(*) FROM log_aktivitas WHERE aktivitas = "keluar" AND waktu >= ?', [$hariIni . ' 00:00:00'], 0);
 $terakhir = one('SELECT * FROM log_aktivitas ORDER BY waktu DESC, id DESC LIMIT 1');
 $perambanUmum = all('SELECT peramban, COUNT(*) AS jml FROM log_aktivitas WHERE peramban IS NOT NULL GROUP BY peramban ORDER BY jml DESC LIMIT 5');
+
+// ---------------------------------------------------------------- ringkasan pembersihan
+// Kartu "Bersihkan Riwayat Lama" menampilkan BERAPA BARIS yang akan terhapus untuk tiap pilihan,
+// supaya pengguna tidak memilih angka hari yang menghasilkan 0 baris lalu mengira fiturnya rusak.
+$totalAda    = (int) val('SELECT COUNT(*) FROM log_aktivitas', [], 0);
+$jmlMasuk    = (int) val('SELECT COUNT(*) FROM log_aktivitas WHERE aktivitas = "masuk"', [], 0);
+$jmlKeluar   = (int) val('SELECT COUNT(*) FROM log_aktivitas WHERE aktivitas = "keluar"', [], 0);
+$jmlGagal    = (int) val('SELECT COUNT(*) FROM log_aktivitas WHERE aktivitas = "gagal"', [], 0);
+$tertuaWaktu = (string) val('SELECT MIN(waktu) FROM log_aktivitas', [], '');
+$umurTertua  = $tertuaWaktu !== '' ? max(0, (int) floor((time() - (int) strtotime($tertuaWaktu)) / 86400)) : 0;
+// Angka bawaan pada isian hari: pilih yang paling masuk akal agar TIDAK menghasilkan 0 baris.
+// Diambil dari pilihan terkecil yang benar-benar menghapus sesuatu; bila tidak ada (semua riwayat
+// lebih muda dari sehari), dipakai 1 hari.
+$hariBawaan = 1;
+foreach ([7, 30, 90, 365] as $cHari) {
+    if ($umurTertua >= $cHari) {
+        $hariBawaan = $cHari;
+        break;
+    }
+}
+$pilihanBersih = [];
+foreach ([1 => 'Lebih lama dari 1 hari', 7 => 'Lebih lama dari 7 hari',
+          30 => 'Lebih lama dari 30 hari', 90 => 'Lebih lama dari 90 hari',
+          365 => 'Lebih lama dari 365 hari'] as $cHari => $labelnya) {
+    $n = (int) val('SELECT COUNT(*) FROM log_aktivitas WHERE waktu < ?',
+        [date('Y-m-d H:i:s', time() - $cHari * 86400)], 0);
+    $pilihanBersih[] = ['label' => $labelnya, 'hapus' => $n, 'sisa' => max(0, $totalAda - $n)];
+}
+$pilihanBersih[] = ['label' => 'SELURUH riwayat (masuk, keluar, gagal)', 'hapus' => $totalAda, 'sisa' => 0];
+
 $qFilter = array_filter(['cari' => $fCari, 'aktivitas' => $fAksi, 'dari' => $fDari, 'sampai' => $fSampai],
     static fn($v) => $v !== '' && $v !== null);
 
@@ -255,7 +352,7 @@ page_top('Log Aktivitas', 'Super Admin &middot; pemantauan akun &amp; aktivitas 
       <table class="tbl" id="tblRiwayat">
         <thead>
           <tr><th>Tanggal &amp; Jam</th><th>Nama</th><th>Peran</th><th>Asal</th>
-            <th class="ctr">Aktivitas</th><th>IP</th><th>Peramban</th></tr>
+            <th class="ctr">Aktivitas</th><th>IP</th><th>Peramban</th><th class="ctr">Tindakan</th></tr>
         </thead>
         <tbody>
         <?php foreach ($rows as $r):
@@ -282,6 +379,17 @@ page_top('Log Aktivitas', 'Super Admin &middot; pemantauan akun &amp; aktivitas 
             </td>
             <td class="xs nowrap"><?= e((string) ($r['ip'] ?: '-')) ?></td>
             <td class="xs"><?= e((string) ($r['peramban'] ?: '-')) ?></td>
+            <td class="ctr">
+              <?php // Permintaan pemilik: hapus SATU baris riwayat (mis. percobaan masuk yang keliru). ?>
+              <form method="post"
+                    data-confirm="Hapus riwayat ini?&#10;<?= e($nama) ?> — <?= e(waktu_id((string) $r['waktu'])) ?>&#10;Penghapusan tidak dapat dibatalkan.">
+                <?= csrf_field() ?>
+                <input type="hidden" name="aksi" value="hapus_riwayat">
+                <input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
+                <input type="hidden" name="kembali" value="<?= e($tautanSendiri) ?>">
+                <button class="btn btn-ghost btn-sm" type="submit" title="Hapus riwayat ini"><?= ikon('trash', 14) ?></button>
+              </form>
+            </td>
           </tr>
         <?php endforeach; ?>
         </tbody>
@@ -290,8 +398,9 @@ page_top('Log Aktivitas', 'Super Admin &middot; pemantauan akun &amp; aktivitas 
 
     <?php if ($jmlHal > 1): ?>
       <div class="flex between mt16" style="flex-wrap:wrap;gap:10px">
-        <span class="xs mut">Menampilkan <?= (($hal - 1) * $perHal) + 1 ?>&ndash;<?= min($totalRiwayat, $hal * $perHal) ?>
-          dari <?= $totalRiwayat ?> baris</span>
+        <?php $barisAwal = (($hal - 1) * $perHal) + 1; $barisAkhir = min($totalRiwayat, $hal * $perHal); ?>
+        <span class="xs mut">Menampilkan <?= $barisAwal ?>&ndash;<?= $barisAkhir ?> dari <?= $totalRiwayat ?> baris
+          (<?= (int) $perHal ?> terakhir per halaman)</span>
         <div class="flex" style="gap:6px">
           <?php
           $tautanHal = static function (int $n) use ($qFilter): string {
@@ -304,7 +413,7 @@ page_top('Log Aktivitas', 'Super Admin &middot; pemantauan akun &amp; aktivitas 
           <?php endif; ?>
           <span class="chip">Halaman <?= $hal ?> / <?= $jmlHal ?></span>
           <?php if ($hal < $jmlHal): ?>
-            <a class="btn btn-ghost btn-sm" href="<?= e($tautanHal($hal + 1)) ?>">Berikutnya &rarr;</a>
+            <a class="btn btn-ghost btn-sm" href="<?= e($tautanHal($hal + 1)) ?>">Selanjutnya &rarr;</a>
             <a class="btn btn-ghost btn-sm" href="<?= e($tautanHal($jmlHal)) ?>">Akhir</a>
           <?php endif; ?>
         </div>
@@ -336,7 +445,9 @@ page_top('Log Aktivitas', 'Super Admin &middot; pemantauan akun &amp; aktivitas 
     </p>
   </div>
 
-  <div class="card">
+  <?php // id="cardBersih" dipakai uji antarmuka (check_eguru_log_bersih_ui.js) untuk mengukur
+        // kartu ini secara tepat — halaman ini memuat beberapa tabel lain. ?>
+  <div class="card" id="cardBersih">
     <div class="card-head"><div><h2>Bersihkan Riwayat Lama</h2><p>Merapikan basis data tanpa mengubah data administrasi.</p></div></div>
     <p class="sm mut" style="margin:0 0 12px">
       Riwayat terakhir tercatat:
@@ -344,21 +455,67 @@ page_top('Log Aktivitas', 'Super Admin &middot; pemantauan akun &amp; aktivitas 
         ? waktu_id((string) $terakhir['waktu']) . ' — ' . e((string) ($terakhir['nama'] ?? '')) . ' (' . e((string) ($terakhir['aktivitas'] ?? '')) . ')'
         : 'belum ada' ?>.
     </p>
-    <form method="post" data-confirm="Hapus riwayat aktivitas yang lebih lama dari rentang yang dipilih?">
-      <?= csrf_field() ?>
-      <input type="hidden" name="aksi" value="bersihkan">
-      <div class="grid g2" style="gap:10px">
-        <div>
-          <label class="f" for="hari">Lebih lama dari (hari)</label>
-          <input type="number" id="hari" name="hari" value="90" min="1" max="3650">
-        </div>
-        <div>
-          <label class="f" for="konfirmasi">Ketik HAPUS untuk konfirmasi</label>
-          <input type="text" id="konfirmasi" name="konfirmasi" placeholder="HAPUS">
-        </div>
+    <?php // Ringkasan umur riwayat: supaya pengguna tahu ANGKA HARI yang akan benar-benar menghapus
+          // sesuatu. Sebelum ini hanya ada satu pilihan ("lebih lama dari 90 hari") sehingga pada
+          // instalasi yang riwayatnya masih muda tombolnya menghapus 0 baris dan kelihatan rusak. ?>
+    <?php if ($totalAda === 0): ?>
+      <div class="alert alert-ok"><?= ikon('check', 16) ?><span>Riwayat masuk &amp; keluar masih kosong —
+        belum ada yang perlu dibersihkan.</span></div>
+    <?php else: ?>
+      <div class="stat-mini mb16" id="ringkasBersih">
+        <div><b><?= (int) $totalAda ?></b><span>Baris riwayat tersimpan</span></div>
+        <div><b><?= (int) $umurTertua ?> hari</b><span>Umur riwayat terlama</span>
+          <div class="stat-hint"><?= e(tanggal_id(substr((string) $tertuaWaktu, 0, 10))) ?></div></div>
+        <div><b><?= (int) $jmlMasuk ?></b><span>Masuk</span></div>
+        <div><b><?= (int) $jmlKeluar + (int) $jmlGagal ?></b><span>Keluar + gagal masuk</span></div>
       </div>
-      <button class="btn btn-danger mt16" type="submit"><?= ikon('trash', 15) ?> Bersihkan riwayat lama</button>
-    </form>
+      <div class="table-wrap mb16">
+        <table class="tbl" id="tblBersih">
+          <thead><tr><th>Kalau dibersihkan dengan pilihan …</th><th class="ctr">Baris yang terhapus</th>
+            <th class="ctr">Sisa</th></tr></thead>
+          <tbody>
+            <?php foreach ($pilihanBersih as $pb): ?>
+              <tr>
+                <td><?= e($pb['label']) ?></td>
+                <td class="ctr"><b><?= (int) $pb['hapus'] ?></b></td>
+                <td class="ctr"><?= (int) $pb['sisa'] ?></td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+      <form method="post" data-confirm="Bersihkan riwayat sesuai pilihan yang aktif?">
+        <?= csrf_field() ?>
+        <input type="hidden" name="aksi" value="bersihkan">
+        <div class="grid g2" style="gap:10px">
+          <div>
+            <label class="f" for="mode">Yang dibersihkan</label>
+            <select id="mode" name="mode">
+              <option value="hari">Hanya yang lebih lama dari (hari)</option>
+              <option value="semua">SELURUH riwayat (masuk, keluar, gagal)</option>
+            </select>
+          </div>
+          <div>
+            <label class="f" for="hari">Lebih lama dari (hari)</label>
+            <input type="number" id="hari" name="hari" value="<?= (int) $hariBawaan ?>" min="1" max="3650">
+          </div>
+        </div>
+        <p class="hint" style="margin:8px 0 0">
+          Isi angka hari di atas, atau pakai tombol cepat berikut (angka pada tombol = batas hari):
+        </p>
+        <div class="flex" style="gap:8px;flex-wrap:wrap;margin-top:8px">
+          <?php foreach ([1, 7, 30, 90, 365] as $cHari): ?>
+            <button class="btn btn-ghost btn-sm" type="submit" name="hari_pilih" value="<?= $cHari ?>">
+              &gt; <?= $cHari ?> hari</button>
+          <?php endforeach; ?>
+        </div>
+        <div class="mt16">
+          <label class="f" for="konfirmasi">Ketik HAPUS untuk konfirmasi</label>
+          <input type="text" id="konfirmasi" name="konfirmasi" placeholder="HAPUS" style="max-width:220px">
+        </div>
+        <button class="btn btn-danger mt16" type="submit"><?= ikon('trash', 15) ?> Bersihkan riwayat</button>
+      </form>
+    <?php endif; ?>
   </div>
 </div>
 

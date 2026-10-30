@@ -2,7 +2,8 @@
 /**
  * Lembar cetak LAPORAN DAFTAR CATATAN PELANGGARAN SISWA (A4 landscape).
  *
- * Filter mengikuti halaman Catatan Pelanggaran Siswa: kelas, status, jenis, dan kata kunci —
+ * Filter mengikuti halaman Pelanggaran Siswa (dulu "Catatan Pelanggaran Siswa"): kelas,
+ * status, jenis, dan kata kunci —
  * sehingga lembar yang tercetak sama dengan yang tampil di layar.
  *
  * Posisi tanda tangan: kepala sekolah/madrasah di KIRI, guru di KANAN (permintaan pemilik).
@@ -26,7 +27,24 @@ if ($fKelas > 0 && !boleh_kelas($fKelas)) {
 }
 $fStatus = array_key_exists((string) ($_GET['status'] ?? ''), $statusList) ? (string) $_GET['status'] : '';
 $fJenis = array_key_exists((string) ($_GET['jenis'] ?? ''), $jenisList) ? (string) $_GET['jenis'] : '';
+// Filter mata pelajaran (permintaan pemilik) — mengikuti filter pada halaman Pelanggaran Siswa.
+$fMapel = (int) ($_GET['mapel'] ?? 0);
+if ($fMapel > 0 && (!mapel_by_id($fMapel) || !boleh_mapel($fMapel))) {
+    tolak403('Mata pelajaran itu tidak Anda ampu.');
+}
 $cari = trim((string) ($_GET['cari'] ?? ''));
+// Filter satu siswa (datang dari "Lihat Pelanggaran" pada Laporan Rekap Pelanggaran Siswa).
+$fSiswa = (int) ($_GET['siswa'] ?? 0);
+$siswaCetak = null;
+if ($fSiswa > 0) {
+    $siswaCetak = one('SELECT s.*, k.nama AS kelas_nama FROM siswa s LEFT JOIN kelas k ON k.id = s.kelas_id
+                       WHERE s.id = ? AND s.sekolah_id = ?', [$fSiswa, sekolah_id()]);
+    if (!$siswaCetak) {
+        $fSiswa = 0;
+    } elseif (is_guru() && !in_array((int) ($siswaCetak['kelas_id'] ?? 0), array_map('intval', array_column(kelas_diampu(), 'id')), true)) {
+        tolak403('Siswa itu di luar kelas yang Anda ampu.');
+    }
+}
 $fDari = tgl_ok($_GET['dari'] ?? null);
 $fSampai = tgl_ok($_GET['sampai'] ?? null);
 if ($fDari !== null && $fSampai !== null && $fDari > $fSampai) {
@@ -47,6 +65,10 @@ if (is_guru()) {
         array_push($p, ...$kelasGuru);
     }
 }
+if ($fSiswa > 0) {
+    $w[] = 'ks.siswa_id = ?';
+    $p[] = $fSiswa;
+}
 if ($fKelas > 0) {
     $w[] = 'ks.kelas_id = ?';
     $p[] = $fKelas;
@@ -58,6 +80,10 @@ if ($fStatus !== '') {
 if ($fJenis !== '') {
     $w[] = 'ks.jenis = ?';
     $p[] = $fJenis;
+}
+if ($fMapel > 0) {
+    $w[] = 'ks.mapel_id = ?';
+    $p[] = $fMapel;
 }
 if ($cari !== '') {
     $w[] = '(s.nama LIKE ? OR ks.judul LIKE ? OR ks.deskripsi LIKE ?)';
@@ -74,13 +100,15 @@ if ($fSampai !== null) {
 }
 $where = ' WHERE ' . implode(' AND ', $w);
 
-$rows = all('SELECT ks.*, s.nama AS siswa_nama, s.nis, k.nama AS kelas_nama, g.nama AS guru_nama
+$rows = all('SELECT ks.*, s.nama AS siswa_nama, s.nis, k.nama AS kelas_nama, g.nama AS guru_nama,
+                       m.nama AS mapel_nama
     FROM kasus ks LEFT JOIN siswa s ON s.id = ks.siswa_id
-    LEFT JOIN kelas k ON k.id = ks.kelas_id LEFT JOIN guru g ON g.id = ks.guru_id'
+    LEFT JOIN kelas k ON k.id = ks.kelas_id LEFT JOIN guru g ON g.id = ks.guru_id
+    LEFT JOIN mapel m ON m.id = ks.mapel_id'
     . $where . ' ORDER BY ks.tanggal, ks.id', $p);
 
 if (!$rows) {
-    flash('Belum ada catatan pelanggaran siswa untuk dicetak pada filter yang dipilih.', 'warn');
+    flash('Belum ada pelanggaran siswa untuk dicetak pada filter yang dipilih.', 'warn');
     redirect('kasus.php');
 }
 
@@ -122,7 +150,7 @@ if ($guruCetak === '') {
 $autoPrint = isset($_GET['auto']);
 $qPrint = array_filter([
     'kelas' => $fKelas ?: null, 'status' => $fStatus ?: null, 'jenis' => $fJenis ?: null,
-    'cari' => $cari ?: null, 'dari' => $fDari, 'sampai' => $fSampai,
+    'mapel' => $fMapel ?: null, 'cari' => $cari ?: null, 'dari' => $fDari, 'sampai' => $fSampai,
 ]);
 ?>
 <!DOCTYPE html>
@@ -130,7 +158,7 @@ $qPrint = array_filter([
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Catatan Pelanggaran Siswa — <?= e(tetap_kata(nama_sekolah())) ?></title>
+<title>Pelanggaran Siswa — <?= e(tetap_kata(nama_sekolah())) ?></title>
 <link rel="stylesheet" href="assets/style.css?v=<?= e(APP_VERSION) ?>">
 <style>
   body{background:#F3F0FF;padding:26px 18px 40px}
@@ -140,19 +168,31 @@ $qPrint = array_filter([
   table.sheet.kasus th,table.sheet.kasus td{padding:5px 6px}
   .sheet-foot{justify-content:space-between}
   .ket-print{font-size:.72rem;color:#635F82;margin-top:10px;line-height:1.5}
-  @media (max-width:900px){
+  /* Tata letak layar sempit HANYA untuk layar (media "screen"): kertas A4 portrait hanya
+     selebar ±695px, jadi "@media (max-width:900px)" ikut aktif saat MENCETAK dan membuat tanda
+     tangan menumpuk atas-bawah — padahal harus tetap kiri-kanan. */
+  @media screen and (max-width:900px){
     .print-sheet{padding:18px 14px}
     table.sheet.kasus{min-width:900px}
     .sheet-meta{grid-template-columns:minmax(0,1fr)}
     .sheet-foot{flex-direction:column;gap:20px}
   }
   @media print{
+    /* PENTING: tema menetapkan body{min-height:100vh}. Saat MENCETAK, 100vh = tinggi kertas,
+       sehingga tinggi dokumen menjadi setinggi halaman dan peramban mencetak halaman KEDUA yang
+       hampir kosong. Karena itu min-height dimatikan pada media cetak. */
+    html,body{min-height:0 !important;height:auto}
     body{background:#fff;padding:0}
     .toolbar,.no-print{display:none !important}
     .sheet-wrap{max-width:none}
     .print-sheet{box-shadow:none;border:none;padding:0;border-radius:0}
     .sheet-scroll{overflow:visible}
     table.sheet.kasus{min-width:0}
+  }
+  /* Saat dicetak, dua blok tanda tangan WAJIB berdampingan (kiri & kanan). */
+  @media print{
+    .sheet-foot{flex-direction:row !important;flex-wrap:nowrap;justify-content:space-between}
+    .sheet-foot.dua-ttd .sheet-sign{flex:1 1 0;min-width:0}
   }
   @page{size:A4 landscape;margin:12mm}
 </style>
@@ -167,16 +207,18 @@ $qPrint = array_filter([
 
 <div class="sheet-wrap">
   <div class="print-sheet">
-    <?php kop_cetak('Laporan Catatan Pelanggaran Siswa', ['Administrasi Pembinaan Siswa']); ?>
+    <?php kop_cetak('Laporan Pelanggaran Siswa', ['Administrasi Pembinaan Siswa']); ?>
 
-    <?php sheet_meta([
+    <?php sheet_meta(array_filter([
+        'Siswa'          => $siswaCetak ? (string) $siswaCetak['nama'] . ' (' . (string) ($siswaCetak['kelas_nama'] ?: 'tanpa kelas') . ')' : null,
         'Periode'        => $periode,
         'Kelas'          => $fKelas > 0 ? kelas_nama($fKelas) : 'Semua kelas',
         'Jenis'          => $fJenis !== '' ? $jenisList[$fJenis] : 'Semua jenis',
+        'Mata Pelajaran' => $fMapel > 0 ? mapel_nama($fMapel) : 'Semua mata pelajaran',
         'Status'         => $fStatus !== '' ? $statusList[$fStatus] : 'Semua status',
         'Jumlah Catatan' => (string) count($rows),
         'Rekap Status'   => 'Baru ' . $ringkas['baru'] . ', Dalam Penanganan ' . $ringkas['proses'] . ', Selesai ' . $ringkas['selesai'],
-    ]); ?>
+    ])); ?>
 
     <div class="sheet-scroll">
       <table class="sheet kasus padat">
@@ -187,6 +229,7 @@ $qPrint = array_filter([
             <th style="width:15%">Nama Siswa</th>
             <th class="ctr" style="width:7%">Kelas</th>
             <th style="width:11%">Jenis</th>
+            <th style="width:13%">Mata Pelajaran</th>
             <th style="width:25%">Uraian Pelanggaran &amp; Tindakan</th>
             <th class="ctr" style="width:11%">Status</th>
             <th style="width:11%">Dicatat oleh</th>
@@ -203,6 +246,7 @@ $qPrint = array_filter([
             </td>
             <td class="ctr"><?= e((string) ($r['kelas_nama'] ?: '-')) ?></td>
             <td><?= e($jenisList[(string) $r['jenis']] ?? 'Lainnya') ?></td>
+            <td><?= trim((string) ($r['mapel_nama'] ?? '')) !== '' ? e((string) $r['mapel_nama']) : '-' ?></td>
             <td>
               <?php if (trim((string) ($r['judul'] ?? '')) !== ''): ?><b><?= e((string) $r['judul']) ?></b><br><?php endif; ?>
               <?= e((string) ($r['deskripsi'] ?: '-')) ?>
@@ -224,8 +268,8 @@ $qPrint = array_filter([
 
     <!-- Posisi tanda tangan: kepala sekolah/madrasah di KIRI, guru di KANAN (permintaan pemilik). -->
     <div class="sheet-foot dua-ttd">
-      <?php ttd_blok('Mengetahui, ' . jabatan_kepala(), kepala_nama(), kepala_nip(), 'sheet-sign sheet-sign-kiri'); ?>
-      <?php ttd_blok('Guru Pembina / Pencatat', (string) $guruCetak, '', 'sheet-sign sheet-sign-kanan'); ?>
+      <?php ttd_blok(ttd_mengetahui(), kepala_nama(), kepala_nip(), 'sheet-sign sheet-sign-kiri'); ?>
+      <?php ttd_blok('Guru Pembina / Pencatat', (string) $guruCetak, '', 'sheet-sign sheet-sign-kanan', true); ?>
     </div>
 
     <p class="xs mut center" style="margin-top:18px">
