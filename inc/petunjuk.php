@@ -152,7 +152,7 @@ function petunjuk_daftar(): array
                 . 'keterangan), fitur aplikasi, keunggulan, total pengguna, testimoni, tentang aplikasi, '
                 . 'dan kontak.',
                 ['Tab <b>Slider Beranda</b>: tambah slide berisi Judul Slider, foto/gambar '
-                 . '(PNG/JPG/GIF/WEBP/SVG, maks 15 MB), dan keterangan; atur urutannya dengan ▲▼.',
+                 . '(PNG/JPG/GIF/WEBP/SVG, maks ' . maks_unggah_teks() . '), dan keterangan; atur urutannya dengan ▲▼.',
                  'Tab <b>Fitur Aplikasi</b> &amp; <b>Keunggulan</b>: tambah/ubah kartu beserta ikon dan '
                  . 'keterangannya, atau sembunyikan kartu yang tidak dipakai.',
                  'Tab <b>Total Pengguna</b>: angkanya dihitung OTOMATIS dari data aplikasi — yang dapat '
@@ -167,7 +167,7 @@ function petunjuk_daftar(): array
             petunjuk_baris('Tentang Aplikasi', 'card', 'tentang.php',
                 'Mengisi kartu "Tentang Aplikasi" pada halaman masuk: dua tempat foto 3x4 dengan nama di '
                 . 'bawah masing-masing foto, dan keterangan/penjelasan di sisi kanannya.',
-                ['Isi nama yang tampil di bawah tiap foto, lalu pilih berkas fotonya (PNG/JPG/GIF/WEBP/SVG, maks 15 MB).',
+                ['Isi nama yang tampil di bawah tiap foto, lalu pilih berkas fotonya (PNG/JPG/GIF/WEBP/SVG, maks ' . maks_unggah_teks() . ').',
                  'Tulis keterangan pada kotak yang tersedia — pisahkan dengan satu baris kosong bila ingin membuat paragraf baru.',
                  'Tekan Simpan; perubahan langsung tampil pada halaman masuk (lihat kartu Pratinjau).'],
                 'Keterangan ini menggantikan deskripsi tentang aplikasi yang dahulu tertulis tetap pada '
@@ -175,7 +175,7 @@ function petunjuk_daftar(): array
             petunjuk_baris('Logo Aplikasi', 'star', 'logo.php',
                 'Mengganti lambang aplikasi dengan gambar milik sendiri — dipakai pada halaman masuk, '
                 . 'halaman pendaftaran, sidebar seluruh pengguna, dan ikon tab peramban (favicon).',
-                ['Pilih berkas gambar (PNG/JPG/GIF/WEBP/SVG, maks 15 MB), lalu tekan "Unggah / Ganti Logo".',
+                ['Pilih berkas gambar (PNG/JPG/GIF/WEBP/SVG, maks ' . maks_unggah_teks() . '), lalu tekan "Unggah / Ganti Logo".',
                  'Gunakan gambar persegi (1:1), minimal 512 x 512 piksel, agar tidak terpotong saat ditampilkan kecil.',
                  'Tombol "Kembalikan Lambang Bawaan" memulihkan lambang bawaan aplikasi.'],
                 'Berlaku untuk seluruh sekolah/madrasah (pengaturan tingkat aplikasi). Logo ini berbeda '
@@ -690,7 +690,7 @@ function petunjuk_daftar(): array
         . 'Super Admin) dan dapat dipakai semua peran — termasuk pengawas.');
     $isiAkunSaya[] = petunjuk_baris('Akun Saya', 'user', 'akun.php',
         'Profil Anda sendiri: foto profil, nama, dan penggantian kata sandi.',
-        ['Unggah foto profil dengan tombol yang tersedia (format gambar, maksimal 15 MB).',
+        ['Unggah foto profil dengan tombol yang tersedia (format gambar, maksimal ' . maks_unggah_teks() . ').',
          'Untuk mengganti sandi, isi sandi lama, sandi baru, dan ulangi sandi barunya.',
          'Riwayat nilai dan kehadiran yang terkait akun ini tampil ringkas di halaman yang sama.'],
         'Jaga kerahasiaan sandi Anda; seluruh catatan yang dibuat tercatat atas nama akun ini.');

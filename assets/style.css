@@ -1475,6 +1475,36 @@ dialog.popup-peringatan{border-top:3px solid #b8860b}
 }
 @media print{dialog.popup{display:none !important}}
 
+/* ===== POPUP WAJIB GANTI KATA SANDI (v1.74.0) =====
+   Muncul bila sandi akun belum memenuhi kebijakan (lihat sandi_wajib_ganti() + gerbang_sandi()).
+   TIDAK ada tombol Tutup: satu-satunya jalan adalah mengganti sandi (atau keluar).
+   Warna memakai token tema supaya ikut berganti bila Super Admin mengganti tema aplikasi. */
+dialog.popup-wajib-sandi{border-top:3px solid var(--maroon)}
+.popup-wajib-sandi .popup-isi{padding:22px 24px 20px;display:grid;gap:12px}
+.popup-wajib-sandi h2{margin:0;font-size:1.16rem;color:var(--maroon);line-height:1.35}
+.popup-wajib-sandi p{margin:0;font-size:.92rem}
+.popup-ikon{
+  width:52px;height:52px;border-radius:50%;display:grid;place-items:center;
+  background:rgba(var(--accent-rgb),.10);color:var(--maroon);
+}
+.popup-kebijakan{
+  background:rgba(var(--accent-rgb),.07);border:1px solid rgba(var(--accent-rgb),.18);
+  border-radius:10px;padding:10px 12px;font-size:.88rem!important;
+}
+.popup-aksi{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px}
+@media (max-width:520px){
+  .popup-wajib-sandi .popup-isi{padding:18px 15px 16px}
+  .popup-aksi .btn{width:100%;justify-content:center}
+}
+/* Banner pengingat pada halaman lain yang tetap boleh dibuka (mis. Status & Aktivasi). */
+.banner-sandi{
+  display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;
+  border:1px solid var(--maroon);border-left:5px solid var(--maroon);border-radius:12px;
+  background:rgba(109,27,37,.06);padding:11px 14px;margin:0 0 16px;font-size:.9rem;
+}
+.banner-sandi b{color:var(--maroon)}
+.banner-sandi .btn{white-space:nowrap}
+
 /* ===== Pratinjau IMPOR DATA SISWA (siswa_import.php) =====
    13 kolom (NIS, NISN, Nama, JK, Tempat Lahir, Tanggal Lahir, No. HP, Ayah, Ibu, Wali, Kelas,
    Status) sehingga tabelnya lebih lebar daripada tabel biasa — dibuat lebih rapat agar muat

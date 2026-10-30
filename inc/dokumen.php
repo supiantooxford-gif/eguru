@@ -80,7 +80,10 @@ function dok_batas_server(): int
     if ($up > 0) {
         $kandidat[] = $up;
     }
-    $min = $kandidat ? min($kandidat) : 8 * 1024 * 1024;
+    // Batas aplikasi (UNGGAH_MAKS_BYTE, 2 MB) ikut diperhitungkan supaya angka yang DITAMPILKAN
+    // pada formulir = batas yang benar-benar ditegakkan.
+    $kandidat[] = UNGGAH_MAKS_BYTE;
+    $min = min($kandidat);
     return max(1024 * 1024, $min);
 }
 
@@ -197,6 +200,13 @@ function dok_validasi(string $namaAsli, int $ukuran, string $tmpPath): array
     if ($jenis === 'gambar' && $ext !== 'svg') {
         if (@getimagesize($tmpPath) === false) {
             return $gagal('Berkas ini sepertinya bukan gambar yang sah.');
+        }
+    } elseif ($ext === 'svg') {
+        // SVG adalah dokumen yang boleh memuat skrip → isinya WAJIB diperiksa (stored XSS).
+        $isiSvg = (string) @file_get_contents($tmpPath, false, null, 0, 2 * 1024 * 1024 + 1);
+        $cekSvg = svg_aman($isiSvg);
+        if (empty($cekSvg['ok'])) {
+            return $gagal((string) $cekSvg['pesan']);
         }
     } elseif ($ext === 'pdf') {
         if (strpos($kepala, '%PDF') === false) {

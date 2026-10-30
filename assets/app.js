@@ -294,7 +294,7 @@
     var btn = document.getElementById('btnFoto');
     var form = document.getElementById('formFoto');
     var status = document.getElementById('fotoStatus');
-    var MAKS = 15 * 1024 * 1024;
+    var MAKS = 2 * 1024 * 1024;   // batas per berkas 2 MB (UNGGAH_MAKS_BYTE di inc/config.php)
     var OK = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
 
     function mb(b) { return (b / 1048576).toFixed(b < 1048576 ? 2 : 1).replace('.', ',') + ' MB'; }
@@ -310,7 +310,7 @@
         return;
       }
       if (f.size > MAKS) {
-        hint.innerHTML = '<b style="color:#b91c1c">Terlalu besar (' + mb(f.size) + ').</b> Maksimal 15 MB — perkecil dulu fotonya.';
+        hint.innerHTML = '<b style="color:#b91c1c">Terlalu besar (' + mb(f.size) + ').</b> Maksimal 2 MB — perkecil dulu fotonya.';
         if (wrap) wrap.hidden = true;
         if (btn) btn.disabled = true;
         return;
@@ -350,7 +350,7 @@
     var btn = document.getElementById('btnSiswa');
     var hapus = document.getElementById('hapusFoto');
     var form = document.getElementById('formSiswa');
-    var MAKS = 15 * 1024 * 1024;
+    var MAKS = 2 * 1024 * 1024;   // batas per berkas 2 MB (UNGGAH_MAKS_BYTE di inc/config.php)
     var OK = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
 
     function mb(b) { return (b / 1048576).toFixed(b < 1048576 ? 2 : 1).replace('.', ',') + ' MB'; }
@@ -365,7 +365,7 @@
         return;
       }
       if (f.size > MAKS) {
-        if (hint) hint.innerHTML = '<b style="color:#b91c1c">Terlalu besar (' + mb(f.size) + ').</b> Maksimal 15 MB &mdash; perkecil dulu fotonya.';
+        if (hint) hint.innerHTML = '<b style="color:#b91c1c">Terlalu besar (' + mb(f.size) + ').</b> Maksimal 2 MB &mdash; perkecil dulu fotonya.';
         inp.value = '';
         return;
       }
@@ -421,7 +421,7 @@
     if (!form) return;
     var btn = document.getElementById('btnTentang');
     var status = document.getElementById('tentangStatus');
-    var MAKS = 15 * 1024 * 1024;
+    var MAKS = 2 * 1024 * 1024;   // batas per berkas 2 MB (UNGGAH_MAKS_BYTE di inc/config.php)
     var OK = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
 
     function mb(b) { return (b / 1048576).toFixed(b < 1048576 ? 2 : 1).replace('.', ',') + ' MB'; }
@@ -451,7 +451,7 @@
           return;
         }
         if (f.size > MAKS) {
-          if (hint) hint.innerHTML = '<b style="color:#b91c1c">Terlalu besar (' + mb(f.size) + ').</b> Maksimal 15 MB.';
+          if (hint) hint.innerHTML = '<b style="color:#b91c1c">Terlalu besar (' + mb(f.size) + ').</b> Maksimal 2 MB.';
           if (btn) btn.disabled = true;
           return;
         }
@@ -482,7 +482,7 @@
     var hint = document.getElementById('logoHint');
     var btn = document.getElementById('btnLogo');
     var status = document.getElementById('logoStatus');
-    var MAKS = 15 * 1024 * 1024;
+    var MAKS = 2 * 1024 * 1024;   // batas per berkas 2 MB (UNGGAH_MAKS_BYTE di inc/config.php)
     var OK = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
 
     function mb(b) { return (b / 1048576).toFixed(b < 1048576 ? 2 : 1).replace('.', ',') + ' MB'; }
@@ -498,7 +498,7 @@
         return;
       }
       if (f.size > MAKS) {
-        hint.innerHTML = '<b style="color:#b91c1c">Terlalu besar (' + mb(f.size) + ').</b> Maksimal 15 MB — perkecil dulu berkasnya.';
+        hint.innerHTML = '<b style="color:#b91c1c">Terlalu besar (' + mb(f.size) + ').</b> Maksimal 2 MB — perkecil dulu berkasnya.';
         if (wrap) wrap.hidden = true;
         if (btn) btn.disabled = true;
         return;
@@ -701,7 +701,7 @@
     var btn = document.getElementById('btnFotoNotulen');
     var form = document.getElementById('formFotoNotulen');
     var status = document.getElementById('fotoNotulenStatus');
-    var MAKS = 15 * 1024 * 1024;
+    var MAKS = 2 * 1024 * 1024;   // batas per berkas 2 MB (UNGGAH_MAKS_BYTE di inc/config.php)
     var OK = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
 
     function mb(b) { return (b / 1048576).toFixed(b < 1048576 ? 2 : 1).replace('.', ',') + ' MB'; }
@@ -717,7 +717,7 @@
         return;
       }
       if (f.size > MAKS) {
-        hint.innerHTML = '<b style="color:#b91c1c">Terlalu besar (' + mb(f.size) + ').</b> Maksimal 15 MB — perkecil dulu fotonya.';
+        hint.innerHTML = '<b style="color:#b91c1c">Terlalu besar (' + mb(f.size) + ').</b> Maksimal 2 MB — perkecil dulu fotonya.';
         if (wrap) wrap.hidden = true;
         if (btn) btn.disabled = true;
         return;
@@ -1700,7 +1700,29 @@
     });
   }
 
+  /**
+   * POPUP WAJIB GANTI KATA SANDI (v1.74.0).
+   * Dialog sudah dicetak dengan atribut `open` (tetap terlihat walau skrip gagal dimuat); di sini
+   * dinaikkan menjadi MODAL (showModal) supaya latar halaman tidak dapat diklik sebelum sandi
+   * diganti. Tidak ada tombol Tutup — sengaja (lihat gerbang_sandi() di inc/helpers.php).
+   */
+  function initWajibSandi() {
+    var d = document.getElementById('popupWajibSandi');
+    if (!d || !d.showModal) { return; }
+    if (!d.hasAttribute('open')) { try { d.showModal(); } catch (e) {} }
+    // Esc juga tidak boleh menutup popup wajib ini.
+    d.addEventListener('cancel', function (ev) { ev.preventDefault(); });
+    var tombol = document.getElementById('btnGantiSandiSekarang');
+    if (tombol) {
+      tombol.addEventListener('click', function () {
+        var isian = document.getElementById('sandi_baru');
+        if (isian) { setTimeout(function () { isian.focus(); }, 60); }
+      });
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
+    initWajibSandi();
     initNav();
     initConfirm();
     initTableSearch();

@@ -46,11 +46,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (one('SELECT id FROM users WHERE username = ? AND id <> ?', [$username, $id])) {
             $galat[] = 'Nama pengguna "' . $username . '" sudah dipakai (harus unik se-aplikasi).';
         }
-        if ($aksi === 'tambah' && strlen($sandi) < 6) {
-            $galat[] = 'Kata sandi minimal 6 karakter.';
+        if ($aksi === 'tambah' && !sandi_pemeriksa($sandi, false)['ok']) {
+            $galat[] = 'Kata sandi minimal ' . SANDI_MIN . ' karakter.';
         }
-        if ($aksi === 'ubah' && $sandi !== '' && strlen($sandi) < 6) {
-            $galat[] = 'Kata sandi baru minimal 6 karakter.';
+        if ($aksi === 'ubah' && $sandi !== '' && !sandi_pemeriksa($sandi, false)['ok']) {
+            $galat[] = 'Kata sandi baru minimal ' . SANDI_MIN . ' karakter.';
         }
         if ($role === 'guru' && $guruId <= 0) {
             $galat[] = 'Akun guru harus ditautkan ke salah satu data guru.';
@@ -70,6 +70,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($aksi === 'tambah') {
             q('INSERT INTO users (sekolah_id, username, password_hash, nama, role, guru_id, aktif, dibuat) VALUES (?,?,?,?,?,?,?,?)',
                 [$sekolahAkun, $username, password_hash($sandi, PASSWORD_DEFAULT), $nama, $role, $taut, $aktif, date('Y-m-d H:i:s')]);
+            // Sandi lemah (mis. guru123) → akun WAJIB mengganti sandi saat masuk pertama.
+            if (sandi_lemah_dasar($sandi)) {
+                q('UPDATE users SET sandi_wajib_ganti = 1 WHERE username = ?', [$username]);
+            }
             flash('Pengguna ' . $nama . ' (' . role_label($role) . ') ditambahkan.');
         } else {
             if ($id === $aku && ($role !== 'super' || $aktif !== 1)) {
@@ -84,7 +88,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             q('UPDATE users SET username=?, nama=?, role=?, guru_id=?, sekolah_id=?, aktif=? WHERE id=?',
                 [$username, $nama, $role, $taut, $sekolahAkun, $aktif, $id]);
             if ($sandi !== '') {
-                q('UPDATE users SET password_hash = ? WHERE id = ?', [password_hash($sandi, PASSWORD_DEFAULT), $id]);
+                // sandi_simpan() sekaligus menandai wajib-ganti bila sandinya lemah.
+                sandi_simpan($id, $sandi, sandi_lemah_dasar($sandi));
             }
             flash('Pengguna ' . $nama . ' diperbarui.');
         }
@@ -107,6 +112,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $sandi = guru_sandi_awal($g);
                 q('INSERT INTO users (sekolah_id, username, password_hash, nama, role, guru_id, aktif, dibuat) VALUES (?,?,?,?,?,?,1,?)',
                     [$sid, $username, password_hash($sandi, PASSWORD_DEFAULT), $g['nama'], 'guru', (int) $g['id'], date('Y-m-d H:i:s')]);
+                // Sandi awal (guru123) selalu ditandai wajib ganti saat guru pertama kali masuk.
+                q('UPDATE users SET sandi_wajib_ganti = 1 WHERE username = ?', [$username]);
                 $daftar[] = $username . ' / ' . $sandi;
                 $n++;
             }
@@ -131,10 +138,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($aksi === 'reset') {
         $sandi = (string) ($_POST['password'] ?? '');
-        if (strlen($sandi) < 6) {
-            flash('Kata sandi baru minimal 6 karakter.', 'err');
+        if (!sandi_pemeriksa($sandi, false)['ok']) {
+            flash('Kata sandi baru minimal ' . SANDI_MIN . ' karakter.', 'err');
         } else {
-            q('UPDATE users SET password_hash = ? WHERE id = ?', [password_hash($sandi, PASSWORD_DEFAULT), $id]);
+            // Reset oleh Super Admin: sandi lemah → pemilik akun WAJIB menggantinya saat masuk.
+            sandi_simpan($id, $sandi, sandi_lemah_dasar($sandi));
             flash('Kata sandi ' . $target['nama'] . ' berhasil diganti.');
         }
     } elseif ($aksi === 'toggle') {
@@ -268,7 +276,7 @@ page_top($lintas ? 'Akun Super Admin' : 'Pengguna & Akun: ' . nama_sekolah_tampi
       <?php endif; ?>
       <div>
         <label class="f" for="password">Kata Sandi <?= $edit ? '(kosongkan bila tidak diubah)' : '*' ?></label>
-        <input type="password" id="password" name="password" <?= $edit ? '' : 'required' ?> minlength="6">
+        <input type="password" id="password" name="password" <?= $edit ? '' : 'required' ?> minlength="<?= (int) SANDI_MIN ?>">
       </div>
       <label class="f" style="display:flex;gap:9px;align-items:center;font-weight:600;margin:0">
         <input type="checkbox" name="aktif" value="1" <?= (int) ($edit['aktif'] ?? 1) === 1 ? 'checked' : '' ?> style="width:16px;height:16px;accent-color:var(--hijau)">

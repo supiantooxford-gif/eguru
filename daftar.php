@@ -73,6 +73,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ((int) $_SESSION['daftar_jumlah'] >= 3) {
         $err[] = 'Anda sudah mengirim 3 pendaftaran pada sesi ini. Hubungi Admin bila perlu menambah lagi.';
     }
+    // KEAMANAN (v1.73.4): batas di atas hanya berbasis SESI, jadi dapat dilewati dengan mengosongkan
+    // cookie. Pembatas per ALAMAT IP PUBLIK di bawah menutup celah itu (pembuatan sekolah tanpa
+    // henti akan membengkakkan basis data & menghabiskan kuota penyimpanan). IP privat/loopback
+    // dilewati supaya pengujian lokal tetap berjalan.
+    $ipDaftar = log_ip();
+    if (throttle_ip_layak($ipDaftar)
+        && throttle_jumlah('daftar:' . $ipDaftar, PUBLIK_DAFTAR_MENIT) >= PUBLIK_DAFTAR_MAKS) {
+        $err[] = 'Terlalu banyak pendaftaran dari jaringan ini dalam waktu singkat. '
+            . 'Coba lagi dalam ' . PUBLIK_DAFTAR_MENIT . ' menit atau hubungi Admin aplikasi.';
+    }
     if ($nilai['nama'] === '') {
         $err[] = 'Nama sekolah/madrasah wajib diisi.';
     }
@@ -169,6 +179,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Akunnya TIDAK dapat dipakai masuk sampai Super Admin meninjau & mengaktifkannya.
         $pengawasBaru = pengawas_dari_pendaftaran($sid, (string) $nilai['pengawas_nama']);
         $_SESSION['daftar_jumlah'] = (int) $_SESSION['daftar_jumlah'] + 1;
+        // Catat pada pembatas per IP hanya pendaftaran yang BENAR-BENAR tersimpan (v1.73.4).
+        if (throttle_ip_layak($ipDaftar)) {
+            throttle_lewat('daftar:' . $ipDaftar, PUBLIK_DAFTAR_MAKS, PUBLIK_DAFTAR_MENIT);
+        }
         unset($_SESSION['daftar_captcha'], $_SESSION['daftar_captcha2']);
         $sukses = [
             'nama' => $nilai['nama'],

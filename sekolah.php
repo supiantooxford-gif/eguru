@@ -76,7 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $galat[] = 'Jenjang "' . $jenjang . '" tidak berlaku untuk jenis lembaga yang dipilih.';
         }
         if ($admNama === '' || $admUser === '' || strlen($admPass) < 6) {
-            $galat[] = 'Nama, nama pengguna, dan kata sandi (min. 6 karakter) akun pengelola wajib diisi.';
+            $galat[] = 'Nama, nama pengguna, dan kata sandi (min. ' . SANDI_MIN . ' karakter) akun pengelola wajib diisi.';
         }
         if ($admUser !== '' && one('SELECT id FROM users WHERE username = ?', [$admUser])) {
             $galat[] = 'Nama pengguna "' . $admUser . '" sudah dipakai (harus unik se-aplikasi).';
@@ -100,6 +100,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $sid = (int) db()->lastInsertId();
             q('INSERT INTO users (sekolah_id, username, password_hash, nama, role, aktif, dibuat) VALUES (?,?,?,?,?,1,?)',
                 [$sid, $admUser, password_hash($admPass, PASSWORD_DEFAULT), $admNama, $admRole, $now]);
+                if (sandi_lemah_dasar($admPass)) {
+                    q('UPDATE users SET sandi_wajib_ganti = 1 WHERE username = ?', [$admUser]);
+                }
             provision_sekolah(db(), $sid);
             db()->exec('COMMIT');
         } catch (Throwable $ex) {
@@ -169,13 +172,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $username = trim((string) ($_POST['username'] ?? ''));
         $sandi = (string) ($_POST['password'] ?? '');
         $role = in_array((string) ($_POST['role'] ?? ''), ['kepala', 'operator'], true) ? (string) $_POST['role'] : 'kepala';
-        if ($nama === '' || $username === '' || strlen($sandi) < 6) {
-            flash('Nama, nama pengguna, dan kata sandi (min. 6 karakter) wajib diisi.', 'err');
+        if ($nama === '' || $username === '' || !sandi_pemeriksa($sandi, false)['ok']) {
+            flash('Nama, nama pengguna, dan kata sandi (min. ' . SANDI_MIN . ' karakter) wajib diisi.', 'err');
         } elseif (one('SELECT id FROM users WHERE username = ?', [$username])) {
             flash('Nama pengguna "' . $username . '" sudah dipakai.', 'err');
         } else {
             q('INSERT INTO users (sekolah_id, username, password_hash, nama, role, aktif, dibuat) VALUES (?,?,?,?,?,1,?)',
                 [$id, $username, password_hash($sandi, PASSWORD_DEFAULT), $nama, $role, date('Y-m-d H:i:s')]);
+            if (sandi_lemah_dasar($sandi)) {
+                q('UPDATE users SET sandi_wajib_ganti = 1 WHERE username = ?', [$username]);
+            }
             flash('Akun ' . role_label($role) . ' untuk ' . nama_sekolah_tampil($s) . ' dibuat: ' . $username . '.');
         }
         redirect('sekolah.php?edit=' . $id);
@@ -563,7 +569,7 @@ page_top('Kelola Sekolah/Madrasah', 'Super Admin &middot; ' . count($daftar) . '
       </div>
       <div>
         <label class="f" for="admin_password">Kata Sandi * (min. 6 karakter)</label>
-        <input type="password" id="admin_password" name="admin_password" minlength="6" required>
+        <input type="password" id="admin_password" name="admin_password" minlength="<?= (int) SANDI_MIN ?>" required>
       </div>
       <div class="form-actions">
         <button class="btn btn-primary" type="submit"><?= ikon('plus', 16) ?> Tambah Sekolah/Madrasah</button>
@@ -737,7 +743,7 @@ page_top('Kelola Sekolah/Madrasah', 'Super Admin &middot; ' . count($daftar) . '
             </div>
             <div>
               <label class="f" for="akun_pass">Kata Sandi * (min. 6)</label>
-              <input type="password" id="akun_pass" name="password" minlength="6" required>
+              <input type="password" id="akun_pass" name="password" minlength="<?= (int) SANDI_MIN ?>" required>
             </div>
           </div>
           <button class="btn btn-ghost" type="submit"><?= ikon('plus', 16) ?> Tambah akun</button>

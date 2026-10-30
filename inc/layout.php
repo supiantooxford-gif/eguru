@@ -773,6 +773,22 @@ function page_top(string $judul, string $sub = ''): void
     </div>
   <?php endforeach; ?>
 
+  <?php
+  // BANNER WAJIB GANTI KATA SANDI (v1.74.0). Seluruh halaman pengelolaan sudah dialihkan ke
+  // akun.php oleh gerbang_sandi(); banner ini untuk halaman yang tetap BOLEH dibuka (Status &
+  // Aktivasi, Akun Saya) supaya pengguna tahu mengapa menunya terbatas. Di akun.php sendiri
+  // sudah ada popup + kartu formulir, jadi bannernya tidak dicetak.
+  $__berkasSandi = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+  if (sandi_wajib_ganti() && $__berkasSandi !== 'akun.php') { ?>
+    <div class="banner-sandi" id="bannerWajibSandi">
+      <?= ikon('lock', 18) ?>
+      <span><b>Kata sandi Anda wajib diganti.</b> Menu lain belum dapat dibuka sampai kata sandi
+        memenuhi kebijakan (<?= e(sandi_kebijakan_teks()) ?>).</span>
+      <a class="btn btn-primary btn-sm" href="akun.php?wajib_sandi=1#cardSandi">Ganti Sekarang</a>
+    </div>
+  <?php }
+  unset($__berkasSandi); ?>
+
   <div class="content">
 <?php
     // Popup "Selamat datang" (pengumuman sambutan): dicetak page_bottom() di akhir halaman,

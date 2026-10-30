@@ -364,7 +364,7 @@ page_top('Identitas & Pengaturan');
               <span class="xs mut" id="logoUkuran"><?= e(istilah_sekolah('Sekolah')) ?></span>
             </div>
             <div>
-              <div class="hint" id="logoHint">Maksimal 15 MB. Disarankan PNG/SVG persegi latar transparan.</div>
+              <div class="hint" id="logoHint">Maksimal <?= e(maks_unggah_teks()) ?>. Disarankan PNG/SVG persegi latar transparan.</div>
               <div class="form-actions">
                 <button class="btn btn-primary" id="btnLogo" type="submit"><?= ikon('upload', 16) ?> <?= ada_logo() ? 'Ganti logo' : 'Unggah logo' ?></button>
                 <span class="xs mut" id="logoStatus"></span>

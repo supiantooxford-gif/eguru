@@ -132,6 +132,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $sandi = guru_sandi_awal($baru);
                     q('INSERT INTO users (sekolah_id, username, password_hash, nama, role, guru_id, aktif, dibuat) VALUES (?,?,?,?,?,?,1,?)',
                         [sekolah_id(), $username, password_hash($sandi, PASSWORD_DEFAULT), $nama, 'guru', $gid, $now]);
+                    // Sandi awal guru123 → WAJIB diganti guru saat masuk pertama (v1.74.0).
+                    q('UPDATE users SET sandi_wajib_ganti = ? WHERE username = ?',
+                        [sandi_lemah_dasar($sandi) ? 1 : 0, $username]);
                     $akunBaru++;
                 }
             }

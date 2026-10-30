@@ -44,7 +44,7 @@ page_top('Logo Aplikasi', 'Super Admin &middot; logo aplikasi pada halaman masuk
     <div class="alert alert-info">
       <?= ikon('alert', 16) ?>
       <span>Disarankan gambar <b>persegi (1:1)</b>, minimal <b>512 x 512 piksel</b>, format
-        <b>PNG</b> (latar transparan) atau <b>SVG</b>, maksimal 15 MB. Logo tampil kecil (46–62 px),
+        <b>PNG</b> (latar transparan) atau <b>SVG</b>, maksimal <?= e(maks_unggah_teks()) ?>. Logo tampil kecil (46–62 px),
         jadi hindari detail yang terlalu halus.</span>
     </div>
 
@@ -93,7 +93,7 @@ page_top('Logo Aplikasi', 'Super Admin &middot; logo aplikasi pada halaman masuk
       <div>
         <label class="f" for="fileLogoApp">Pilih Berkas Logo *</label>
         <input type="file" id="fileLogoApp" name="logo" accept="image/*" required>
-        <div class="hint" id="pesanLogoApp">PNG, JPG, GIF, WEBP, atau SVG — maksimal 15 MB.</div>
+        <div class="hint" id="pesanLogoApp">PNG, JPG, GIF, WEBP, atau SVG — maksimal <?= e(maks_unggah_teks()) ?>.</div>
       </div>
       <div class="form-actions">
         <button class="btn btn-primary" type="submit"><?= ikon('upload', 16) ?> Unggah / Ganti Logo</button>
@@ -141,8 +141,8 @@ page_top('Logo Aplikasi', 'Super Admin &middot; logo aplikasi pada halaman masuk
     var f = inp.files && inp.files[0];
     var pesan = document.getElementById('pesanLogoApp');
     if (!f) { return; }
-    if (f.size > 15 * 1024 * 1024) {
-      if (pesan) { pesan.textContent = 'Ukuran gambar maksimal 15 MB.'; }
+    if (f.size > <?= (int) UNGGAH_MAKS_BYTE ?>) {
+      if (pesan) { pesan.textContent = 'Ukuran gambar maksimal <?= e(maks_unggah_teks()) ?>.'; }
       inp.value = '';
       return;
     }

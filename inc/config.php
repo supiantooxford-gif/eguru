@@ -10,6 +10,21 @@ declare(strict_types=1);
 
 define('APP_NAME', 'e-GURU');
 define('APP_SUB', 'Administrasi Guru Digital');
+
+/**
+ * BATAS UKURAN SATU BERKAS UNGGAHAN (permintaan pemilik v1.74.0):
+ * *"Ukuran maksimal 20,00 MB per berkas buat maksimal 2MB agar tidak memberatkan sistem
+ * penyimpanan."* → SATU batas untuk SEMUA jenis berkas (gambar, dokumen, maupun video).
+ *
+ * ⚠️ Konstanta ini diletakkan di AWAL berkas karena konstanta turunannya (DOK_MAKS_*,
+ * FOTO_MAKS_BYTE, TENTANG_FOTO_MAKS_BYTE) memakainya — `const` dievaluasi berurutan.
+ *
+ * Ubah HANYA baris `UNGGAH_MAKS_BYTE` bila batasnya berganti; seluruh tempat lain
+ * (foto profil, logo sekolah/lembaga, pas foto siswa, foto notulen, foto landing, kirim dokumen,
+ * kirim perangkat, tanda tangan) membaca nilai turunannya — dan teks yang tampil ke pengguna
+ * memakai maks_unggah_teks() supaya tidak ada angka yang ditulis mati di halaman.
+ */
+const UNGGAH_MAKS_BYTE = 2 * 1024 * 1024;          // 2 MB per berkas
 // 1.16.0 = menu Wali Kelas (skema v29); 1.17.0 = Super Admin dapat MENAMBAH tugas tambahan baru
 // pada menu Kelola Tugas Tambahan (kode menu dibuat otomatis dari namanya);
 // 1.18.0 = SATU daftar Tugas Tambahan: pilihan pada Data Guru bersumber dari `tugas_menu`
@@ -584,8 +599,58 @@ define('APP_SUB', 'Administrasi Guru Digital');
 //   Hari)" pada `daftar.php`/`pendaftaran.php` serta panduan Pendaftaran (`inc/petunjuk.php`) kini
 //   memakai konstanta itu (dulu satu tempat di kartu sukses masih menulis angka 30 mati).
 //   Pilihan masa uji coba manual Super Admin (30/60/90 hari) TIDAK berubah.
+// 1.73.4 = **PENGUATAN KEAMANAN (hasil audit)** — tanpa perubahan tampilan:
+//   (a) **CSRF**: token kini HANYA diterima dari BADAN permintaan atau kepala `X-CSRF-Token`
+//       (`csrf_ok()`), bukan lagi dari query string (`?csrf=…`) yang mudah bocor lewat Referer,
+//       riwayat peramban, atau log; token juga DIPUTAR setelah berhasil masuk (`csrf_putar()`)
+//       supaya token sesi tamu tidak tetap sah setelah hak akses berubah;
+//   (b) **sandi konfirmasi hapus sekolah** tidak lagi dibandingkan sebagai teks dari kode sumber:
+//       disimpan sebagai hash bcrypt di `app_pengaturan` (`sekolah_hapus_hash`) dan percobaannya
+//       dibatasi 5 kali / 10 menit per akun (`SEKOLAH_HAPUS_COBA`/`SEKOLAH_HAPUS_MENIT`);
+//   (c) **isi berkas SVG diperiksa** (`svg_aman()`): SVG yang memuat `<script>`, penanganan
+//       peristiwa `on…`, `javascript:`, `<!DOCTYPE`/entitas eksternal, atau `<foreignObject>`
+//       DITOLAK — sebelumnya SVG lolos tanpa pemeriksaan isi (bisa menjadi stored XSS);
+//   (d) **batas jangka panjang masuk siswa**: selain 10 percobaan / 10 menit, kegagalan untuk satu
+//       NISN dibatasi `LOGIN_MAKS_GAGAL_SISWA_NISN` (25) per `LOGIN_JAM_GAGAL_SISWA` (24 jam) —
+//       kata sandi siswa berupa tanggal lahir hanya berentropi ±13 bit;
+//   (e) **pembatas per alamat IP** untuk dua endpoint publik yang sebelumnya hanya dibatasi per
+//       sesi (mudah dilewati dengan cookie baru): pendaftaran sekolah (`PUBLIK_DAFTAR_MAKS`/jam)
+//       dan formulir pesan halaman depan (`PUBLIK_PESAN_MAKS`/jam). Tabel `throttle` (skema v57);
+//       IP privat/loopback dilewati supaya pengujian lokal tidak terkunci.
+// 1.74.0 = DUA PERMINTAAN PEMILIK (skema v58):
+//   (1) **BATAS UKURAN BERKAS 2 MB** — *"Ukuran maksimal 20,00 MB per berkas buat maksimal 2MB agar
+//       tidak memberatkan sistem penyimpanan."* Satu konstanta **`UNGGAH_MAKS_BYTE = 2 MB`** di
+//       AWAL berkas ini; `DOK_MAKS_GAMBAR`/`DOK_MAKS_VIDEO`/`DOK_MAKS_DOKUMEN`, `FOTO_MAKS_BYTE`,
+//       dan `TENTANG_FOTO_MAKS_BYTE` semuanya menurunkannya (video tidak lagi 300 MB, dokumen tidak
+//       lagi 50 MB). `dok_batas_server()` juga dibatasi 2 MB supaya angka yang ditampilkan pada
+//       formulir = batas yang benar-benar ditegakkan; seluruh keterangan halaman memakai
+//       `maks_unggah_teks()`/`ukuran_berkas_teks()` (tidak ada angka mati) dan `assets/app.js`
+//       memakai 2 MB.
+//   (2) **KEBIJAKAN KATA SANDI + POPUP WAJIB GANTI** — *"Pada akun yang Sandinya saat ini masih
+//       minimal 6 karakter + sandi awal guru123/admin123 tampilkan popup agar wajib ganti dan
+//       mengubah minimal jadi 8 karakter dengan kombinasi Huruf besar, kecil dan angka demi
+//       keamanan akun."* Aturannya:
+//         • `SANDI_MIN = 8` + wajib huruf besar, huruf kecil, dan angka (`sandi_pemeriksa()`);
+//         • kolom **`users.sandi_wajib_ganti`** (skema **v58**) + `users.sandi_diubah`;
+//         • migrasi v58 menandai SELURUH akun yang sudah ada saat kebijakan dipasang (sandi lama
+//           tidak dapat dibuktikan memenuhi kebijakan — hash bcrypt tidak menyimpan panjang sandi);
+//           penanda sekali-jalan `app_pengaturan.sandi_kebijakan_v1` mencegah penandaan ulang, dan
+//           **instalasi baru tidak ditandai** (akun bawaan langsung bisa dipakai);
+//         • **`gerbang_sandi()`** (dipanggil `require_login()`) mengalihkan semua halaman ke
+//           `akun.php?wajib_sandi=1` selama sandi belum diganti; berkas bebas: akun.php,
+//           upload_foto.php, logout.php, login.php, aktivasi.php, chat.php, daftar.php, lembaga.php;
+//           permintaan JSON dijawab 403 JSON;
+//         • **popup** `<dialog id="popupWajibSandi">` di akun.php (tanpa tombol Tutup, `open` dari
+//           server sehingga tetap terlihat walau skrip gagal) + banner `#bannerWajibSandi` pada
+//           halaman yang tetap boleh dibuka;
+//         • sandi awal **guru123** tetap boleh dibuat (dibagikan operator) tetapi akunnya DITANDAI
+//           wajib ganti — begitu pula sandi lemah lain (daftar `SANDI_LEMAH`);
+//         • validasi 6 → 8 karakter di SEMUA jalur (akun.php, pengguna.php, akun_operator.php,
+//           pengawas.php, sekolah.php, pengguna reset) dan atribut `minlength` memakai SANDI_MIN;
+//         • peran SISWA dikecualikan (sandinya tanggal lahir, tidak tersimpan & tidak dapat diganti).
+//       Uji: `bash tests_eguru_sandi_berkas.sh` (62).
 // (Versi ditulis ulang terakhir setelah SELURUH berkas aplikasi selesai disentuh.)
-define('APP_VERSION', '1.73.3');
+define('APP_VERSION', '1.74.0');
 // Unggahan berkas (logo sekolah) lewat media proxy platform. Token dibaca server-side
 // dari berkas .vibecoder-media-token dan TIDAK pernah dikirim ke browser.
 // AKTIVASI sekolah/madrasah: cadangan kunci rahasia generator KODE AKTIVASI.
@@ -792,9 +857,12 @@ const LAB_KET_MAKS  = 300;
 const DOK_EKSTENSI_GAMBAR  = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
 const DOK_EKSTENSI_VIDEO   = ['mp4', 'webm', 'mov'];
 const DOK_EKSTENSI_DOKUMEN = ['pdf', 'docx', 'xlsx', 'pptx', 'csv', 'txt', 'zip'];
-const DOK_MAKS_GAMBAR  = 15 * 1024 * 1024;    // 15 MB (batas platform untuk gambar)
-const DOK_MAKS_VIDEO   = 300 * 1024 * 1024;   // 300 MB (batas platform untuk video)
-const DOK_MAKS_DOKUMEN = 50 * 1024 * 1024;    // 50 MB (batas platform untuk dokumen)
+// Batas ukuran per jenis: SEMUA disamakan ke UNGGAH_MAKS_BYTE (2 MB) atas permintaan pemilik —
+// "agar tidak memberatkan sistem penyimpanan". Video ikut 2 MB, jadi video panjang sebaiknya
+// ditautkan (mis. tautan YouTube) daripada diunggah.
+const DOK_MAKS_GAMBAR  = UNGGAH_MAKS_BYTE;
+const DOK_MAKS_VIDEO   = UNGGAH_MAKS_BYTE;
+const DOK_MAKS_DOKUMEN = UNGGAH_MAKS_BYTE;
 const DOK_JUDUL_MAKS   = 160;
 const DOK_CATATAN_MAKS = 600;
 // Kode menu Tugas Tambahan yang berisi fitur ini.
@@ -866,7 +934,8 @@ const TENTANG_FOTO_SLOT = 2;          // jumlah tempat foto 3x4
 const TENTANG_NAMA_MAKS = 80;         // panjang maksimal nama di bawah foto
 const TENTANG_KET_MAKS  = 3000;       // panjang maksimal keterangan/penjelasan
 const TENTANG_FOTO_RASIO = '3x4';     // informasi bagi Super Admin (kotak foto memakai rasio 3:4)
-const TENTANG_FOTO_MAKS_BYTE = 15 * 1024 * 1024;   // batas platform untuk gambar (15 MB)
+// Foto "Tentang Aplikasi" (halaman masuk) — batasnya sama dengan UNGGAH_MAKS_BYTE (lihat atas).
+const TENTANG_FOTO_MAKS_BYTE = UNGGAH_MAKS_BYTE;
 
 // ===================== JENIS LEMBAGA & PILIHAN JENJANG (skema v49, v1.68.0) =====================
 // Permintaan pemilik: *"pada yang ditandai warna biru ganti dengan Jenis Lembaga. dan pada yang saya
@@ -984,7 +1053,7 @@ const DAFTAR_APPS_BARU_HARI = 30;
 const DAFTAR_APPS_BARU_TEKS = 'Bonus';
 
 define('MEDIA_ENDPOINT', 'http://127.0.0.1:4310/api/app-media/upload');
-define('FOTO_MAKS_BYTE', 15 * 1024 * 1024); // 15 MB (batas platform untuk gambar)
+define('FOTO_MAKS_BYTE', UNGGAH_MAKS_BYTE); // batas per berkas — lihat UNGGAH_MAKS_BYTE di atas
 define('FOTO_EKSTENSI', ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg']);
 
 // Foto BUKTI KEGIATAN pada notulen rapat: maksimal 2 foto per notulen
@@ -1068,7 +1137,40 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 // lembaga berarti menghapus SELURUH datanya (guru, siswa, nilai, jurnal, akun) sehingga tidak boleh
 // bisa dijalankan karena salah klik atau karena satu permintaan POST buatan.
 // Ubah nilainya di sini bila pemilik mengganti sandi.
+// CATATAN KEAMANAN (v1.73.4): nilai ini hanya DIPAKAI SEKALI sebagai bahan pembuat hash bcrypt
+// (tabel `app_pengaturan`, kunci `sekolah_hapus_hash`). Perbandingan sandi memakai hash itu,
+// bukan teks di bawah — dan percobaannya dibatasi SEKOLAH_HAPUS_COBA kali per SEKOLAH_HAPUS_MENIT
+// menit per akun (lihat sekolah_hapus_sandi_sah() di inc/helpers.php).
 const SEKOLAH_HAPUS_SANDI = '181288';
+const SEKOLAH_HAPUS_COBA = 5;    // maksimal percobaan sandi konfirmasi hapus …
+const SEKOLAH_HAPUS_MENIT = 10;  // … dalam rentang menit ini (per akun Super Admin)
+
+// ================= KEBIJAKAN KATA SANDI (v1.74.0) =================
+// Permintaan pemilik: *"Pada akun yang Sandinya saat ini masih minimal 6 karakter + sandi awal
+// guru123/admin123 tampilkan popup agar wajib ganti dan mengubah minimal jadi 8 karakter dengan
+// kombinasi Huruf besar, kecil dan angka demi keamanan akun."*
+//
+// Aturannya:
+//   • `SANDI_MIN` = 8 karakter (naik dari 6);
+//   • wajib memuat huruf BESAR, huruf kecil, dan ANGKA (lihat sandi_pemeriksa() di inc/helpers.php);
+//   • akun yang sandinya belum memenuhi kebijakan diberi penanda `users.sandi_wajib_ganti = 1`
+//     sehingga saat masuk pengguna MELIHAT POPUP dan halaman lain dialihkan ke formulir ganti sandi
+//     (gerbang_sandi() dipanggil dari require_login());
+//   • sandi awal `guru123` (dibuat operator saat menambah/impor guru) TETAP boleh dipakai untuk
+//     masuk pertama, tetapi akunnya ditandai wajib ganti — sesuai permintaan pemilik.
+// Mengubah nilai di sini berlaku untuk seluruh aplikasi; jangan menulis angka 8 di halaman.
+const SANDI_MIN = 8;
+const SANDI_WAJIB_BESAR = true;
+const SANDI_WAJIB_KECIL = true;
+const SANDI_WAJIB_ANGKA = true;
+// Versi kebijakan: naikkan bila aturannya diperketat lagi (dipakai penanda migrasi sekali jalan).
+const SANDI_KEBIJAKAN_VERSI = '1';
+// Sandi yang sudah diketahui umum / sandi bawaan aplikasi → SELALU ditandai wajib ganti.
+const SANDI_LEMAH = [
+    'guru123', 'admin123', 'operator123', 'kepala123', 'madrasah123', 'pengawas123',
+    '123456', '1234567', '12345678', '123456789', 'password', 'password1',
+    'qwerty123', 'guru1234', 'admin1234', 'guru2024', 'admin2024', 'eguru123',
+];
 
 // ================= BATAS PERCOBAAN MASUK (ANTI BRUTE FORCE) =================
 // Permintaan pemilik: "Pastikan sistem keamanan aplikasi aman dari peretasan atau serangan hacker."
@@ -1088,6 +1190,19 @@ const LOGIN_MENIT_GAGAL = 10;
 const LOGIN_MAKS_GAGAL_IP = 30;
 const LOGIN_MAKS_GAGAL_USER = 10;
 const LOGIN_MAKS_GAGAL_SISWA = 12;
+// v1.73.4 — BATAS JANGKA PANJANG masuk SISWA. Kata sandi siswa = tanggal lahir (DDMMYYYY) yang
+// hanya berentropi ~13 bit (365–3.650 kemungkinan), sedangkan batas di atas (10 percobaan /
+// 10 menit) masih memungkinkan satu siswa ditebak habis dalam kurang dari sehari. Karena itu
+// ditambahkan batas KEDUA: jumlah kegagalan untuk SATU NISN dalam 24 jam.
+const LOGIN_JAM_GAGAL_SISWA = 24;    // rentang jendela panjang (jam)
+const LOGIN_MAKS_GAGAL_SISWA_NISN = 25; // maksimal kegagalan per NISN dalam jendela itu
+// Endpoint PUBLIK (pendaftaran sekolah & formulir pesan pada halaman depan) dibatasi per alamat
+// IP PUBLIK — pembatas lama hanya berbasis SESI sehingga cukup mengosongkan cookie untuk
+// mengulang tanpa batas. IP privat/loopback dilewati (pengujian lokal & proxy).
+const PUBLIK_DAFTAR_MAKS = 5;     // maksimal pendaftaran sekolah …
+const PUBLIK_DAFTAR_MENIT = 60;   // … per IP dalam rentang menit ini
+const PUBLIK_PESAN_MAKS = 10;     // maksimal pesan kontak halaman depan …
+const PUBLIK_PESAN_MENIT = 60;    // … per IP dalam rentang menit ini
 
 // ================= TEMPLATE WARNA KARTU PELAJAR (v1.72.1) =================
 // Permintaan pemilik: *"Pada fitur cetak kartu pelajar tambahkan pilihan template warna. Contoh desain

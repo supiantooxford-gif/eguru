@@ -174,7 +174,7 @@ page_top($s ? 'Ubah Data Siswa' : 'Tambah Data Siswa');
                   // ikut menangani berkas ini dan gagal (galat konsol). ?>
             <input type="file" id="fotoSiswa" name="foto_siswa" accept=".jpg,.jpeg,.png,.gif,.webp,.svg,image/*" style="padding:9px">
             <div class="hint" id="pasfotoHint">
-              Format JPG, PNG, GIF, WEBP, atau SVG. Maksimal 15 MB. Paling rapi bila foto <b>tegak dengan
+              Format JPG, PNG, GIF, WEBP, atau SVG. Maksimal <?= e(maks_unggah_teks()) ?>. Paling rapi bila foto <b>tegak dengan
               rasio 3 : 4</b> (mis. 240 x 320 px atau lebih besar) &mdash; foto lain tetap diterima dan
               dipotong otomatis pada kartu.
             </div>

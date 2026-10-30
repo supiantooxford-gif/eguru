@@ -86,11 +86,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (one('SELECT id FROM users WHERE username = ? AND id <> ?', [$in['username'], $in['id']])) {
             $galat[] = 'Nama pengguna "' . $in['username'] . '" sudah dipakai (harus unik se-aplikasi).';
         }
-        if ($aksi === 'tambah' && strlen($sandi) < 6) {
-            $galat[] = 'Kata sandi minimal 6 karakter.';
+        if ($aksi === 'tambah' && !sandi_pemeriksa($sandi, false)['ok']) {
+            $galat[] = 'Kata sandi minimal ' . SANDI_MIN . ' karakter.';
         }
-        if ($aksi === 'ubah' && $sandi !== '' && strlen($sandi) < 6) {
-            $galat[] = 'Kata sandi baru minimal 6 karakter.';
+        if ($aksi === 'ubah' && $sandi !== '' && !sandi_pemeriksa($sandi, false)['ok']) {
+            $galat[] = 'Kata sandi baru minimal ' . SANDI_MIN . ' karakter.';
         }
         if ($galat) {
             foreach ($galat as $g) {
@@ -107,6 +107,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 q('INSERT INTO users (sekolah_id, username, password_hash, nama, role, guru_id, aktif, dibuat)
                    VALUES (?,?,?,?,"operator",NULL,?,?)',
                     [$sid, $in['username'], password_hash($sandi, PASSWORD_DEFAULT), $in['nama'], $in['aktif'], date('Y-m-d H:i:s')]);
+                if (sandi_lemah_dasar($sandi)) {
+                    // Sandi lemah (mis. guru123/12345678) → pemilik akun WAJIB menggantinya nanti.
+                    q('UPDATE users SET sandi_wajib_ganti = 1 WHERE username = ?', [$in['username']]);
+                }
                 // Sandi ditampilkan SEKALI pada halaman berikutnya (disimpan teracak di basis data).
                 $_SESSION['operator_sandi_sekali'] = ['username' => $in['username'], 'sandi' => $sandi];
                 flash('Akun operator ' . $in['nama'] . ' dibuat. Berikan nama pengguna & kata sandi kepada yang bersangkutan.');
@@ -114,7 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 q('UPDATE users SET username = ?, nama = ?, aktif = ? WHERE id = ? AND sekolah_id = ? AND role = "operator"',
                     [$in['username'], $in['nama'], $in['aktif'], (int) $target['id'], $sid]);
                 if ($sandi !== '') {
-                    q('UPDATE users SET password_hash = ? WHERE id = ?', [password_hash($sandi, PASSWORD_DEFAULT), (int) $target['id']]);
+                    sandi_simpan((int) $target['id'], $sandi, sandi_lemah_dasar($sandi));
                     flash('Akun operator ' . $in['nama'] . ' diperbarui beserta kata sandinya.');
                 } else {
                     flash('Akun operator ' . $in['nama'] . ' diperbarui.');
@@ -135,7 +139,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($aksi === 'reset') {
         // "Sandi awal" = sandi acak yang ditampilkan SEKALI (pola sama dengan buat akun guru).
         $sandi = operator_sandi_acak();
-        q('UPDATE users SET password_hash = ? WHERE id = ?', [password_hash($sandi, PASSWORD_DEFAULT), (int) $target['id']]);
+        // Reset sandi oleh kepala sekolah → tandai wajib ganti bila sandinya lemah.
+        sandi_simpan((int) $target['id'], $sandi, sandi_lemah_dasar($sandi));
         $_SESSION['operator_sandi_sekali'] = ['username' => (string) $target['username'], 'sandi' => $sandi];
         flash('Sandi akun operator ' . $target['nama'] . ' ditetapkan ulang. Sandi barunya ditampilkan sekali di bawah.');
     } elseif ($aksi === 'toggle') {
@@ -227,7 +232,7 @@ page_top('Akun Operator', 'Kelola akun Admin Operator ' . istilah_sekolah('sekol
       </div>
       <div>
         <label class="f" for="password"><?= $sedangUbah ? 'Kata Sandi Baru (kosongkan bila tidak diubah)' : 'Kata Sandi * (min. 6)' ?></label>
-        <input type="password" id="password" name="password" <?= $sedangUbah ? '' : 'required' ?> minlength="6">
+        <input type="password" id="password" name="password" <?= $sedangUbah ? '' : 'required' ?> minlength="<?= (int) SANDI_MIN ?>">
         <div class="hint">Sandi disimpan teracak (tidak dapat dilihat kembali). Sampaikan langsung kepada operatornya.</div>
       </div>
       <label class="f" style="display:flex;gap:9px;align-items:center;font-weight:600">

@@ -490,7 +490,7 @@ $labelTab = [
             <div class="landing-gambar-pratinjau"><img src="<?= e($gbEdit) ?>" alt="Gambar slide"></div>
           <?php endif; ?>
           <input type="file" id="slider_foto" name="foto" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml">
-          <div class="hint">Format PNG, JPG, GIF, WEBP, atau SVG &middot; maksimal 15 MB &middot;
+          <div class="hint">Format PNG, JPG, GIF, WEBP, atau SVG &middot; maksimal <?= e(maks_unggah_teks()) ?> &middot;
             sebaiknya gambar mendatar (landscape). Mengunggah berkas baru menggantikan gambar lama.</div>
           <?php if ($gbEdit !== ''): ?>
             <label class="f mt16" style="display:flex;gap:9px;align-items:center;font-weight:600">
@@ -533,7 +533,7 @@ $labelTab = [
         <div class="mt16">
           <label class="f" for="sliderFotoBaru">Foto / gambar</label>
           <input type="file" id="sliderFotoBaru" name="foto" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml">
-          <div class="hint">Format PNG, JPG, GIF, WEBP, atau SVG &middot; maksimal 15 MB &middot;
+          <div class="hint">Format PNG, JPG, GIF, WEBP, atau SVG &middot; maksimal <?= e(maks_unggah_teks()) ?> &middot;
             sebaiknya gambar mendatar. Boleh dikosongkan dulu — slide tetap tampil dengan latar gradasi.</div>
         </div>
         <div class="form-actions">
@@ -1004,7 +1004,7 @@ $labelTab = [
             <div class="landing-foto-pratinjau"><img src="<?= e($fotoEdit) ?>" alt="Foto testimoni"></div>
           <?php endif; ?>
           <input type="file" id="testimoni_foto" name="foto" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml">
-          <div class="hint">Format PNG, JPG, GIF, WEBP, atau SVG &middot; maksimal 15 MB.
+          <div class="hint">Format PNG, JPG, GIF, WEBP, atau SVG &middot; maksimal <?= e(maks_unggah_teks()) ?>.
             Bila kosong, inisial nama yang dipakai.</div>
           <?php if ($fotoEdit !== ''): ?>
             <label class="f mt16" style="display:flex;gap:9px;align-items:center;font-weight:600">

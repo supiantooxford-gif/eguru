@@ -129,7 +129,7 @@ page_top('Tentang Aplikasi (Halaman Masuk)', 'Isi kartu Tentang Aplikasi pada ha
                      accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
                      data-pratinjau-foto="pratinjauBingkai<?= $n ?>">
               <div class="hint" id="hintFoto<?= $n ?>">
-                Format PNG, JPG, GIF, WEBP, atau SVG &middot; maksimal 15 MB &middot; sebaiknya potret <?= e(TENTANG_FOTO_RASIO) ?>.
+                Format PNG, JPG, GIF, WEBP, atau SVG &middot; maksimal <?= e(maks_unggah_teks()) ?> &middot; sebaiknya potret <?= e(TENTANG_FOTO_RASIO) ?>.
                 <?= $sl['foto'] !== '' ? 'Mengunggah berkas baru akan menggantikan foto yang sekarang.' : '' ?>
               </div>
             </div>

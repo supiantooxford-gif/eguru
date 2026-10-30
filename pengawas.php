@@ -92,8 +92,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (one('SELECT id FROM users WHERE username = ?', [$username])) {
             $galat[] = 'Nama pengguna "' . $username . '" sudah dipakai (harus unik se-aplikasi).';
         }
-        if (strlen($password) < 6) {
-            $galat[] = 'Kata sandi minimal 6 karakter.';
+        if (!sandi_pemeriksa($password, false)['ok']) {
+            $galat[] = 'Kata sandi minimal ' . SANDI_MIN . ' karakter.';
         }
         if ($galat) {
             foreach ($galat as $g) {
@@ -107,6 +107,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             q('INSERT INTO users (sekolah_id, username, password_hash, nama, role, aktif, dibuat)
                VALUES (NULL,?,?,?,"pengawas",?,?)',
                 [$username, password_hash($password, PASSWORD_DEFAULT), $nama, $aktif, date('Y-m-d H:i:s')]);
+            if (sandi_lemah_dasar($password)) {
+                q('UPDATE users SET sandi_wajib_ganti = 1 WHERE username = ?', [$username]);
+            }
             $uid = (int) db()->lastInsertId();
             db()->exec('COMMIT');
         } catch (Throwable $ex) {
@@ -157,8 +160,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (one('SELECT id FROM users WHERE username = ? AND id <> ?', [$username, $id])) {
             $galat[] = 'Nama pengguna "' . $username . '" sudah dipakai akun lain.';
         }
-        if ($sandiBaru !== '' && strlen($sandiBaru) < 6) {
-            $galat[] = 'Kata sandi baru minimal 6 karakter (kosongkan bila tidak diubah).';
+        if ($sandiBaru !== '' && !sandi_pemeriksa($sandiBaru, false)['ok']) {
+            $galat[] = 'Kata sandi baru minimal ' . SANDI_MIN . ' karakter (kosongkan bila tidak diubah).';
         }
         if ($galat) {
             foreach ($galat as $g) {
@@ -171,6 +174,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             q('UPDATE users SET nama = ?, username = ?, aktif = ?, ditinjau = 1, password_hash = ?
                WHERE id = ? AND role = "pengawas"',
                 [$nama, $username, $aktif, password_hash($sandiBaru, PASSWORD_DEFAULT), $id]);
+            if (sandi_lemah_dasar($sandiBaru)) {
+                q('UPDATE users SET sandi_wajib_ganti = 1 WHERE id = ?', [$id]);
+            }
         } else {
             q('UPDATE users SET nama = ?, username = ?, aktif = ?, ditinjau = 1
                WHERE id = ? AND role = "pengawas"',
@@ -188,10 +194,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($aksi === 'reset') {
         $sandi = (string) ($_POST['password'] ?? '');
-        if (strlen($sandi) < 6) {
-            flash('Kata sandi baru minimal 6 karakter.', 'err');
+        if (!sandi_pemeriksa($sandi, false)['ok']) {
+            flash('Kata sandi baru minimal ' . SANDI_MIN . ' karakter.', 'err');
         } else {
-            q('UPDATE users SET password_hash = ?, ditinjau = 1 WHERE id = ?', [password_hash($sandi, PASSWORD_DEFAULT), $id]);
+            // sandi_simpan() ikut mengatur penanda wajib-ganti; reset oleh Super Admin juga
+            // menghilangkan penanda "menunggu ditinjau".
+            sandi_simpan($id, $sandi, sandi_lemah_dasar($sandi));
+            q('UPDATE users SET ditinjau = 1 WHERE id = ?', [$id]);
             flash('Kata sandi akun pengawas ' . $p['nama'] . ' berhasil diganti.');
         }
         redirect('pengawas.php');
@@ -346,7 +355,7 @@ page_top('Akun Pengawas', 'Super Admin &middot; ' . count($rows) . ' akun pengaw
       </div>
       <div>
         <label class="f" for="password"><?= $edit ? 'Kata Sandi Baru (kosongkan bila tidak diubah)' : 'Kata Sandi * (min. 6)' ?></label>
-        <input type="password" id="password" name="password" <?= $edit ? '' : 'required' ?> minlength="6">
+        <input type="password" id="password" name="password" <?= $edit ? '' : 'required' ?> minlength="<?= (int) SANDI_MIN ?>">
       </div>
     </div>
 

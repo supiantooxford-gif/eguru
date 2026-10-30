@@ -61,6 +61,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ((int) ($_SESSION['landing_pesan_jumlah'] ?? 0) >= LANDING_MAKS_SESI) {
             $pesanGalat[] = 'Pengiriman pesan dari sesi ini sudah mencapai batas (' . LANDING_MAKS_SESI . ' kali).';
         }
+        // KEAMANAN (v1.73.4): batas per sesi mudah dilewati (cukup cookie baru). Pembatas per
+        // alamat IP publik mencegah formulir kontak dipakai mengirim pesan sampah tanpa henti.
+        $ipPesan = log_ip();
+        if (throttle_ip_layak($ipPesan)
+            && throttle_jumlah('pesan:' . $ipPesan, PUBLIK_PESAN_MENIT) >= PUBLIK_PESAN_MAKS) {
+            $pesanGalat[] = 'Terlalu banyak pesan dari jaringan ini dalam waktu singkat. '
+                . 'Coba lagi dalam ' . PUBLIK_PESAN_MENIT . ' menit.';
+        }
         if ($nilaiPesan['nama'] === '') { $pesanGalat[] = 'Nama wajib diisi.'; }
         if ($nilaiPesan['kontak'] === '') { $pesanGalat[] = 'Email atau nomor WhatsApp wajib diisi.'; }
         if (strlen($nilaiPesan['pesan']) < 5) { $pesanGalat[] = 'Tuliskan pesan Anda (minimal 5 karakter).'; }
@@ -75,6 +83,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     log_ip(), date('Y-m-d H:i:s'),
                 ]);
                 $_SESSION['landing_pesan_jumlah'] = (int) ($_SESSION['landing_pesan_jumlah'] ?? 0) + 1;
+                if (throttle_ip_layak($ipPesan)) {
+                    throttle_lewat('pesan:' . $ipPesan, PUBLIK_PESAN_MAKS, PUBLIK_PESAN_MENIT);
+                }
                 unset($_SESSION['landing_captcha']);
                 redirect('login.php?terkirim=1#kontak');
             } catch (Throwable $ex) {
@@ -142,6 +153,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         log_gagal(null, 'siswa:' . $nisn, 'akun siswa gagal dibuat');
                     } else {
                         session_regenerate_id(true);
+                        // Token CSRF DIPUTAR setelah hak akses berubah (anti token-fixation):
+                        // token yang berlaku saat masih tamu tidak boleh tetap sah setelah masuk.
+                        csrf_putar();
                         $_SESSION['uid'] = (int) $akun['id'];
                         $_SESSION['sambutan_tampil'] = 1;
                         log_sesi_mulai($akun);
@@ -199,6 +213,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 log_gagal($u, $user, 'akun guru belum ditautkan ke data guru');
             } else {
                 session_regenerate_id(true);
+                // Token CSRF DIPUTAR setelah hak akses berubah (anti token-fixation).
+                csrf_putar();
                 $tabMasuk = 'pengguna';
                 $_SESSION['uid'] = (int) $u['id'];
                 // Popup "Selamat datang" ditampilkan SEKALI setelah masuk berhasil (isi diatur Super

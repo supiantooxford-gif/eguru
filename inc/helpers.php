@@ -326,10 +326,38 @@ function csrf_field(): string
     return '<input type="hidden" name="csrf" value="' . e(csrf_token()) . '">';
 }
 
+/**
+ * Putar (buat ulang) token CSRF — dipanggil setiap kali tingkat kepercayaan sesi berubah,
+ * terutama SETELAH berhasil masuk, supaya token sesi tamu tidak berlaku lagi.
+ */
+function csrf_putar(): string
+{
+    unset($_SESSION['csrf']);
+    return csrf_token();
+}
+
+/**
+ * Periksa token CSRF.
+ *
+ * KEAMANAN (v1.73.4) — token HANYA diterima dari BADAN permintaan (`$_POST['csrf']`) atau
+ * kepala `X-CSRF-Token` (jalur unggahan/JS non-form). Versi lama juga menerima `$_GET['csrf']`
+ * sehingga token dapat ikut terkirim di URL; URL mudah bocor lewat Referer ke situs lain,
+ * riwayat peramban, log server/proxy, dan tautan yang dibagikan — dan token yang bocor membuat
+ * seluruh perlindungan CSRF runtuh. Jalur URL itu DITUTUP.
+ */
 function csrf_ok(): bool
 {
-    $t = $_POST['csrf'] ?? $_GET['csrf'] ?? '';
-    return is_string($t) && $t !== '' && hash_equals((string) ($_SESSION['csrf'] ?? ''), $t);
+    $t = '';
+    if (isset($_POST['csrf']) && is_scalar($_POST['csrf'])) {
+        $t = trim((string) $_POST['csrf']);
+    } elseif (isset($_SERVER['HTTP_X_CSRF_TOKEN']) && is_string($_SERVER['HTTP_X_CSRF_TOKEN'])) {
+        $t = trim($_SERVER['HTTP_X_CSRF_TOKEN']);
+    }
+    $sah = (string) ($_SESSION['csrf'] ?? '');
+    if ($t === '' || $sah === '' || strlen($t) !== strlen($sah)) {
+        return false;   // perbandingan waktu-tetap + panjang token ikut diperiksa
+    }
+    return hash_equals($sah, $t);
 }
 
 function csrf_guard(): void
@@ -980,12 +1008,112 @@ function sekolah_dampak(int $sid): array
  *
  * Permintaan pemilik (v1.72.3): *"Sebelum menghapus super admin akan dimintakan sandi (sandinya:
  * 181288). Tujuan sandi ini agar ketika tidak sengaja di klik hapus lembaga tidak langsung
- * terhapus"*. Sandinya konstanta `SEKOLAH_HAPUS_SANDI` (`inc/config.php`).
- * Perbandingan memakai `hash_equals()` (waktu tetap) dan spasi di tepi diabaikan.
+ * terhapus"*.
+ *
+ * KEAMANAN (v1.73.4) — versi lama membandingkan isian dengan konstanta `SEKOLAH_HAPUS_SANDI`
+ * APA ADANYA: teks sandi tersimpan di kode sumber/repositori, berlaku sama pada semua
+ * pemasangan, dan tanpa batas percobaan sehingga bisa ditebak berulang (hanya 6 angka).
+ * Sekarang:
+ *   1. sandi disimpan sebagai **hash bcrypt** di `app_pengaturan` (`sekolah_hapus_hash`) —
+ *      dibuat sekali dari nilai bawaan; teks sandi tidak lagi dipakai membandingkan;
+ *   2. pemeriksaan memakai `password_verify()` (hash dinaikkan otomatis bila usang);
+ *   3. percobaan dibatasi `SEKOLAH_HAPUS_COBA` kali per `SEKOLAH_HAPUS_MENIT` menit per akun,
+ *      disimpan di BASIS DATA (mengosongkan cookie sesi tidak mengosongkan hitungan).
+ * Bila basis data belum siap (mis. berkas ini dijalankan sendiri tanpa tabel `app_pengaturan`),
+ * pemeriksaan jatuh ke nilai bawaan agar aplikasi tidak gagal — jalur normal selalu memakai hash.
  */
 function sekolah_hapus_sandi_sah(?string $sandi): bool
 {
-    return hash_equals((string) SEKOLAH_HAPUS_SANDI, trim((string) $sandi));
+    $sandi = trim((string) $sandi);
+    if ($sandi === '' || sekolah_hapus_coba_habis()) {
+        return false;
+    }
+    $hash = sekolah_hapus_hash();
+    if ($hash !== '' && (str_starts_with($hash, '$2y$') || str_starts_with($hash, '$argon2'))) {
+        $ok = password_verify($sandi, $hash);
+        if ($ok && password_needs_rehash($hash, PASSWORD_DEFAULT)) {
+            try {
+                app_setting_set('sekolah_hapus_hash', password_hash($sandi, PASSWORD_DEFAULT));
+            } catch (Throwable $e) {
+                // gagal menaikkan hash bukan alasan menolak sandi yang sudah terbukti benar
+            }
+        }
+    } else {
+        $ok = hash_equals((string) SEKOLAH_HAPUS_SANDI, $sandi);   // cadangan, waktu-tetap
+    }
+    $ok ? sekolah_hapus_coba_reset() : sekolah_hapus_coba_catat();
+    return $ok;
+}
+
+/** Hash bcrypt sandi konfirmasi hapus ('' bila belum dapat dibaca/dibuat). */
+function sekolah_hapus_hash(): string
+{
+    try {
+        $ada = app_setting('sekolah_hapus_hash', '');
+        if ($ada !== '') {
+            return $ada;
+        }
+        $hash = password_hash((string) SEKOLAH_HAPUS_SANDI, PASSWORD_DEFAULT);
+        app_setting_set('sekolah_hapus_hash', $hash);
+        return $hash;
+    } catch (Throwable $e) {
+        return '';
+    }
+}
+
+/** Kunci penghitung percobaan (per akun yang sedang masuk). */
+function sekolah_hapus_coba_kunci(): string
+{
+    return 'sekolah_hapus_coba_' . (int) (current_user()['id'] ?? 0);
+}
+
+/** Apakah jatah percobaan sandi konfirmasi hapus sudah habis? */
+function sekolah_hapus_coba_habis(): bool
+{
+    try {
+        $raw = app_setting(sekolah_hapus_coba_kunci(), '');
+        if ($raw === '') {
+            return false;
+        }
+        $bagian = explode('|', $raw);
+        $awal = (int) ($bagian[0] ?? 0);
+        $jml = (int) ($bagian[1] ?? 0);
+        if ($awal <= 0 || time() - $awal > SEKOLAH_HAPUS_MENIT * 60) {
+            return false;   // jendela waktu lewat → hitungan dianggap kosong
+        }
+        return $jml >= SEKOLAH_HAPUS_COBA;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+/** Tambah satu percobaan sandi konfirmasi yang GAGAL. */
+function sekolah_hapus_coba_catat(): void
+{
+    try {
+        $kunci = sekolah_hapus_coba_kunci();
+        $raw = app_setting($kunci, '');
+        $bagian = $raw === '' ? [] : explode('|', $raw);
+        $awal = (int) ($bagian[0] ?? 0);
+        $jml = (int) ($bagian[1] ?? 0);
+        if ($awal <= 0 || time() - $awal > SEKOLAH_HAPUS_MENIT * 60) {
+            $awal = time();
+            $jml = 0;
+        }
+        app_setting_set($kunci, $awal . '|' . ($jml + 1));
+    } catch (Throwable $e) {
+        // pencatatan percobaan tidak boleh menggagalkan halaman
+    }
+}
+
+/** Kosongkan hitungan percobaan setelah sandi terbukti benar. */
+function sekolah_hapus_coba_reset(): void
+{
+    try {
+        q('DELETE FROM app_pengaturan WHERE kunci = ?', [sekolah_hapus_coba_kunci()]);
+    } catch (Throwable $e) {
+        // abaikan
+    }
 }
 
 /**
@@ -4326,6 +4454,7 @@ function require_login(): array
     gerbang_aktivasi();  // kunci seluruh menu bila masa uji coba sudah berakhir
     gerbang_pengawas();  // pengawas: hanya berkas lihat/cetak + POST ditolak
     gerbang_siswa();     // siswa: hanya halaman sendiri (lihat/cetak) + POST ditolak
+    gerbang_sandi();     // sandi lemah/bawaan: WAJIB diganti lebih dulu (popup + alihkan ke akun.php)
     return $u;
 }
 
@@ -4650,6 +4779,44 @@ function media_upload(string $bytes, string $filename): array
     return ['ok' => false, 'pesan' => 'Unggahan ditolak: ' . ($pesan !== '' ? $pesan : 'HTTP ' . $code)];
 }
 
+/**
+ * Periksa ISI berkas SVG sebelum diteruskan ke penyimpanan.
+ *
+ * KEAMANAN (v1.73.4) — sebelumnya SVG lolos TANPA pemeriksaan isi (`getimagesize()` dilewati),
+ * padahal SVG adalah dokumen yang boleh memuat skrip. Berkas semacam itu dapat menjadi
+ * *stored XSS* pada domain penyimpanan (skrip berjalan saat URL-nya dibuka langsung) dan bahan
+ * phishing dengan tampilan resmi aplikasi. Yang ditolak: elemen/atribut yang menjalankan skrip,
+ * rujukan `javascript:`, entitas eksternal (XXE), dan `<!DOCTYPE`/`<iframe>`/`<foreignObject>`.
+ *
+ * @return array{ok:bool,pesan:string}
+ */
+function svg_aman(string $isi): array
+{
+    if ($isi === '') {
+        return ['ok' => false, 'pesan' => 'Berkas SVG kosong.'];
+    }
+    if (strlen($isi) > 2 * 1024 * 1024) {
+        return ['ok' => false, 'pesan' => 'Berkas SVG terlalu besar (maksimal 2 MB).'];
+    }
+    $bawah = strtolower($isi);
+    if (strpos($bawah, '<svg') === false) {
+        return ['ok' => false, 'pesan' => 'Berkas SVG ini tidak memuat gambar SVG yang sah.'];
+    }
+    $terlarang = ['<script', '<foreignobject', '<iframe', '<embed', '<object',
+                  '<!entity', '<!doctype', 'javascript:', 'data:text/html'];
+    foreach ($terlarang as $tanda) {
+        if (strpos($bawah, $tanda) !== false) {
+            return ['ok' => false, 'pesan' => 'Berkas SVG memuat kode yang tidak diizinkan ('
+                . $tanda . ') sehingga ditolak demi keamanan.'];
+        }
+    }
+    // Atribut penanganan peristiwa (onload=, onclick=, onerror=, …) juga menjalankan skrip.
+    if (preg_match('/\son[a-z]{3,}\s*=/i', $isi) === 1) {
+        return ['ok' => false, 'pesan' => 'Berkas SVG memuat penanganan peristiwa (on…) yang tidak diizinkan.'];
+    }
+    return ['ok' => true, 'pesan' => ''];
+}
+
 /** Validasi berkas gambar (logo). */
 function validasi_foto(string $namaAsli, int $ukuran, string $tmpPath): array
 {
@@ -4661,11 +4828,19 @@ function validasi_foto(string $namaAsli, int $ukuran, string $tmpPath): array
         return ['ok' => false, 'pesan' => 'Berkas gambar kosong atau gagal diunggah.'];
     }
     if ($ukuran > FOTO_MAKS_BYTE) {
-        return ['ok' => false, 'pesan' => 'Ukuran gambar maksimal 15 MB (berkas Anda ' . number_format($ukuran / 1048576, 1, ',', '.') . ' MB).'];
+        return ['ok' => false, 'pesan' => 'Ukuran gambar maksimal ' . ukuran_berkas_teks(FOTO_MAKS_BYTE)
+            . ' (berkas Anda ' . ukuran_berkas_teks($ukuran) . ').'];
     }
     if ($ext !== 'svg') {
         if (@getimagesize($tmpPath) === false) {
             return ['ok' => false, 'pesan' => 'Berkas ini sepertinya bukan gambar yang sah.'];
+        }
+    } else {
+        // SVG WAJIB diperiksa isinya — tanpa itu berkas bisa memuat skrip (stored XSS).
+        $isi = (string) @file_get_contents($tmpPath, false, null, 0, 2 * 1024 * 1024 + 1);
+        $cekSvg = svg_aman($isi);
+        if (empty($cekSvg['ok'])) {
+            return ['ok' => false, 'pesan' => (string) $cekSvg['pesan']];
         }
     }
     return ['ok' => true];
@@ -5341,6 +5516,227 @@ function login_blokir_detik_siswa(string $ip, string $nisn = ''): int
     } catch (Throwable $e) {
         return 0;
     }
+}
+
+// ------------------------------------------------------------------ PEMBATAS ENDPOINT PUBLIK (IP)
+// KEAMANAN (v1.73.4): pendaftaran sekolah & formulir pesan halaman depan dulu hanya dibatasi
+// "N kali per SESI". Batas berbasis sesi dapat dilewati cukup dengan mengosongkan cookie, sehingga
+// program dapat membuat sekolah/akun atau mengirim pesan tanpa henti (basis data membengkak dan
+// kuota penyimpanan aplikasi terkuras). Sekarang ditambah pembatas per ALAMAT IP PUBLIK pada tabel
+// `throttle`; IP privat/loopback dilewati supaya pengujian lokal & proxy internal tidak terkunci.
+
+/** true bila alamat IP ini layak dijadikan kunci pembatas (bukan privat/loopback). */
+function throttle_ip_layak(string $ip): bool
+{
+    $ip = trim($ip);
+    return $ip !== '' && $ip !== '-' && filter_var($ip, FILTER_VALIDATE_IP) !== false && !ip_privat($ip);
+}
+
+/** Jumlah kejadian tercatat untuk kunci ini dalam N menit terakhir. */
+function throttle_jumlah(string $kunci, int $menit): int
+{
+    try {
+        return (int) val('SELECT COUNT(*) FROM throttle WHERE kunci = ? AND waktu >= ?',
+            [$kunci, date('Y-m-d H:i:s', time() - max(1, $menit) * 60)], 0);
+    } catch (Throwable $e) {
+        return 0;   // tabel belum ada / galat → jangan pernah memblokir pengguna karena teknis
+    }
+}
+
+/**
+ * Catat satu kejadian dan kembalikan TRUE bila batasnya sudah terlampaui
+ * (dipakai sebelum memproses permintaan: "sudah terlalu banyak" → tolak).
+ */
+function throttle_lewat(string $kunci, int $maks, int $menit): bool
+{
+    try {
+        if (throttle_jumlah($kunci, $menit) >= max(1, $maks)) {
+            return true;
+        }
+        // Buang catatan lama sekadarnya supaya tabel tidak tumbuh tanpa batas.
+        if (random_int(1, 20) === 1) {
+            q('DELETE FROM throttle WHERE waktu < ?', [date('Y-m-d H:i:s', time() - 86400)]);
+        }
+        q('INSERT INTO throttle (kunci, waktu) VALUES (?, ?)', [$kunci, date('Y-m-d H:i:s')]);
+        return false;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+/**
+ * Teks ukuran berkas yang ramah dibaca dan SERAGAM di seluruh aplikasi.
+ * Dipakai halaman & pesan validasi supaya angka batas tidak pernah ditulis mati
+ * (lihat UNGGAH_MAKS_BYTE di inc/config.php).
+ */
+function ukuran_berkas_teks(int $byte): string
+{
+    if ($byte <= 0) {
+        return '0 byte';
+    }
+    if ($byte >= 1024 * 1024) {
+        $mb = $byte / 1048576;
+        return rtrim(rtrim(number_format($mb, 2, ',', '.'), '0'), ',') . ' MB';
+    }
+    if ($byte >= 1024) {
+        return r0($byte / 1024) . ' KB';
+    }
+    return $byte . ' byte';
+}
+
+/** Batas unggah per berkas dalam bentuk teks ("2 MB") — dipakai keterangan pada formulir. */
+function maks_unggah_teks(): string
+{
+    return ukuran_berkas_teks(UNGGAH_MAKS_BYTE);
+}
+
+// ------------------------------------------------------------------ KEBIJAKAN KATA SANDI (v1.74.0)
+// Permintaan pemilik: minimal 8 karakter + kombinasi huruf besar, huruf kecil, dan angka; akun yang
+// sandinya masih lemah (termasuk sandi awal guru123/admin123) WAJIB menggantinya lebih dulu.
+
+/** Kalimat kebijakan sandi untuk ditampilkan pada formulir/pesan. */
+function sandi_kebijakan_teks(): string
+{
+    $syarat = [];
+    if (SANDI_WAJIB_BESAR) {
+        $syarat[] = 'huruf besar';
+    }
+    if (SANDI_WAJIB_KECIL) {
+        $syarat[] = 'huruf kecil';
+    }
+    if (SANDI_WAJIB_ANGKA) {
+        $syarat[] = 'angka';
+    }
+    return 'minimal ' . SANDI_MIN . ' karakter'
+        . ($syarat ? ', kombinasi ' . implode(', ', $syarat) : '');
+}
+
+/** Daftar sandi lemah/bawaan yang sudah diketahui (huruf kecil semua). */
+function sandi_lemah_daftar(): array
+{
+    return array_map('strtolower', SANDI_LEMAH);
+}
+
+/**
+ * Periksa sebuah kata sandi terhadap kebijakan.
+ *
+ * @param bool $penuh  true = seluruh syarat (dipakai saat pengguna MENETAPKAN SANDINYA SENDIRI);
+ *                     false = hanya panjang minimal (dipakai saat pengelola menetapkan sandi
+ *                     sementara untuk akun orang lain — sandi lemah tetap ditandai wajib ganti).
+ * @return array{ok:bool,pesan:string}
+ */
+function sandi_pemeriksa(string $sandi, bool $penuh = true): array
+{
+    if (strlen($sandi) < SANDI_MIN) {
+        return ['ok' => false, 'pesan' => 'Kata sandi minimal ' . SANDI_MIN . ' karakter.'];
+    }
+    if (strlen($sandi) > 200) {
+        return ['ok' => false, 'pesan' => 'Kata sandi terlalu panjang (maksimal 200 karakter).'];
+    }
+    if (!$penuh) {
+        return ['ok' => true, 'pesan' => ''];
+    }
+    if (SANDI_WAJIB_BESAR && !preg_match('/[A-Z]/', $sandi)) {
+        return ['ok' => false, 'pesan' => 'Kata sandi harus memuat HURUF BESAR.'];
+    }
+    if (SANDI_WAJIB_KECIL && !preg_match('/[a-z]/', $sandi)) {
+        return ['ok' => false, 'pesan' => 'Kata sandi harus memuat huruf kecil.'];
+    }
+    if (SANDI_WAJIB_ANGKA && !preg_match('/[0-9]/', $sandi)) {
+        return ['ok' => false, 'pesan' => 'Kata sandi harus memuat angka.'];
+    }
+    return ['ok' => true, 'pesan' => ''];
+}
+
+/** true bila sandi ini KURANG dari minimal atau termasuk sandi yang sudah diketahui umum. */
+function sandi_lemah_dasar(string $sandi): bool
+{
+    $sandi = trim($sandi);
+    if ($sandi === '' || strlen($sandi) < SANDI_MIN) {
+        return true;
+    }
+    return in_array(strtolower($sandi), sandi_lemah_daftar(), true);
+}
+
+/**
+ * Apakah akun ini WAJIB mengganti kata sandinya lebih dulu?
+ * Akun SISWA dikecualikan: sandinya adalah tanggal lahir (tidak disimpan, tidak dapat diganti
+ * sendiri oleh siswa) — memaksa mereka mengganti tidak mungkin dan tidak ada gunanya.
+ */
+function sandi_wajib_ganti(?array $u = null): bool
+{
+    $u = $u ?? current_user();
+    if (!$u) {
+        return false;
+    }
+    if ((string) ($u['role'] ?? '') === 'siswa') {
+        return false;
+    }
+    return (int) ($u['sandi_wajib_ganti'] ?? 0) === 1;
+}
+
+/**
+ * Simpan kata sandi baru untuk sebuah akun + tentukan penanda wajib-ganti.
+ *
+ * @param string $sandi        sandi baru (sudah divalidasi pemanggil)
+ * @param bool   $wajibGanti   true = pengguna wajib menggantinya saat masuk berikutnya
+ */
+function sandi_simpan(int $userId, string $sandi, bool $wajibGanti = false): void
+{
+    if ($userId <= 0 || $sandi === '') {
+        return;
+    }
+    q('UPDATE users SET password_hash = ?, sandi_wajib_ganti = ?, sandi_diubah = ? WHERE id = ?',
+        [password_hash($sandi, PASSWORD_DEFAULT), $wajibGanti ? 1 : 0, date('Y-m-d H:i:s'), $userId]);
+}
+
+/** Berkas yang TETAP dapat dibuka saat akun wajib mengganti sandi. */
+function sandi_berkas_bebas(): array
+{
+    return [
+        'akun.php',        // formulir ganti sandi
+        'upload_foto.php', // foto profil (bagian dari halaman Akun Saya)
+        'logout.php',
+        'login.php',
+        'aktivasi.php',    // status & aktivasi lembaga (di luar urusan sandi akun)
+        'chat.php',        // endpoint JSON — kalau dialihkan, klien menerima HTML (galat aneh)
+        'daftar.php',      // pendaftaran publik (tanpa login)
+        'lembaga.php',     // halaman data lembaga publik (token)
+    ];
+}
+
+/**
+ * GERBANG WAJIB GANTI SANDI — dipanggil dari require_login().
+ *
+ * Selama penanda `users.sandi_wajib_ganti` aktif, seluruh halaman pengelolaan dialihkan ke
+ * `akun.php?wajib_sandi=1` (popup + formulir ganti sandi). Permintaan AJAX/JSON dijawab 403 JSON
+ * supaya klien tidak menerima halaman HTML sebagai "jawaban JSON" (pola sama dengan gerbang lain).
+ */
+function gerbang_sandi(): void
+{
+    $u = current_user();
+    if (!$u || !sandi_wajib_ganti($u)) {
+        return;
+    }
+    $berkas = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+    if (in_array($berkas, sandi_berkas_bebas(), true)) {
+        return;
+    }
+    $inginJson = strtolower((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest'
+        || str_contains(strtolower((string) ($_SERVER['HTTP_ACCEPT'] ?? '')), 'application/json')
+        || (isset($_GET['format']) && $_GET['format'] === 'json');
+    if ($inginJson) {
+        http_response_code(403);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+            'ok' => false,
+            'wajib_sandi' => true,
+            'pesan_galat' => 'Kata sandi akun Anda wajib diganti lebih dulu. Buka halaman Akun Saya.',
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+    flash('Kata sandi akun Anda belum memenuhi kebijakan keamanan. Wajib diganti terlebih dahulu.', 'warn');
+    redirect('akun.php?wajib_sandi=1');
 }
 
 /** Kalimat sisa waktu tunggu yang ramah dibaca manusia ("2 menit", "45 detik"). */

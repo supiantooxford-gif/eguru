@@ -360,7 +360,7 @@ page_top($edit ? 'Ubah Notulen Rapat' : 'Buat Notulen Rapat');
             <label class="f" for="fotoNotulenKet">Keterangan (opsional)</label>
             <input type="text" id="fotoNotulenKet" name="keterangan" maxlength="160" placeholder="mis. suasana pembahasan rapat">
             <div class="hint" id="fotoNotulenHint">
-              Maksimal 15 MB, format JPG/PNG/GIF/WEBP/SVG. Sisa slot: <b><?= $sisaFoto ?></b> foto.
+              Maksimal <?= e(maks_unggah_teks()) ?>, format JPG/PNG/GIF/WEBP/SVG. Sisa slot: <b><?= $sisaFoto ?></b> foto.
             </div>
             <div class="form-actions">
               <button class="btn btn-primary" id="btnFotoNotulen" type="submit"><?= ikon('upload', 16) ?> Unggah foto bukti</button>

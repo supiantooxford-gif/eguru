@@ -23,18 +23,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $lama = (string) ($_POST['sandi_lama'] ?? '');
         $baru = (string) ($_POST['sandi_baru'] ?? '');
         $ulang = (string) ($_POST['sandi_ulang'] ?? '');
+        $cekSandi = sandi_pemeriksa($baru, true);   // min 8 + huruf besar, kecil, angka
         if (!password_verify($lama, (string) $u['password_hash'])) {
             flash('Kata sandi lama tidak cocok.', 'err');
-        } elseif (strlen($baru) < 6) {
-            flash('Kata sandi baru minimal 6 karakter.', 'err');
+        } elseif (empty($cekSandi['ok'])) {
+            flash((string) $cekSandi['pesan'], 'err');
         } elseif ($baru !== $ulang) {
             flash('Ulangi kata sandi baru dengan tepat sama.', 'err');
         } else {
-            q('UPDATE users SET password_hash = ? WHERE id = ?', [password_hash($baru, PASSWORD_DEFAULT), (int) $u['id']]);
-            flash('Kata sandi berhasil diganti.');
+            // Sandi baru memenuhi kebijakan → penanda "wajib ganti" dilepas.
+            sandi_simpan((int) $u['id'], $baru, false);
+            flash('Kata sandi berhasil diganti. Akun Anda kini memenuhi kebijakan keamanan.');
+            redirect('akun.php');
         }
     }
-    redirect('akun.php');
+    redirect('akun.php' . (sandi_wajib_ganti($u) ? '?wajib_sandi=1' : ''));
 }
 
 $aku = current_user();
@@ -50,8 +53,40 @@ if (is_super()) {
     $hak = ['Daftar hadir & nilai pada kelas yang diajar', 'Jurnal harian dan catatan kasus', 'Data siswa pada kelas yang diajar (hanya lihat)'];
 }
 
+$wajibSandi = sandi_wajib_ganti($aku);
+
 page_top('Akun Saya');
 ?>
+<?php if ($wajibSandi): ?>
+<?php // POPUP WAJIB GANTI SANDI (v1.74.0 — permintaan pemilik). Dicetak dengan atribut `open`
+      // sehingga tetap terlihat walau skrip gagal dimuat; tombolnya mengarah ke formulir ganti sandi.
+      // Tanpa tombol Tutup: selama sandinya belum memenuhi kebijakan, popup ini muncul di setiap
+      // halaman (seluruh halaman lain dialihkan ke sini oleh gerbang_sandi()). ?>
+<dialog class="popup popup-wajib-sandi" id="popupWajibSandi" open aria-labelledby="judulWajibSandi">
+  <div class="popup-isi">
+    <div class="popup-ikon"><?= ikon('lock', 30) ?></div>
+    <h2 id="judulWajibSandi">Kata Sandi Anda Wajib Diganti</h2>
+    <p>
+      Kata sandi akun <b><?= e((string) $aku['nama']) ?></b> belum memenuhi kebijakan keamanan aplikasi
+      (masih kurang dari <?= (int) SANDI_MIN ?> karakter, atau masih memakai sandi awal yang umum
+      diketahui seperti <b>guru123</b>/<b>admin123</b>).
+    </p>
+    <p class="popup-kebijakan">
+      <b>Kebijakan kata sandi:</b> <?= e(sandi_kebijakan_teks()) ?>.
+    </p>
+    <p class="xs mut">
+      Setelah kata sandi diganti, popup ini tidak muncul lagi dan seluruh menu kembali dapat dibuka.
+      Jangan bagikan kata sandi Anda kepada siapa pun.
+    </p>
+    <div class="popup-aksi">
+      <a class="btn btn-primary" href="akun.php#cardSandi" id="btnGantiSandiSekarang">
+        <?= ikon('lock', 16) ?> Ganti Kata Sandi Sekarang
+      </a>
+      <a class="btn btn-ghost btn-sm" href="logout.php">Keluar</a>
+    </div>
+  </div>
+</dialog>
+<?php endif; ?>
 <div class="grid g21">
   <div class="card">
     <div class="card-head"><div><h2>Profil</h2><p>Data akun yang Anda pakai untuk masuk.</p></div></div>
@@ -115,7 +150,7 @@ page_top('Akun Saya');
               <span class="xs mut" id="fotoUkuran">Foto saat ini</span>
             </div>
             <div>
-              <div class="hint" id="fotoHint">Format JPG, PNG, GIF, WEBP, atau SVG — maksimal 15 MB. Gunakan foto persegi agar hasilnya rapi.</div>
+              <div class="hint" id="fotoHint">Format JPG, PNG, GIF, WEBP, atau SVG — maksimal <?= e(maks_unggah_teks()) ?>. Gunakan foto persegi agar hasilnya rapi.</div>
               <div class="form-actions">
                 <button class="btn btn-primary" id="btnFoto" type="submit"><?= ikon('upload', 16) ?> <?= foto_user($aku) ? 'Ganti foto' : 'Unggah foto' ?></button>
                 <span class="xs mut" id="fotoStatus"></span>
@@ -126,22 +161,38 @@ page_top('Akun Saya');
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-head"><div><h2>Ganti Kata Sandi</h2><p>Minimal 6 karakter.</p></div></div>
-      <form method="post" class="form-grid" autocomplete="off">
+    <div class="card" id="cardSandi">
+      <div class="card-head"><div><h2>Ganti Kata Sandi</h2>
+        <p>Wajib <?= e(sandi_kebijakan_teks()) ?>.</p></div>
+        <?php if ($wajibSandi): ?><span class="pill pill-err" id="pilWajibSandi">wajib diganti</span><?php endif; ?>
+      </div>
+      <?php if ($wajibSandi): ?>
+        <div class="alert alert-err" id="pesanWajibSandi">
+          <b>Kata sandi akun Anda belum aman.</b> Demi keamanan akun, ganti kata sandi Anda sekarang —
+          gunakan <?= e(sandi_kebijakan_teks()) ?>.
+        </div>
+      <?php endif; ?>
+      <form method="post" class="form-grid" autocomplete="off" id="formSandiSaya">
         <?= csrf_field() ?>
         <input type="hidden" name="aksi" value="sandi">
         <div>
           <label class="f" for="sandi_lama">Kata sandi lama</label>
-          <input type="password" id="sandi_lama" name="sandi_lama" required>
+          <input type="password" id="sandi_lama" name="sandi_lama" required autocomplete="current-password">
         </div>
         <div>
           <label class="f" for="sandi_baru">Kata sandi baru</label>
-          <input type="password" id="sandi_baru" name="sandi_baru" required minlength="6">
+          <input type="password" id="sandi_baru" name="sandi_baru" required
+                 minlength="<?= (int) SANDI_MIN ?>" autocomplete="new-password"
+                 aria-describedby="ketSandiBaru">
         </div>
         <div>
           <label class="f" for="sandi_ulang">Ulangi kata sandi baru</label>
-          <input type="password" id="sandi_ulang" name="sandi_ulang" required minlength="6">
+          <input type="password" id="sandi_ulang" name="sandi_ulang" required
+                 minlength="<?= (int) SANDI_MIN ?>" autocomplete="new-password">
+        </div>
+        <div class="hint" id="ketSandiBaru">
+          <?= e(sandi_kebijakan_teks()) ?> — misalnya <b>Guru2026</b>. Jangan memakai nama sendiri,
+          tanggal lahir, atau kata sandi yang pernah dipakai di aplikasi lain.
         </div>
         <div class="form-actions">
           <button class="btn btn-primary" type="submit"><?= ikon('lock', 16) ?> Ganti Kata Sandi</button>

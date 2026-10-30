@@ -32,6 +32,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $sandi = guru_sandi_awal($g);
             q('INSERT INTO users (sekolah_id, username, password_hash, nama, role, guru_id, aktif, dibuat) VALUES (?,?,?,?,?,?,1,?)',
                 [sekolah_id(), $username, password_hash($sandi, PASSWORD_DEFAULT), $g['nama'], 'guru', $id, date('Y-m-d H:i:s')]);
+            // Sandi awal guru123 → guru WAJIB menggantinya saat masuk pertama (v1.74.0).
+            q('UPDATE users SET sandi_wajib_ganti = ? WHERE username = ?', [sandi_lemah_dasar($sandi) ? 1 : 0, $username]);
             flash('Akun login dibuat untuk ' . $g['nama'] . ' — nama pengguna: ' . $username . ', kata sandi awal: ' . $sandi . '. Minta guru segera menggantinya.');
         }
     } elseif ($aksi === 'toggle') {

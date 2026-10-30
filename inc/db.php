@@ -19,7 +19,7 @@ require_once __DIR__ . '/helpers.php'; // untuk setting_default() saat seed (tid
 require_once __DIR__ . '/landing.php';
 
 /** Naikkan angka ini setiap kali skema berubah agar migrasi/seed ikut berjalan. */
-const SCHEMA_VERSION = '56';
+const SCHEMA_VERSION = '58';
 
 /**
  * Kolom yang MEMASTIKAN isi basis data sudah benar-benar versi terkini — dipakai
@@ -92,7 +92,10 @@ const SCHEMA_KOLOM_WAJIB = [
     // v45: `siswa_id` = tautan akun SISWA ke baris `siswa` (akun ini dibuat otomatis saat siswa
     // masuk pertama kali dengan NISN-nya). Daftar beberapa kolom wajib diperbolehkan — lihat
     // catatan "SCHEMA_KOLOM_WAJIB boleh berisi DAFTAR kolom".
-    'users' => ['ditinjau', 'siswa_id'],
+    // v40 `ditinjau`, v45 `siswa_id`, v58 `sandi_wajib_ganti`/`sandi_diubah` (kebijakan kata sandi).
+    // ⚠️ SATU entri saja untuk tabel `users` — kunci array PHP tidak boleh kembar, entri kedua
+    // akan MENIMPA yang pertama sehingga pemeriksaan pemulihan diri untuk kolom lain hilang.
+    'users' => ['ditinjau', 'siswa_id', 'sandi_wajib_ganti', 'sandi_diubah'],
     // v9: `mapel_id` = mata pelajaran pada catatan pelanggaran (dulu hanya lewat db_add_column).
     // v51: TINDAK LANJUT oleh guru Tugas Tambahan "Kesiswaan" — 4 kolom (lihat inc/kesiswaan.php).
     'kasus' => ['mapel_id', 'tindak_lanjut', 'tindak_lanjut_jenis',
@@ -162,7 +165,10 @@ const SCHEMA_TABEL_WAJIB = ['app_pengaturan', 'pengawas_sekolah', 'guru_tugas',
     // terakhir yang sudah dibaca tiap pengguna (dasar lencana "belum dibaca").
     'chat_pesan', 'chat_baca',
     // v50: TANDA TANGAN DIGITAL notulen rapat (layar sentuh) — hanya URL CDN hasil media proxy.
-    'notulen_ttd'];
+    'notulen_ttd',
+    // v57: PEMBATAS LAJU ENDPOINT PUBLIK (pendaftaran sekolah & formulir pesan halaman depan) —
+    // satu baris per kejadian; lihat throttle_lewat() di inc/helpers.php.
+    'throttle'];
 
 function db(): PDO
 {
@@ -528,6 +534,11 @@ function ensure_schema(PDO $pdo): void
         $pdo->exec('PRAGMA foreign_keys = OFF');
     }
 
+    // Apakah ini basis data yang SUDAH ADA (bukan instalasi baru)? Dipakai migrasi v58: akun lama
+    // (dibuat sebelum kebijakan kata sandi berlaku) wajib mengganti sandi, sedangkan akun yang
+    // dibuat oleh seed instalasi baru (admin bawaan) TIDAK boleh ikut ditandai.
+    $databaseLama = db_has_table($pdo, 'users');
+
     $pdo->exec('BEGIN IMMEDIATE');
     try {
         // ---------------------------------------------------------------- tabel sekolah
@@ -618,6 +629,9 @@ function ensure_schema(PDO $pdo): void
             nama TEXT NOT NULL,
             role TEXT NOT NULL DEFAULT "guru",
             guru_id INTEGER REFERENCES guru(id) ON DELETE SET NULL,
+            -- v58: kebijakan kata sandi (wajib ganti + waktu sandi terakhir diubah)
+            sandi_wajib_ganti INTEGER NOT NULL DEFAULT 0,
+            sandi_diubah TEXT,
             -- v45: tautan akun SISWA ke baris pada tabel siswa (peran baru bernama siswa yang
             -- masuk HANYA dengan NISN). SENGAJA TANPA klausa REFERENCES: tabel siswa dibuat
             -- SETELAH tabel ini sehingga rujukan ke depan itu berisiko; penghapusan siswa yang
@@ -2173,6 +2187,62 @@ function ensure_schema(PDO $pdo): void
             $pdo->exec('ALTER TABLE meeting_hadir_baru RENAME TO meeting_hadir');
             $pdo->exec('CREATE INDEX IF NOT EXISTS idx_meeting_hadir ON meeting_hadir(meeting_id, sekolah_id)');
             error_log('e-GURU migrasi v56: tabel meeting_hadir dibangun ulang (FK schools_placeholder diperbaiki).');
+        }
+
+        // ---------------------------------------------------------------- MIGRASI v57
+        // PEMBATAS LAJU ENDPOINT PUBLIK (v1.73.4). Dua endpoint yang dapat dipanggil TANPA login
+        // hanya dibatasi "N kali per sesi"; cukup mengosongkan cookie untuk mengulang tanpa henti
+        // (pendaftaran sekolah membuat baris `sekolah` + akun + perlengkapan, formulir pesan
+        // mengisi `landing_pesan`). Tabel kecil ini mencatat kejadian per kunci (mis. `daftar:<ip>`)
+        // supaya batasnya berlaku per ALAMAT IP, bukan per sesi.
+        // Hanya CREATE TABLE/CREATE INDEX — tidak ada tabel lama yang dibangun ulang dan tabelnya
+        // tetap KOSONG setelah migrasi.
+        $pdo->exec('CREATE TABLE IF NOT EXISTS throttle (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            kunci TEXT NOT NULL,
+            waktu TEXT NOT NULL
+        )');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_throttle ON throttle(kunci, waktu)');
+
+        // ---------------------------------------------------------------- MIGRASI v58
+        // KEBIJAKAN KATA SANDI BARU (v1.74.0) — minimal 8 karakter + kombinasi huruf besar/kecil/angka.
+        //
+        // Kolom `users.sandi_wajib_ganti` = 1 berarti akun itu WAJIB mengganti sandinya lebih dulu
+        // (popup + seluruh halaman dialihkan ke formulir ganti sandi, lihat gerbang_sandi()).
+        //
+        // Migrasi menandai SELURUH akun yang SUDAH ADA saat kebijakan ini dipasang: sandi mereka
+        // dibuat dengan aturan lama (minimal 6 karakter, boleh sandi awal guru123/admin123) dan
+        // TIDAK dapat dibuktikan memenuhi kebijakan baru — hash bcrypt tidak menyimpan panjang
+        // sandi. Akun yang dibuat SESUDAHNYA tidak ditandai otomatis; penandanya diatur di jalur
+        // pembuatan/penetapan sandi (sandi_simpan()).
+        //
+        // ⚠️ Penanda sekali-jalan (`app_pengaturan.sandi_kebijakan_v1`) WAJIB ada: tanpa itu,
+        // setiap kali migrasi dipulihkan (mis. penanda skema hilang) akun yang sudah mengganti
+        // sandinya akan ditandai ulang sehingga pengguna terjebak memutar.
+        // Tambah kolomnya LEBIH DULU: pada basis data lama blok ini berjalan sebelum blok
+        // migrasi lain, dan UPDATE di bawah membutuhkannya. Ditulis juga pada CREATE TABLE
+        // (instalasi baru) dan didaftarkan di SCHEMA_KOLOM_WAJIB (pemulihan diri).
+        db_add_column($pdo, 'users', 'sandi_wajib_ganti', 'INTEGER NOT NULL DEFAULT 0');
+        db_add_column($pdo, 'users', 'sandi_diubah', 'TEXT');
+        $pdo->exec('CREATE TABLE IF NOT EXISTS app_pengaturan (
+            kunci TEXT PRIMARY KEY,
+            nilai TEXT,
+            diubah TEXT
+        )');
+        $sudahV58 = (int) $pdo->query("SELECT COUNT(*) FROM app_pengaturan WHERE kunci = 'sandi_kebijakan_v1'")->fetchColumn();
+        if ($sudahV58 === 0) {
+            $jmlLama = (int) $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
+            if ($jmlLama > 0 && !$databaseLama) {
+                // INSTALASI BARU: akun yang baru dibuat oleh seed (admin bawaan) TIDAK ditandai —
+                // syarat "wajib ganti" berlaku untuk sandi yang dibuat SEBELUM kebijakan ini.
+                $jmlLama = 0;
+            } elseif ($jmlLama > 0) {
+                $pdo->exec('UPDATE users SET sandi_wajib_ganti = 1 WHERE sandi_wajib_ganti = 0');
+            }
+            $st = $pdo->prepare('INSERT INTO app_pengaturan (kunci, nilai, diubah) VALUES (?,?,?)');
+            $st->execute(['sandi_kebijakan_v1', (string) $jmlLama, date('Y-m-d H:i:s')]);
+            error_log('e-GURU migrasi v58: kebijakan sandi baru — ' . $jmlLama
+                . ' akun lama ditandai WAJIB ganti sandi.');
         }
 
         // ---------------------------------------------------------------- MIGRASI v47
