@@ -649,8 +649,32 @@ const UNGGAH_MAKS_BYTE = 2 * 1024 * 1024;          // 2 MB per berkas
 //           pengawas.php, sekolah.php, pengguna reset) dan atribut `minlength` memakai SANDI_MIN;
 //         • peran SISWA dikecualikan (sandinya tanggal lahir, tidak tersimpan & tidak dapat diganti).
 //       Uji: `bash tests_eguru_sandi_berkas.sh` (62).
+// 1.75.0 = TIGA PERMINTAAN PEMILIK (tanpa perubahan skema):
+//   (a) **MENU "STUDIO FOTO PINTAR" DIHAPUS** — *"Hapus menu yang saya tandai warna merah"* (menu
+//       Studio Foto Pintar pada sidebar). Yang dihapus: tautan sidebar, pintasan dashboard lintas
+//       sekolah, baris Panduan pada Petunjuk Penggunaan, daftar putih pengawas, entri konfigurasi
+//       `daftar_apps_konfig()`, dan berkas `studio_foto.php`. Tabel `studio_foto` SENGAJA DIBIARKAN
+//       supaya isian pemilik tidak hilang. Aplikasi studio fotonya tetap ada sebagai KARTU di dalam
+//       menu Smart Teacher.
+//   (b) **IKON KARTU SESUAI NAMA APLIKASI** — *"Pada menu smart teacher isinya tambahkan ikon yang
+//       sesuai dengan nama aplikasi (yang saya tandai warna hitam)"*: kotak huruf awal (CM/AP/RC/…)
+//       pada tiap kartu diganti IKON yang maknanya cocok dengan nama aplikasinya lewat
+//       **`apps_ikon()`** + peta kata kunci **`apps_ikon_peta()`** (mis. "Suara Kita" → mikrofon,
+//       "Analisis Pekan Efektif" → kalender, "Maktabah Digital" → buku, "Studio Foto Pintar" →
+//       kamera, "Materi/Rubrik/KKTP" → lapisan). Nama yang tidak cocok kata kunci apa pun tetap
+//       memakai lencana inisial, jadi tidak ada kartu tanpa penanda. Ikon baru `mic` & `layers`
+//       ditambahkan pada `ikon()`. Tidak perlu mengisi apa pun di akun Super Admin.
+//   (c) **KARTU DAFTAR APLIKASI JADI 3 DIMENSI + EFEK KLIK seperti Portal Operator** —
+//       *"tambahkan efek seperti kartu pada aplikasi portal operator dan buat kartu lebih timbul
+//       agar terlihat 3 dimensi"*: bayangan berlapis (rim cahaya + 3 lapis bayangan luar), kartu
+//       MIRING mengikuti kursor (maks 7°, `perspective` pada wadah), sorotan mengikuti kursor,
+//       kilau menyapu, terasa ditekan lalu MEMANTUL saat diklik, dan muncul berurutan. Skripnya
+//       **`initKartuApps3D()`** (`assets/app.js`); seluruh efek dimatikan pada
+//       `prefers-reduced-motion` dan pada perangkat tanpa hover. Berlaku untuk SEMUA menu daftar
+//       aplikasi (modul bersama `inc/daftar_apps.php`), termasuk Smart Teacher.
+//       Uji: `bash tests_eguru_daftar_apps.sh` & `bash check_eguru_daftar_apps_ui.sh`.
 // (Versi ditulis ulang terakhir setelah SELURUH berkas aplikasi selesai disentuh.)
-define('APP_VERSION', '1.74.0');
+define('APP_VERSION', '1.75.0');
 // Unggahan berkas (logo sekolah) lewat media proxy platform. Token dibaca server-side
 // dari berkas .vibecoder-media-token dan TIDAK pernah dikirim ke browser.
 // AKTIVASI sekolah/madrasah: cadangan kunci rahasia generator KODE AKTIVASI.

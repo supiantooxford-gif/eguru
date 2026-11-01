@@ -451,12 +451,7 @@ function petunjuk_daftar(): array
         $adm[] = petunjuk_baris('Smart Teacher', 'apps', 'smart_teacher.php',
             'Daftar aplikasi pembelajaran pilihan yang disiapkan pengelola aplikasi.',
             ['Klik "Buka Aplikasi" untuk membuka aplikasinya pada tab baru.',
-             'Keterangan pada tiap kartu menjelaskan isi aplikasinya.']);
-        $adm[] = petunjuk_baris('Studio Foto Pintar', 'camera', 'studio_foto.php',
-            'Daftar aplikasi studio foto yang disiapkan pengelola aplikasi.',
-            ['Klik "Buka Aplikasi" untuk membuka aplikasinya pada tab baru.'],
-            'Selama tautan aplikasinya belum diisi pengelola aplikasi, menu ini menampilkan keterangan '
-            . '<b>Aplikasi Sementara Dikembangkan</b>.');
+             'Tiap kartu memakai ikon yang sesuai dengan nama aplikasinya, sehingga mudah dikenali.']);
         if (daftar_apps_tampil('aplikasi_sagu')) {
             $adm[] = petunjuk_baris('Aplikasi Sagu', 'star', 'aplikasi_sagu.php',
                 'Daftar aplikasi tambahan yang disiapkan pengelola aplikasi untuk sekolah/madrasah ini.',

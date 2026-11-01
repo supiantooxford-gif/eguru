@@ -70,6 +70,12 @@ function ikon(string $name, int $size = 18): string
         'save'      => '<path d="M5 3h11l3 3v15H5z"/><path d="M9 3v6h6V3"/><path d="M8 21v-6h8v6"/>',
         'lock'      => '<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
         'mosque'    => '<path d="M12 3c2.6 2 4 4 4 6H8c0-2 1.4-4 4-6z"/><path d="M5 21V11c0-1.5 1.2-2.6 3-3M19 21V11c0-1.5-1.2-2.6-3-3"/><path d="M3 21h18"/><path d="M10 21v-4a2 2 0 0 1 4 0v4"/>',
+        // MIKROFON — dipakai kartu daftar aplikasi (v1.75.0) untuk aplikasi bersuara/audio
+        // (mis. "Suara Kita" — pengubah teks menjadi suara).
+        'mic'       => '<rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0"/><path d="M12 18v3.5M9 21.5h6"/>',
+        // LAPISAN — dipakai kartu daftar aplikasi (v1.75.0) untuk aplikasi berisi kumpulan
+        // materi/rubrik/KKTP (beberapa berkas bertumpuk dalam satu aplikasi).
+        'layers'    => '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3.5 12.4l8.5 4.7 8.5-4.7"/><path d="M3.5 16.7l8.5 4.8 8.5-4.8"/>',
         // SILANG — dipakai daftar perangkat (v1.67.0) untuk menandai perangkat yang BELUM dikirim
         // (pasangan dari ikon 'check' yang menandai yang sudah ada).
         'x'         => '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
@@ -486,18 +492,14 @@ function page_top(string $judul, string $sub = ''): void
             // aplikasi ujian online yang diisi Super Admin). Diletakkan TEPAT di bawah Pelanggaran
             // Siswa, sebelum Smart Teacher. ?>
       <a class="nav-item <?= $here === 'ujian_online.php' ? 'on' : '' ?>" href="ujian_online.php"><?= ikon('clipboard') ?><?= daftar_apps_nama_sidebar('ujian_online', 'Ujian Online') ?></a>
-      <?php // Smart Teacher, Studio Foto Pintar, Aplikasi Sagu & Hasil Supervisi: daftar aplikasi
-            // GLOBAL (diisi Super Admin) — tampil untuk SEMUA pengguna, berurutan tepat di bawah
-            // Pelanggaran Siswa (permintaan pemilik), dengan "Studio Foto Pintar" di bawah Smart
-            // Teacher dan "Aplikasi Sagu" di bawah Studio Foto Pintar.
-            // Jangan ditambahkan lagi di blok menu lain. ?>
+      <?php // Smart Teacher, Aplikasi Sagu & Hasil Supervisi: daftar aplikasi GLOBAL (diisi Super
+            // Admin) — tampil untuk SEMUA pengguna, berurutan tepat di bawah Pelanggaran Siswa
+            // (permintaan pemilik), dengan "Aplikasi Sagu" di bawah Smart Teacher.
+            // Jangan ditambahkan lagi di blok menu lain.
+            // ⚠️ v1.75.0: menu **"Studio Foto Pintar" DIHAPUS** atas permintaan pemilik ("Hapus menu
+            // yang saya tandai warna merah") — aplikasi studio fotonya tetap ada sebagai salah satu
+            // kartu DI DALAM menu Smart Teacher. Jangan dihidupkan kembali tanpa permintaan baru. ?>
       <a class="nav-item <?= $here === 'smart_teacher.php' ? 'on' : '' ?>" href="smart_teacher.php"><?= ikon('apps') ?><?= daftar_apps_nama_sidebar('smart_teacher', 'Smart Teacher') ?></a>
-      <?php // STUDIO FOTO PINTAR (v1.72.4) — permintaan pemilik: *"dibawah menu Smart Teacher
-            // tambahkan menu Studio Foto Pintar (tambahkan label Bonus seperti Menu Smart Teacher)
-            // dan linknya akan di isi oleh super admin"*. Daftar aplikasi GLOBAL seperti Smart
-            // Teacher; lencana "Bonus" tampil di atas nama menu bila Super Admin menandai aplikasinya
-            // (daftar_apps_nama_sidebar() → kolom `studio_foto.baru_pada`). ?>
-      <a class="nav-item <?= $here === 'studio_foto.php' ? 'on' : '' ?>" href="studio_foto.php"><?= ikon('camera') ?><?= daftar_apps_nama_sidebar('studio_foto', 'Studio Foto Pintar') ?></a>
       <?php // Aplikasi Sagu: dibatasi per sekolah (lihat daftar_apps_tampil()) — sekolah yang tidak
             // dicentang Super Admin tidak melihat menunya sama sekali. ?>
       <?php if (daftar_apps_tampil('aplikasi_sagu')): ?>

@@ -4,11 +4,15 @@
  *
  * Dipakai oleh beberapa menu yang isinya sama bentuknya dan HANYA diisi Super Admin:
  *   - `smart_teacher.php`   → menu "Smart Teacher"
- *   - `studio_foto.php`     → menu "Studio Foto Pintar" (di bawah Smart Teacher, v1.72.4)
- *   - `aplikasi_sagu.php`   → menu "Aplikasi Sagu" (di bawah Studio Foto Pintar)
+ *   - `aplikasi_sagu.php`   → menu "Aplikasi Sagu"
  *   - `hasil_supervisi.php` → menu "Hasil Supervisi"
  *   - `ujian_online.php`    → menu "Ujian Online"
  *   - `tugas.php?kode=…`    → "Bendahara Bos" & "Bendahara Madrasah" (menu Tugas Tambahan)
+ *
+ * ⚠️ Menu **"Studio Foto Pintar"** (`studio_foto.php`) DIHAPUS pada v1.75.0 atas permintaan pemilik
+ * (*"Hapus menu yang saya tandai warna merah"*). Tabel `studio_foto` sengaja TIDAK di-drop supaya
+ * isian pemilik tidak hilang — tetapi menu, halaman, dan entri konfigurasinya sudah tidak ada.
+ * Aplikasi studio foto tetap tersedia sebagai salah satu KARTU di dalam menu Smart Teacher.
  *
  * KENAPA MODUL BERSAMA (jangan disalin menjadi halaman terpisah):
  * dahulu setiap menu dibuat sebagai halaman tersendiri sehingga logika yang sama (validasi tautan,
@@ -54,34 +58,10 @@ function daftar_apps_konfig(?string $menu = null): ?array
             // DI ATAS nama menu dan hilang sendiri setelah DAFTAR_APPS_BARU_HARI hari.
             'label_baru' => true,
         ],
-        // Menu "STUDIO FOTO PINTAR" (v1.72.4, skema v54) — permintaan pemilik: *"dibawah menu Smart
-        // Teacher tambahkan menu Studio Foto Pintar (tambahkan label Bonus seperti Menu Smart Teacher)
-        // dan linknya akan di isi oleh super admin. Dan jika link belum di isi ketika klik menu
-        // tersebut tampilkan keterangan aplikasi sementara dikembangkan"*.
-        // Bentuknya SAMA PERSIS dengan Smart Teacher (daftar aplikasi GLOBAL yang diisi Super Admin;
-        // satu entri di sini + berkas halaman tipis `studio_foto.php`; JANGAN menyalin logikanya),
-        // ditambah DUA hal:
-        //   1. `label_baru` => true  → Super Admin dapat menandai aplikasi sebagai **Bonus** (lencana
-        //      merah berkedip di atas nama menu pada sidebar), sama seperti Smart Teacher & Ujian
-        //      Online (kolom `studio_foto.baru_pada`);
-        //   2. `kosong_judul`/`kosong_teks` → keterangan **"Aplikasi Sementara Dikembangkan"** yang
-        //      tampil saat belum ada aplikasi/link yang diisi Super Admin (lihat blok keadaan kosong
-        //      pada `daftar_apps_halaman()`). Menu lain TIDAK memakai kunci ini sehingga keterangan
-        //      "Belum ada aplikasi" miliknya tidak berubah.
-        'studio_foto' => [
-            'tabel'      => 'studio_foto',
-            'menu'       => 'Studio Foto Pintar',
-            'judul'      => 'Daftar Aplikasi Studio Foto Pintar',
-            'berkas'     => 'studio_foto.php',
-            'form_id'    => 'formStudioFoto',
-            'placeholder' => 'mis. Studio Foto Pintar',
-            'contoh_ket' => 'Penjelasan singkat aplikasi studio foto ini…',
-            'label_baru' => true,
-            'kosong_judul' => 'Aplikasi Sementara Dikembangkan',
-            'kosong_teks'  => 'Link aplikasi Studio Foto Pintar belum diisi Admin aplikasi. '
-                . 'Aplikasi ini sementara dikembangkan dan akan tampil pada menu ini begitu '
-                . 'tautannya siap dipakai.',
-        ],
+        // ⚠️ v1.75.0: entri menu "Studio Foto Pintar" (`studio_foto`) DIHAPUS atas permintaan pemilik
+        // ("Hapus menu yang saya tandai warna merah"). Halaman `studio_foto.php` ikut dihapus dan menu
+        // hilang dari sidebar/pintasan/Petunjuk Penggunaan. Tabel `studio_foto` sengaja dibiarkan ada
+        // (isian pemilik tidak dihapus); JANGAN dihidupkan kembali tanpa permintaan baru.
         // Menu "Aplikasi Sagu" — permintaan pemilik: "Tambahkan Menu Aplikasi Sagu dibawah menu
         // Smart Teacher. Cara pengisian link aplikasi seperti Smart Teacher" → bentuknya SAMA PERSIS
         // dengan Smart Teacher (cukup satu entri di sini + berkas halaman tipis `aplikasi_sagu.php`;
@@ -688,6 +668,133 @@ function apps_inisial(string $nama): string
 }
 
 /**
+ * PETA IKON KARTU APLIKASI — "ikon yang sesuai dengan nama aplikasi" (v1.75.0).
+ *
+ * PERMINTAAN PEMILIK: *"Pada menu smart teacher isinya tambahkan ikon yang sesuai dengan nama
+ * aplikasi (yang saya tandai warna hitam)"* — kotak huruf awal (CM, AP, RC, …) diganti IKON yang
+ * maknanya cocok dengan nama aplikasinya.
+ *
+ * Cara kerjanya: nama aplikasi (dibuat Super Admin) dicocokkan dengan daftar KATA KUNCI di bawah;
+ * kata kunci pertama yang cocok menentukan ikonnya (lihat `ikon()` di inc/layout.php). Pencocokan
+ * memakai batas kata sehingga "pai" tidak cocok dengan "ca-PAI-an" dan sebaliknya.
+ *
+ * ATURAN:
+ *  - Urutan PENTING (yang lebih khusus lebih dulu). Contoh: "Analisis Pekan Efektif" cocok pada
+ *    "pekan" (kalender) sebelum "analisis" (grafik); "CP Mapel PAI & Bahasa Arab" cocok pada "pai"
+ *    (masjid) sebelum "cp" (buku).
+ *  - Nama aplikasi yang TIDAK cocok kata kunci apa pun tetap memakai LENCANA INISIAL seperti
+ *    sebelumnya (`apps_inisial()`) — jadi tidak pernah ada kartu tanpa penanda.
+ *  - Menambah ikon baru cukup: tambahkan satu baris di sini + pastikan nama ikonnya ada pada `ikon()`.
+ *    Tidak perlu perubahan basis data (tidak ada kolom baru) — seluruh aplikasi lama ikut berikon
+ *    otomatis tanpa disunting satu per satu.
+ *
+ * @return array<string, string> kata kunci (huruf kecil) => nama ikon pada ikon()
+ */
+function apps_ikon_peta(): array
+{
+    return [
+        // ---- foto / kamera
+        'studio foto'  => 'camera',
+        'pas foto'     => 'camera',
+        'foto'         => 'camera',
+        'photo'        => 'camera',
+        'kamera'       => 'camera',
+        // ---- keagamaan (PAI & Bahasa Arab)
+        'pai'          => 'mosque',
+        'arab'         => 'mosque',
+        "qur'an"       => 'mosque',
+        'quran'        => 'mosque',
+        'mengaji'      => 'mosque',
+        // ---- buku / kitab / perpustakaan
+        'maktabah'     => 'book',
+        'kitab'        => 'book',
+        'buku'         => 'book',
+        'perpustaka'   => 'book',
+        // ---- audio (teks → suara)
+        'suara'        => 'mic',
+        'voice'        => 'mic',
+        'audio'        => 'mic',
+        'tts'          => 'mic',
+        // ---- pengubah/konversi berkas
+        'konversi'     => 'switch',
+        'convert'      => 'switch',
+        'kompres'      => 'switch',
+        // ---- asesmen / soal / ujian
+        'soal'         => 'clipboard',
+        'ujian'        => 'clipboard',
+        'asesmen'      => 'clipboard',
+        'kuis'         => 'clipboard',
+        'cbt'          => 'clipboard',
+        // ---- perangkat ajar & dokumen
+        'rpp'          => 'doc',
+        'modul ajar'   => 'doc',
+        'perangkat'    => 'doc',
+        'dokumen'      => 'doc',
+        // ---- kumpulan materi
+        'materi'       => 'layers',
+        'rubrik'       => 'layers',
+        'kktp'         => 'layers',
+        'bahan ajar'   => 'layers',
+        // ---- kalender / pekan efektif / jadwal
+        'pekan'        => 'calendar',
+        'kalender'     => 'calendar',
+        'kaldik'       => 'calendar',
+        'jadwal'       => 'calendar',
+        // ---- kurikulum & capaian pembelajaran
+        'cp'           => 'book',
+        'capaian'      => 'book',
+        'atp'          => 'book',
+        'kurikulum'    => 'book',
+        // ---- laporan & analisis
+        'analisis'     => 'chart',
+        'grafik'       => 'chart',
+        'rekap'        => 'chart',
+        'laporan'      => 'report',
+        // ---- media
+        'video'        => 'slider',
+        'media'        => 'slider',
+        // ---- web / portal
+        'portal'       => 'globe',
+        'web'          => 'globe',
+        // ---- komunikasi
+        'whatsapp'     => 'whatsapp',
+        'obrolan'      => 'chat',
+        'chat'         => 'chat',
+        // ---- permainan / latihan
+        'permainan'    => 'star',
+        'game'         => 'star',
+        'latihan'      => 'star',
+        // ---- pengguna aplikasi lain
+        'teacher'      => 'apps',
+        'guru'         => 'users',
+        'siswa'        => 'student',
+        'sekolah'      => 'school',
+        // ---- data (paling akhir: nama yang menyebut guru/siswa/sekolah sudah tercocokkan di atas)
+        'data'         => 'folder',
+    ];
+}
+
+/**
+ * Nama ikon yang sesuai untuk sebuah nama aplikasi (null = tidak ada yang cocok → pakai inisial).
+ * Lihat `apps_ikon_peta()` untuk daftar kata kuncinya.
+ */
+function apps_ikon(string $nama): ?string
+{
+    $nama = trim($nama);
+    if ($nama === '') {
+        return null;
+    }
+    $nama = strtolower($nama);
+    foreach (apps_ikon_peta() as $kata => $ikon) {
+        // Batas kata: "pai" TIDAK cocok pada "capaian", "cp" TIDAK cocok pada "cbt".
+        if (preg_match('/(?<![a-z0-9])' . preg_quote((string) $kata, '/') . '(?![a-z0-9])/u', $nama) === 1) {
+            return $ikon;
+        }
+    }
+    return null;
+}
+
+/**
  * Tukar posisi satu baris dengan tetangganya pada daftar terurut `urutan, nama`
  * (tombol naik/turun), lalu tulis ulang nomor urut 10, 20, 30, … supaya tetap rapi.
  */
@@ -1075,8 +1182,10 @@ function daftar_apps_halaman(string $menu, ?array $tugas = null): void
       <?php // KETERANGAN "Aplikasi Sementara Dikembangkan" (v1.72.4) — permintaan pemilik:
             // *"jika link belum di isi ketika klik menu tersebut tampilkan keterangan aplikasi
             // sementara dikembangkan"*. Hanya menu yang memuat kunci `kosong_judul` pada
-            // konfigurasinya (kini menu Studio Foto Pintar); menu lain tetap memakai keadaan kosong
-            // "Belum ada aplikasi" di bawah supaya perilakunya tidak berubah. ?>
+            // konfigurasinya yang memakainya. Sejak v1.75.0 menu "Studio Foto Pintar" dihapus,
+            // jadi TIDAK ada menu yang memakai kunci ini; bloknya sengaja DIBIARKAN supaya menu
+            // baru yang ingin tampil begitu cukup menambahkan `kosong_judul`/`kosong_teks`.
+            // Menu lain tetap memakai keadaan kosong "Belum ada aplikasi" di bawah. ?>
       <div class="empty apps-dikembangkan" id="appsDikembangkan">
         <?= ikon('clock', 34) ?>
         <h3><?= e((string) $k['kosong_judul']) ?></h3>
@@ -1105,10 +1214,15 @@ function daftar_apps_halaman(string $menu, ?array $tugas = null): void
     <div class="grid g3 apps-grid">
       <?php foreach ($semua as $a): $link = tautan_aman($a['link']);
           $bolehBuka = $super || !$perApp || daftar_apps_app_boleh($menu, (int) $a['id'], $idSekolahSaya);
+          // v1.75.0 (permintaan pemilik): penanda kartu memakai IKON yang sesuai dengan nama
+          // aplikasinya; bila tidak ada kata kunci yang cocok tetap memakai lencana inisial.
+          $ikonApp = apps_ikon((string) $a['nama']);
       ?>
         <div class="card apps-kartu<?= (int) $a['aktif'] !== 1 ? ' apps-mati' : '' ?><?= $bolehBuka ? '' : ' apps-kunci' ?>">
           <div class="apps-kartu-head">
-            <div class="apps-ikon"><?= e(apps_inisial((string) $a['nama'])) ?></div>
+            <div class="apps-ikon<?= $ikonApp !== null ? ' apps-ikon-svg' : '' ?>"<?= $ikonApp !== null ? ' title="' . e((string) $a['nama']) . '"' : '' ?>>
+              <?= $ikonApp !== null ? ikon($ikonApp, 22) : e(apps_inisial((string) $a['nama'])) ?>
+            </div>
             <div class="apps-judul">
               <h3><?= e((string) $a['nama']) ?></h3>
               <?php if ($super && (int) $a['aktif'] !== 1): ?>

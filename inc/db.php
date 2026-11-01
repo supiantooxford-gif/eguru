@@ -118,8 +118,10 @@ const SCHEMA_TABEL_WAJIB = ['app_pengaturan', 'pengawas_sekolah', 'guru_tugas',
     'nilai_pengaturan', // pengaturan penilaian per (guru, mapel) — skema v31
     'pengumuman',      // pengumuman sambutan (skema v16)
     'aplikasi_sagu',   // daftar aplikasi menu "Aplikasi Sagu", GLOBAL (skema v26)
-    // v54: daftar aplikasi menu "Studio Foto Pintar" (di bawah Smart Teacher), GLOBAL — bentuknya
-    // sama dengan `smart_teacher` (nama, link, keterangan, urutan, aktif, baru_pada).
+    // v54: daftar aplikasi menu "Studio Foto Pintar" — bentuknya sama dengan `smart_teacher`
+    // (nama, link, keterangan, urutan, aktif, baru_pada).
+    // ⚠️ v1.75.0: MENU-nya DIHAPUS atas permintaan pemilik, tetapi TABEL-nya sengaja DIBIARKAN supaya
+    // isian pemilik tidak hilang. Jangan di-drop tanpa bertanya.
     'studio_foto',
     // v55: DAFTAR HADIR MEETING/PERTEMUAN PENGAWAS — `meeting` (satu pertemuan, GLOBAL oleh pengguna),
     // `meeting_sekolah` (binaan yang daftar hadirnya diaktifkan), dan `meeting_hadir` (tanda tangan

@@ -1263,14 +1263,137 @@ dialog.ttd-dialog::backdrop{background:rgba(9,32,23,.55)}
 /* ===== MENU DAFTAR APLIKASI (Smart Teacher & Hasil Supervisi) =====
    Kelas diawali "apps-" karena dipakai BERSAMA oleh dua menu (modul inc/daftar_apps.php).
    Isinya nama aplikasi + keterangan + tombol Buka Aplikasi (global, diisi Super Admin). */
-.apps-grid{gap:20px}
-.apps-kartu{display:flex;flex-direction:column;gap:14px;padding:18px;margin:0}
+/* --- KARTU APLIKASI 3 DIMENSI + EFEK KLIK (v1.75.0) -------------------------------
+   PERMINTAAN PEMILIK: *"untuk kartu aplikasi yang ada di dalam menu smart teacher tambahkan efek
+   seperti kartu pada aplikasi portal operator dan buat kartu lebih timbul agar terlihat 3 dimensi"*.
+
+   Ditiru dari `.kartu-app` aplikasi Portal Operator, disesuaikan ke tema hijau/emas e-GURU:
+     (1) TEBAL 3D  — bayangan BERLAPIS (rim cahaya atas + bayangan dalam tipis di tepi bawah +
+                     tiga lapis bayangan luar) sehingga kartu terlihat punya ketebalan;
+     (2) MIRING 3D — kartu MIRING mengikuti kursor (rotateX/rotateY, maks 7°) dengan `perspective`
+                     pada wadahnya; nilai --apps-rx/--apps-ry/--apps-sx/--apps-sy diisi
+                     `initKartuApps3D()` (assets/app.js);
+     (3) SOROTAN   — titik cahaya mengikuti kursor (radial-gradient pada latar kartu);
+     (4) KILAU     — sapuan cahaya kiri→kanan saat kartu disorot (pseudo ::after, bukan ::before,
+                     karena `.card::before` sudah dipakai garis emas dekoratif);
+     (5) DIKLIK    — terasa ditekan (`:active`) lalu MEMANTUL singkat (kelas `.apps-klik`);
+     (6) MASUK     — muncul berurutan (kelas `.apps-masuk`, dilepas skrip setelah selesai).
+
+   ATURAN YANG WAJIB DIPERTAHANKAN:
+   - TIDAK ada transform yang melebarkan halaman (miring hanya saat kursor di atas kartu) → tidak
+     menimbulkan luapan mendatar;
+   - seluruh efek dimatikan pada `prefers-reduced-motion:reduce` dan pada perangkat tanpa hover;
+   - tanpa JavaScript kartu tetap tampil normal (efek hanya pelengkap). */
+.apps-grid{gap:20px;perspective:1200px}
+.apps-kartu{
+  display:flex;flex-direction:column;gap:14px;padding:18px;margin:0;
+  /* (3) sorotan mengikuti kursor */
+  background:
+    radial-gradient(260px circle at var(--apps-sx,50%) var(--apps-sy,0%),
+      rgba(255,255,255,.95), rgba(255,255,255,0) 70%),
+    var(--card);
+  /* (1) tebal 3D: rim cahaya atas + bayangan dalam tepi bawah + 3 lapis bayangan luar */
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.95),
+    inset 0 -3px 0 rgba(11,74,51,.07),
+    0 2px 3px rgba(11,74,51,.12),
+    0 14px 26px -16px rgba(11,74,51,.42),
+    0 30px 50px -34px rgba(11,74,51,.55);
+  /* (2) miring 3D mengikuti kursor (nilai diisi skrip) */
+  transform:translate3d(0,0,0) rotateX(var(--apps-rx,0deg)) rotateY(var(--apps-ry,0deg));
+  transform-origin:center center;
+  transition:transform .22s cubic-bezier(.2,.7,.3,1),box-shadow .25s ease,border-color .25s ease;
+  will-change:transform;
+}
+/* (4) kilau menyapu — pseudo `inset:0` + border-radius ⇒ tidak perlu overflow:hidden
+       (overflow:hidden akan memotong bayangan 3D-nya). */
+.apps-kartu::after{
+  content:"";position:absolute;inset:0;border-radius:inherit;z-index:2;pointer-events:none;opacity:0;
+  background:linear-gradient(105deg,transparent 36%,rgba(255,255,255,.72) 50%,transparent 64%);
+  background-size:260% 100%;background-position:-60% 0;
+  transition:opacity .22s ease;
+}
+/* (6) masuk berurutan — kelas dipasang & DILEPAS skrip setelah animasi selesai supaya tidak
+       bentrok dengan efek klik (pelajaran dari aplikasi Supervisi). */
+.apps-kartu.apps-masuk{animation:appsMasuk .55s cubic-bezier(.2,.7,.3,1) backwards}
+.apps-kartu.apps-masuk:nth-child(1){animation-delay:.02s}
+.apps-kartu.apps-masuk:nth-child(2){animation-delay:.06s}
+.apps-kartu.apps-masuk:nth-child(3){animation-delay:.10s}
+.apps-kartu.apps-masuk:nth-child(4){animation-delay:.14s}
+.apps-kartu.apps-masuk:nth-child(5){animation-delay:.18s}
+.apps-kartu.apps-masuk:nth-child(6){animation-delay:.22s}
+.apps-kartu.apps-masuk:nth-child(7){animation-delay:.26s}
+.apps-kartu.apps-masuk:nth-child(8){animation-delay:.30s}
+.apps-kartu.apps-masuk:nth-child(n+9){animation-delay:.34s}
+@keyframes appsMasuk{
+  from{opacity:0;transform:translate3d(0,18px,0)}
+  to{opacity:1;transform:translate3d(0,0,0)}
+}
+@keyframes appsKilau{
+  from{background-position:-60% 0}
+  to{background-position:160% 0}
+}
+@keyframes appsKlik{
+  0%{transform:translate3d(0,-1px,0) scale(.982)}
+  55%{transform:translate3d(0,-8px,0) scale(1.014)}
+  100%{transform:translate3d(0,0,0) scale(1)}
+}
+/* (2)+(3)+(4) saat kursor benar-benar di atas kartu (perangkat ber-hover saja) */
+@media (hover:hover){
+  .apps-kartu:hover{
+    transform:translate3d(0,-7px,0) rotateX(var(--apps-rx,0deg)) rotateY(var(--apps-ry,0deg)) scale(1.012);
+    border-color:var(--emas);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.98),
+      inset 0 -3px 0 rgba(11,74,51,.09),
+      0 3px 5px rgba(11,74,51,.14),
+      0 26px 40px -22px rgba(11,74,51,.62),
+      0 46px 72px -46px rgba(11,74,51,.70),
+      0 0 0 3px rgba(201,162,39,.16);
+  }
+  .apps-kartu:hover::after{opacity:1;animation:appsKilau .95s ease-out}
+  .apps-kartu:hover .apps-ikon{
+    transform:translateY(-3px) scale(1.08) rotate(-4deg);
+    box-shadow:0 18px 30px -16px rgba(11,74,51,.9), inset 0 1px 0 rgba(255,255,255,.5);
+  }
+  .apps-kartu:hover .apps-judul h3{color:var(--hijau)}
+  .apps-kartu:hover .apps-kartu-aksi .btn-primary{
+    box-shadow:0 12px 20px -12px rgba(11,74,51,.95);transform:translateY(-1px);
+  }
+}
+/* (5) DIKLIK: terasa ditekan — WAJIB ditulis SESUDAH blok hover di atas. */
+.apps-kartu:active{
+  transform:translate3d(0,-1px,0) rotateX(calc(var(--apps-rx,0deg) * .35))
+            rotateY(calc(var(--apps-ry,0deg) * .35)) scale(.982);
+  box-shadow:
+    inset 0 2px 7px rgba(11,74,51,.16),
+    inset 0 -1px 0 rgba(255,255,255,.7),
+    0 8px 16px -12px rgba(11,74,51,.5);
+  transition-duration:.08s;
+}
+/* (5b) pantulan singkat setelah diklik — kelas ditambahkan lalu dilepas `initKartuApps3D()`. */
+.apps-kartu.apps-klik{animation:appsKlik .46s cubic-bezier(.2,.7,.3,1)}
+/* Hemat gerak: SELURUH efek dimatikan (kartu kembali datar & tanpa animasi). */
+@media (prefers-reduced-motion:reduce){
+  .apps-kartu,
+  .apps-kartu:hover,
+  .apps-kartu:active{transform:none;transition:none;animation:none}
+  .apps-kartu::after{display:none}
+  .apps-kartu.apps-masuk{animation:none;opacity:1}
+  .apps-kartu:hover .apps-ikon{transform:none}
+}
 .apps-kartu-head{display:flex;gap:12px;align-items:flex-start}
 .apps-ikon{
   flex:0 0 auto;width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;
   background:linear-gradient(150deg,var(--hijau),var(--hijau-tua));color:#fff;font-weight:800;font-size:.95rem;
-  letter-spacing:.02em;border:1px solid rgba(201,162,39,.55);box-shadow:0 3px 10px rgba(11,74,51,.18);
+  letter-spacing:.02em;border:1px solid rgba(201,162,39,.55);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 3px 10px rgba(11,74,51,.18);
+  transition:transform .3s cubic-bezier(.2,.7,.3,1),box-shadow .3s ease;
 }
+/* v1.75.0: penanda kartu memakai IKON yang sesuai nama aplikasi (apps_ikon()); kartu yang tidak
+   cocok kata kunci apa pun tetap memakai lencana INISIAL seperti sebelumnya. */
+.apps-ikon-svg{background:linear-gradient(150deg,var(--hijau-terang),var(--hijau-tua))}
+.apps-ikon .ic{display:block}
 .apps-judul{min-width:0;flex:1}
 .apps-judul h3{font-size:1rem;line-height:1.3;color:var(--hijau-tua);overflow-wrap:break-word}
 .apps-judul .pill{margin-top:6px}

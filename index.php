@@ -278,14 +278,12 @@ if (is_super() && !current_sekolah()) {
           <a class="btn btn-primary btn-sm" href="sekolah.php"><?= ikon('building', 15) ?> Kelola Sekolah</a>
           <a class="btn btn-ghost btn-sm" href="pendaftaran.php"><?= ikon('star', 15) ?> Pendaftaran</a>
           <a class="btn btn-ghost btn-sm" href="pengguna.php"><?= ikon('key', 15) ?> Akun Super Admin</a>
-          <?php // Pintasan ke daftar aplikasi GLOBAL (Ujian Online, Smart Teacher, Studio Foto
-                // Pintar, Aplikasi Sagu & Hasil Supervisi) — kelimanya berada pada blok Administrasi
-                // (di bawah Pelanggaran Siswa) sehingga di tampilan lintas sekolah perlu pintasan
-                // agar tetap terjangkau. ?>
+          <?php // Pintasan ke daftar aplikasi GLOBAL (Ujian Online, Smart Teacher, Aplikasi Sagu &
+                // Hasil Supervisi) — keempatnya berada pada blok Administrasi (di bawah Pelanggaran
+                // Siswa) sehingga di tampilan lintas sekolah perlu pintasan agar tetap terjangkau.
+                // (Menu "Studio Foto Pintar" DIHAPUS pada v1.75.0 atas permintaan pemilik.) ?>
           <a class="btn btn-ghost btn-sm" href="ujian_online.php"><?= ikon('clipboard', 15) ?> Ujian Online</a>
           <a class="btn btn-ghost btn-sm" href="smart_teacher.php"><?= ikon('apps', 15) ?> Smart Teacher</a>
-          <?php // v1.72.4: pintasan menu "Studio Foto Pintar" (di bawah Smart Teacher). ?>
-          <a class="btn btn-ghost btn-sm" href="studio_foto.php"><?= ikon('camera', 15) ?> Studio Foto Pintar</a>
           <?php // Aplikasi Sagu dibatasi per sekolah; pintasan ini SELALU tampil untuk Super Admin
                 // karena dialah yang menyetel daftar sekolahnya (daftar_apps_tampil() → true). ?>
           <a class="btn btn-ghost btn-sm" href="aplikasi_sagu.php"><?= ikon('star', 15) ?> Aplikasi Sagu</a>

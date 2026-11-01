@@ -4225,7 +4225,6 @@ function pengawas_berkas_boleh(): array
         'cetak_nilai.php', 'cetak_absensi.php', 'cetak_jurnal.php', 'cetak_kasus.php',
         'cetak_rekap_binaan.php',
         'smart_teacher.php', 'aplikasi_sagu.php', 'hasil_supervisi.php',   // daftar aplikasi GLOBAL (semua peran)
-        'studio_foto.php',                            // daftar aplikasi Studio Foto Pintar (v1.72.4, semua peran)
         'ujian_online.php',                           // daftar link aplikasi UJIAN ONLINE (semua peran)
         'tugas.php',                                  // isi menu Tugas Tambahan (hanya lihat)
         'cetak_sarpras.php',                          // lembar cetak data barang (hanya cetak)

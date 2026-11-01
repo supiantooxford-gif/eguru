@@ -1721,8 +1721,73 @@
     }
   }
 
+  /**
+   * KARTU DAFTAR APLIKASI — EFEK 3 DIMENSI + EFEK KLIK (v1.75.0).
+   *
+   * Permintaan pemilik: *"untuk kartu aplikasi yang ada di dalam menu smart teacher tambahkan efek
+   * seperti kartu pada aplikasi portal operator dan buat kartu lebih timbul agar terlihat 3 dimensi"*.
+   * Seluruh TAMPILAN (bayangan berlapis, kilau, sorotan, pantulan) diatur CSS; skrip ini hanya:
+   *   (a) memasang lalu MELEPAS kelas `.apps-masuk` (animasi masuk berurutan) — dilepas supaya
+   *       animasi itu tidak terpasang ulang setiap kali `.apps-klik` dilepas;
+   *   (b) mengisi --apps-rx/--apps-ry (kemiringan, maks 7°) + --apps-sx/--apps-sy (sorotan) saat
+   *       kursor bergerak di atas kartu. Pendengar dipasang PER KARTU dan memakai `pointerleave`
+   *       (BUKAN `pointerout`) supaya kemiringan tidak hilang saat kursor berpindah antar-anak kartu;
+   *   (c) menambahkan `.apps-klik` saat kartu diklik lalu melepasnya 520 ms kemudian.
+   * Semua efek dihormati `prefers-reduced-motion` dan dimatikan pada perangkat tanpa hover.
+   */
+  function initKartuApps3D() {
+    var kartu = document.querySelectorAll('.apps-kartu');
+    if (!kartu.length) return;
+
+    var hematGerak = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    var bisaHover = !window.matchMedia || window.matchMedia('(hover: hover)').matches;
+
+    Array.prototype.forEach.call(kartu, function (k) {
+      if (hematGerak) return;
+      k.classList.add('apps-masuk');
+      k.addEventListener('animationend', function lepas(ev) {
+        if (ev.animationName !== 'appsMasuk') return;
+        k.classList.remove('apps-masuk');
+        k.removeEventListener('animationend', lepas);
+      });
+    });
+
+    if (bisaHover && !hematGerak) {
+      Array.prototype.forEach.call(kartu, function (k) {
+        k.addEventListener('pointermove', function (ev) {
+          var kotak = k.getBoundingClientRect();
+          if (!kotak.width || !kotak.height) return;
+          var px = (ev.clientX - kotak.left) / kotak.width;    // 0..1 (kiri → kanan)
+          var py = (ev.clientY - kotak.top) / kotak.height;    // 0..1 (atas → bawah)
+          k.style.setProperty('--apps-sx', Math.round(px * 100) + '%');
+          k.style.setProperty('--apps-sy', Math.round(py * 100) + '%');
+          // Kemiringan DIBATASI 7° supaya tidak berlebihan / tidak membuat halaman meluber.
+          k.style.setProperty('--apps-ry', ((px - 0.5) * 7).toFixed(2) + 'deg');
+          k.style.setProperty('--apps-rx', ((0.5 - py) * 7).toFixed(2) + 'deg');
+        }, { passive: true });
+
+        k.addEventListener('pointerleave', function () {
+          k.style.removeProperty('--apps-rx');
+          k.style.removeProperty('--apps-ry');
+        }, { passive: true });
+      });
+    }
+
+    document.addEventListener('click', function (ev) {
+      var t = ev.target;
+      if (!t || !t.closest || hematGerak) return;
+      var k = t.closest('.apps-kartu');
+      if (!k) return;
+      k.classList.remove('apps-klik');
+      void k.offsetWidth;                 // paksa animasi bisa dijalankan ulang
+      k.classList.add('apps-klik');
+      window.setTimeout(function () { k.classList.remove('apps-klik'); }, 520);
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     initWajibSandi();
+    initKartuApps3D();
     initNav();
     initConfirm();
     initTableSearch();
