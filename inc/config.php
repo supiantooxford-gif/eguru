@@ -673,8 +673,22 @@ const UNGGAH_MAKS_BYTE = 2 * 1024 * 1024;          // 2 MB per berkas
 //       `prefers-reduced-motion` dan pada perangkat tanpa hover. Berlaku untuk SEMUA menu daftar
 //       aplikasi (modul bersama `inc/daftar_apps.php`), termasuk Smart Teacher.
 //       Uji: `bash tests_eguru_daftar_apps.sh` & `bash check_eguru_daftar_apps_ui.sh`.
+//   (d) **KIRIM WHATSAPP KE LEMBAGA (v1.76.0)** — permintaan pemilik: *"Pada yang saya tandai warna
+//       merah tambahkan fitur kirim WA seperti aplikasi Supervisi."* Yang ditandai adalah **kolom
+//       Aksi** tabel "Daftar Sekolah/Madrasah" pada Ringkasan Semua Sekolah (`index.php?semua=1`).
+//       Tiap baris kini punya tombol ringkas **WA** (hijau) yang membuka WhatsApp (tab baru) ke
+//       nomor HP/telepon lembaga dengan **pesan otomatis** berisi nama kepala sekolah, nama lembaga,
+//       dan **status masa aktif/masa uji cobanya** — susunan pesannya sama dengan aplikasi Supervisi.
+//       Helper: `wa_lembaga_nomor()`, `wa_lembaga_nomor_teks()`, `wa_tanggal()`,
+//       `wa_lembaga_status()`, `wa_lembaga_pesan()`, `wa_lembaga_tautan()`, `wa_lembaga_tombol()`
+//       (inc/helpers.php). Nomor dibaca dari `sekolah.telepon` (Profil & Pengaturan / Kelola Sekolah)
+//       dengan cadangan `sekolah.kontak_telepon` (formulir pendaftaran); nomor yang belum diisi
+//       ditandai "—" agar kolom tetap rapi. Status memakai `aktivasi_status()` sebagai satu-satunya
+//       sumber kebenaran. Tombolnya masuk ke baris yang sama dengan Kelola/Nonaktifkan/Hapus
+//       (`.sekolah-aksi-baris`), jadi lebar minimum kolom dinaikkan 296 → 372px.
+//       Uji: `bash tests_eguru_wa_lembaga.sh`.
 // (Versi ditulis ulang terakhir setelah SELURUH berkas aplikasi selesai disentuh.)
-define('APP_VERSION', '1.75.0');
+define('APP_VERSION', '1.76.0');
 // Unggahan berkas (logo sekolah) lewat media proxy platform. Token dibaca server-side
 // dari berkas .vibecoder-media-token dan TIDAK pernah dikirim ke browser.
 // AKTIVASI sekolah/madrasah: cadangan kunci rahasia generator KODE AKTIVASI.

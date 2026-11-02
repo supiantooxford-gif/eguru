@@ -2232,7 +2232,10 @@ details.pk-tinjau[open] summary{margin-bottom:8px}
    Sebelum menghapus super admin akan dimintakan sandi … agar ketika tidak sengaja di klik hapus
    lembaga tidak langsung terhapus"*. Tiap baris berisi tombol Kelola & Nonaktifkan (berdampingan)
    dan tombol Hapus yang membuka formulir sandi di dalam <details> (tetap bekerja tanpa JavaScript). */
-table.tbl .sekolah-aksi{min-width:296px;white-space:nowrap}
+/* v1.76.0 — tombol keempat "WA" (kirim WhatsApp ke kepala sekolah/madrasah) masuk ke baris yang
+   sama, sehingga lebar minimum kolom ini dinaikkan (296 → 372px) supaya keempat tombol tetap
+   SEBARIS (wadahnya `flex-wrap:nowrap`) dan tidak ada tombol yang terpotong. */
+table.tbl .sekolah-aksi{min-width:372px;white-space:nowrap}
 /* v1.72.4 — KETIGA TOMBOL SEJAJAR DALAM SATU BARIS. Permintaan pemilik: *"Yang saya beri tanda
    merah dirapikan agar fitur hapus, kelola dan nonaktifkan sejajar rapi"*. Sebelumnya Kelola +
    Nonaktifkan berada pada .row-actions dan tombol Hapus (di dalam <details>) turun ke baris
@@ -2244,6 +2247,9 @@ table.tbl .sekolah-aksi{min-width:296px;white-space:nowrap}
   display:flex;align-items:flex-start;justify-content:flex-end;gap:6px;flex-wrap:nowrap;
 }
 .sekolah-aksi-baris>form{margin:0;flex:0 0 auto;display:flex}
+/* Tautan (tombol "WA") juga flex item yang tidak boleh menyusut — tanpa ini tombolnya mengecil
+   saat kolom sempit dan labelnya terpotong. */
+.sekolah-aksi-baris>a{flex:0 0 auto;display:inline-flex}
 .sekolah-aksi-baris .btn{width:auto}
 details.sekolah-hapus{display:inline-block;text-align:left;flex:0 0 auto}
 details.sekolah-hapus>summary{

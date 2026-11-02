@@ -6775,3 +6775,171 @@ function require_tugas_pengguna(): array
     }
     return $u;
 }
+
+// ==================================================================== KIRIM WHATSAPP KE LEMBAGA (v1.76.0)
+// Permintaan pemilik: *"Pada yang saya tandai warna merah tambahkan fitur kirim WA seperti aplikasi
+// Supervisi."* Yang ditandai adalah KOLOM AKSI tabel "Daftar Sekolah/Madrasah" pada Ringkasan Semua
+// Sekolah (index.php?semua=1). Tombolnya membuka WhatsApp ke nomor HP/telepon lembaga dengan PESAN
+// OTOMATIS berisi nama kepala sekolah, nama lembaga, dan STATUS masa aktif/uji cobanya.
+//
+// Satu sumber kebenaran status tetap `aktivasi_status()` (mode/uji/masa aktif) — JANGAN menghitung
+// sisa hari sendiri di sini. Yang disimpan di database hanyalah nomor HP/telepon lembaga
+// (kolom `sekolah.telepon`, cadangan `sekolah.kontak_telepon` dari formulir pendaftaran).
+
+/**
+ * Nomor WhatsApp sebuah lembaga dalam format internasional (mis. 0853… → 62853…) — '' bila belum
+ * ada nomor yang masuk akal. Urutan sumber: `telepon` (diisi lewat Profil & Pengaturan / Kelola
+ * Sekolah) lalu `kontak_telepon` (diisi saat mendaftar).
+ */
+function wa_lembaga_nomor(?array $sekolah = null): string
+{
+    if ($sekolah === null) {
+        $sekolah = current_sekolah();
+    }
+    if (!$sekolah) {
+        return '';
+    }
+    foreach (['telepon', 'kontak_telepon'] as $kolom) {
+        $nomor = trim((string) ($sekolah[$kolom] ?? ''));
+        if ($nomor === '' || $nomor === '-' || !aktivasi_wa_sah($nomor)) {
+            continue;
+        }
+        $intl = wa_internasional($nomor);
+        if ($intl !== '') {
+            return $intl;
+        }
+    }
+    return '';
+}
+
+/** Nomor HP/telepon lembaga seperti yang tertulis pada data (untuk ditampilkan). */
+function wa_lembaga_nomor_teks(?array $sekolah = null): string
+{
+    if ($sekolah === null) {
+        $sekolah = current_sekolah();
+    }
+    if (!$sekolah) {
+        return '';
+    }
+    foreach (['telepon', 'kontak_telepon'] as $kolom) {
+        $nomor = trim((string) ($sekolah[$kolom] ?? ''));
+        if ($nomor !== '' && $nomor !== '-') {
+            return $nomor;
+        }
+    }
+    return '';
+}
+
+/** Tanggal (tanpa jam) untuk kalimat pesan WhatsApp — '' bila kosong. */
+function wa_tanggal(?string $dt): string
+{
+    $dt = trim((string) $dt);
+    if ($dt === '') {
+        return '';
+    }
+    $t = tanggal_id(substr($dt, 0, 10));
+    return $t === '-' ? '' : $t;
+}
+
+/**
+ * STATUS AKTIVASI dalam bahasa manusia untuk pesan WhatsApp — mis.
+ * "aktif dengan sisa masa aktif 120 hari (berakhir 12 Maret 2027)",
+ * "masa uji coba 30 hari dengan sisa 4 hari (berakhir 31 Oktober 2026)",
+ * "masa uji coba 30 hari sudah HABIS (berakhir 31 Oktober 2026) — aplikasi terkunci",
+ * "aktif tanpa batas waktu" (lembaga permanen).
+ *
+ * Empat keadaan e-GURU yang harus dibedakan (lihat `aktivasi_status()`): `permanen`, `aktif`
+ * (masa aktif 365 hari), dan `uji_coba` (30/60/90 hari) — masing-masing bisa sudah HABIS.
+ */
+function wa_lembaga_status(?array $sekolah = null): string
+{
+    if ($sekolah === null) {
+        $sekolah = current_sekolah();
+    }
+    $st = aktivasi_status($sekolah);
+    if ($st['mode'] === 'tanpa_sekolah') {
+        return 'belum tercatat';
+    }
+    $sampai = wa_tanggal($st['sampai']);
+    if ($st['mode'] === 'permanen') {
+        return 'aktif tanpa batas waktu';
+    }
+    if ($st['mode'] === 'aktif') {
+        if ($st['habis']) {
+            return 'masa aktif ' . (int) aktivasi_hari() . ' hari sudah HABIS'
+                . ($sampai !== '' ? ' (berakhir ' . $sampai . ')' : '') . ' — aplikasi terkunci';
+        }
+        if ((int) $st['sampai_ts'] === 0) {
+            return 'aktif tanpa batas waktu';
+        }
+        return 'aktif dengan sisa masa aktif ' . (int) $st['sisa_hari'] . ' hari'
+            . ($sampai !== '' ? ' (berakhir ' . $sampai . ')' : '');
+    }
+    // Sisa: masa UJI COBA (30/60/90 hari sesuai yang ditetapkan Super Admin).
+    $hari = (int) ($st['hari'] ?? 0);
+    $sebut = $hari > 0 ? 'masa uji coba ' . $hari . ' hari' : 'masa uji coba';
+    if ($st['habis']) {
+        return $sebut . ' sudah HABIS' . ($sampai !== '' ? ' (berakhir ' . $sampai . ')' : '')
+            . ' — aplikasi terkunci';
+    }
+    if ((int) $st['sampai_ts'] === 0) {
+        return $sebut . ' belum tercatat';
+    }
+    return $sebut . ' dengan sisa ' . (int) $st['sisa_hari'] . ' hari'
+        . ($sampai !== '' ? ' (berakhir ' . $sampai . ')' : '');
+}
+
+/**
+ * Isi pesan WhatsApp otomatis untuk seorang kepala sekolah/madrasah — susunannya persis seperti
+ * aplikasi Supervisi: sapaan + nama kepala + nama lembaga + status masa aktif + ajakan aktivasi.
+ *
+ * Nama lembaga & nama kepala TIDAK melewati `terjemahkan_html()` (pesan disusun di PHP lalu
+ * di-`rawurlencode`), jadi nama resmi seperti "MAS Al-Ihsaan" tetap utuh.
+ */
+function wa_lembaga_pesan(?array $sekolah = null): string
+{
+    if ($sekolah === null) {
+        $sekolah = current_sekolah();
+    }
+    $nama = trim((string) ($sekolah['nama'] ?? ''));
+    if ($nama === '') {
+        $nama = '-';
+    }
+    $kepala = trim((string) ($sekolah['kepala_sekolah'] ?? ''));
+    return 'Assalamualaikum ' . ($kepala !== '' ? 'Bapak/Ibu ' . $kepala : 'Bapak/Ibu')
+        . ' dari ' . $nama . ', Aplikasi ' . APP_NAME . ' anda saat ini dalam status '
+        . wa_lembaga_status($sekolah)
+        . '. Silahkan melakukan aktifasi sebelum akun dihapus secara permanen oleh sistem. Terima kasih.';
+}
+
+/** Tautan WhatsApp (wa.me) ke nomor lembaga dengan pesan otomatis — '' bila nomornya belum ada. */
+function wa_lembaga_tautan(?array $sekolah = null): string
+{
+    $nomor = wa_lembaga_nomor($sekolah);
+    if ($nomor === '') {
+        return '';
+    }
+    return 'https://wa.me/' . $nomor . '?text=' . rawurlencode(wa_lembaga_pesan($sekolah));
+}
+
+/**
+ * Tombol "Kirim WA" siap pakai untuk sebuah lembaga.
+ * `$kosongHtml` = penanda yang DICETAK APA ADANYA (HTML) bila nomor HP/teleponnya belum diisi —
+ * '' berarti tidak mencetak apa pun (dipakai pada tabel yang sempit). Karena dicetak apa adanya,
+ * pemanggil WAJIB meng-escape sendiri teks yang berasal dari basis data.
+ */
+function wa_lembaga_tombol(
+    ?array $sekolah = null,
+    string $kelas = 'btn btn-wa btn-sm',
+    string $label = 'Kirim WA',
+    string $kosongHtml = 'Nomor HP/telepon lembaga belum diisi'
+): string {
+    $url = wa_lembaga_tautan($sekolah);
+    if ($url === '') {
+        return $kosongHtml === '' ? '' : '<span class="xs mut">' . $kosongHtml . '</span>';
+    }
+    $judul = 'Kirim WhatsApp ke kepala sekolah/madrasah — status: ' . wa_lembaga_status($sekolah);
+    return '<a class="' . e($kelas) . '" href="' . e($url) . '" target="_blank" rel="noopener noreferrer"'
+        . ' title="' . e($judul) . '" aria-label="' . e($judul) . '">' . ikon('whatsapp', 14) . ' '
+        . e($label) . '</a>';
+}

@@ -390,6 +390,13 @@ if (is_super() && !current_sekolah()) {
                         // menjadi ANAK dari satu wadah flex `.sekolah-aksi-baris`
                         // (lihat blok CSS "KOLOM AKSI pada tabel Daftar Sekolah/Madrasah"). ?>
                   <div class="sekolah-aksi-baris">
+                    <?php // KIRIM WA (v1.76.0 — permintaan pemilik: *"Pada yang saya tandai warna merah
+                          // tambahkan fitur kirim WA seperti aplikasi Supervisi."*). Tombol ringkas "WA"
+                          // membuka WhatsApp (tab baru) ke nomor HP/telepon lembaga dengan pesan OTOMATIS
+                          // berisi nama kepala sekolah, nama lembaga, dan status masa aktif/masa uji
+                          // cobanya. Nomor yang belum diisi ditandai "&mdash;" agar kolom tetap rapi
+                          // (bukan tombol mati). Handler-nya di `wa_lembaga_tombol()` (inc/helpers.php). ?>
+                    <?= wa_lembaga_tombol($s, 'btn btn-wa btn-sm', 'WA', '<span class="mut xs">&mdash;</span>') ?>
                     <?php // "Kelola" tetap memakai handler di sekolah.php (aksi=masuk). ?>
                     <form method="post" action="sekolah.php">
                       <?= csrf_field() ?>
