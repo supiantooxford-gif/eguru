@@ -36,6 +36,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             q('UPDATE users SET sandi_wajib_ganti = ? WHERE username = ?', [sandi_lemah_dasar($sandi) ? 1 : 0, $username]);
             flash('Akun login dibuat untuk ' . $g['nama'] . ' — nama pengguna: ' . $username . ', kata sandi awal: ' . $sandi . '. Minta guru segera menggantinya.');
         }
+    } elseif ($aksi === 'reset_sandi') {
+        // ---------------------------------------------------------------- RESET SANDI AKUN GURU (v1.77.0)
+        // Permintaan pemilik: *"Pada akun operator madrasah/sekolah tambahkan fitur untuk mereset sandi
+        // akun guru pada sekolahnya. Jadi Ketika ada gurunya yang lupa sandi bisa meminta operator
+        // madrasah untuk meresetnya (sandi hasil reset: guru123). Sandi ini akan diganti sendiri oleh
+        // guru Ketika masuk akun."*
+        //
+        // Yang boleh: Admin Operator (dan Super Admin dalam konteks) — sama dengan $bolehUbah di atas.
+        // Sasaran HANYA akun GURU milik sekolah ini (query memakai sekolah_id = sekolah_id()), jadi
+        // akun kepala/operator/Super Admin tidak dapat direset dari sini (anti-IDOR).
+        // `sandi_simpan(..., true)` menandai `sandi_wajib_ganti` → guru yang masuk dengan sandi hasil
+        // reset langsung dialihkan ke halaman Akun Saya untuk membuat sandi baru sendiri.
+        $akunGuru = one('SELECT * FROM users WHERE guru_id = ? AND sekolah_id = ? LIMIT 1', [$id, sekolah_id()]);
+        if (!$akunGuru) {
+            flash('Guru ' . $g['nama'] . ' belum memiliki akun login — buatkan akunnya lebih dulu.', 'err');
+        } elseif ((string) $akunGuru['role'] !== 'guru') {
+            flash('Akun yang tertaut ke data guru itu bukan akun guru.', 'err');
+        } else {
+            $sandiReset = guru_sandi_awal($g);
+            sandi_simpan((int) $akunGuru['id'], $sandiReset, true);
+            flash('Kata sandi akun ' . $g['nama'] . ' (nama pengguna: ' . $akunGuru['username']
+                . ') sudah direset menjadi "' . $sandiReset . '". Sampaikan kepada guru — ia wajib '
+                . 'membuat kata sandi baru sendiri saat masuk.');
+        }
     } elseif ($aksi === 'toggle') {
         q('UPDATE guru SET aktif = ? WHERE id = ? AND sekolah_id = ?', [(int) $g['aktif'] === 1 ? 0 : 1, $id, sekolah_id()]);
         flash('Status guru ' . $g['nama'] . ' diperbarui.', 'warn');
@@ -243,6 +267,18 @@ page_top('Data Guru');
             <td class="ctr">
               <?php if ($g['username']): ?>
                 <span class="pill pill-ok"><?= e((string) $g['username']) ?></span>
+                <?php if ($bolehUbah): ?>
+                  <?php // RESET SANDI AKUN GURU (v1.77.0 — permintaan pemilik): operator/kepala sekolah
+                        // dapat mereset sandi guru sekolahnya menjadi `guru123`; guru WAJIB membuat
+                        // sandi baru sendiri saat masuk (penanda `sandi_wajib_ganti` di sandi_simpan()). ?>
+                  <form method="post" style="margin-top:6px"
+                        data-confirm="Reset kata sandi akun <?= e((string) $g['nama']) ?> menjadi guru123? Guru wajib membuat kata sandi baru sendiri saat masuk.">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="aksi" value="reset_sandi">
+                    <input type="hidden" name="id" value="<?= (int) $g['id'] ?>">
+                    <button class="btn btn-ghost btn-sm" type="submit" title="Reset kata sandi akun guru ini menjadi guru123"><?= ikon('key', 14) ?> Reset sandi</button>
+                  </form>
+                <?php endif; ?>
               <?php elseif ($bolehUbah): ?>
                 <form method="post" style="display:inline">
                   <?= csrf_field() ?>

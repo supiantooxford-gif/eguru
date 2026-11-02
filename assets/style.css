@@ -603,6 +603,11 @@ tfoot td.kiri{text-align:left;padding-left:12px}
 .chart-box{position:relative;height:270px}
 .chart-box.tall{height:330px}
 .chart-box.short{height:210px}
+/* GRAFIK "Aplikasi yang Sering Digunakan" (halaman Smart Teacher, v1.79.0) — batang mendatar
+   sebanyak 8 aplikasi teratas; sedikit lebih tinggi dari kotak grafik biasa agar label nama
+   aplikasi tidak berdesakan. */
+.chart-box.grafik-apps{height:320px}
+@media (max-width:560px){.chart-box.grafik-apps{height:300px}}
 
 /* ============================================================================
    HALAMAN DEPAN (LANDING PAGE) — login.php

@@ -192,7 +192,9 @@ $autoPrint = isset($_GET['auto']);
     <div class="ket-print">
       Keterangan: kolom <b>Akun (Nama Pengguna)</b> adalah nama pengguna untuk masuk aplikasi.
       Kata sandi disimpan dalam bentuk teracak (hash) sehingga <b>tidak dapat dicetak</b>; bila guru
-      lupa sandinya, Super Admin dapat menetapkan sandi baru lewat menu <b>Pengguna &amp; Akun</b>.
+      lupa sandinya, Admin Operator dapat meresetnya lewat tombol <b>Reset sandi</b> pada halaman
+      <b>Data Guru</b> (sandi hasil reset: <b>guru123</b>, lalu guru membuat sandi baru sendiri saat
+      masuk), atau Super Admin menetapkan sandi baru lewat menu <b>Pengguna &amp; Akun</b>.
     </div>
 
     <!-- Tanda tangan: hanya kepala sekolah/madrasah, di sisi KANAN lembar (kelas .kanan). -->

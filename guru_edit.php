@@ -296,7 +296,12 @@ page_top($g ? 'Ubah Data Guru' : 'Tambah Data Guru');
         <div class="card-head"><div><h2>Akun Login</h2><p>Untuk masuk aplikasi sebagai guru.</p></div></div>
         <?php if ($akun): ?>
           <p class="sm" style="margin:0">Nama pengguna: <b><?= e((string) $akun['username']) ?></b></p>
-          <p class="hint">Kata sandi diatur/diubah melalui menu Pengguna &amp; Akun (Super Admin).</p>
+          <?php // v1.77.0 — permintaan pemilik: kalimat ini diganti (tanpa "(Super Admin)") + info bahwa
+                // operator dapat mereset sandi guru menjadi guru123 lewat tombol "Reset sandi" pada
+                // daftar Data Guru. Tombol reset TIDAK ditaruh di kartu ini karena seluruh halaman ini
+                // berada di dalam SATU <form> (HTML tidak mengizinkan form bersarang). ?>
+          <p class="hint">Kata sandi diatur/diubah melalui menu Pengguna &amp; Akun. Jika lupa sandi
+            operator bisa mereset untuk pembuatan sandi baru.</p>
         <?php else: ?>
           <label class="f" style="display:flex;gap:9px;align-items:flex-start;font-weight:600">
             <input type="checkbox" name="buat_akun" value="1" style="width:16px;height:16px;accent-color:var(--accent);margin-top:2px">

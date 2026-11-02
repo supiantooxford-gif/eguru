@@ -687,8 +687,49 @@ const UNGGAH_MAKS_BYTE = 2 * 1024 * 1024;          // 2 MB per berkas
 //       sumber kebenaran. Tombolnya masuk ke baris yang sama dengan Kelola/Nonaktifkan/Hapus
 //       (`.sekolah-aksi-baris`), jadi lebar minimum kolom dinaikkan 296 → 372px.
 //       Uji: `bash tests_eguru_wa_lembaga.sh`.
+//   (e) **RESET SANDI AKUN GURU OLEH OPERATOR (v1.77.0)** — permintaan pemilik: *"Pada akun operator
+//       madrasah/sekolah tambahkan fitur untuk mereset sandi akun guru pada sekolahnya. Jadi Ketika ada
+//       gurunya yang lupa sandi bisa meminta operator madrasah untuk meresetnya (sandi hasil reset:
+//       guru123). Sandi ini akan diganti sendiri oleh guru Ketika masuk akun."*
+//       Tombol **"Reset sandi"** ada pada kolom **Akun** di daftar **Data Guru** (`guru.php`, kolom
+//       Aksi akun — halaman ini dipakai Admin Operator & Super Admin dalam konteks). Aksi POST
+//       `aksi=reset_sandi` menyasar **HANYA akun guru sekolah itu** (`users.guru_id = guru`,
+//       `users.sekolah_id = sekolah_id()`, `role = 'guru'`), menetapkan sandi **`guru123`**
+//       (`guru_sandi_awal()`) lewat `sandi_simpan($id, $sandi, true)` sehingga penanda
+//       `users.sandi_wajib_ganti` aktif → guru yang masuk langsung dialihkan ke halaman Akun Saya
+//       (`gerbang_sandi()`) untuk membuat sandi baru sendiri. Kepala sekolah & guru tetap TIDAK bisa
+//       (kepala hanya-lihat di halaman ini; guru 403 lewat `require_data_guru()`).
+//       Kalimat kartu "Akun Login" pada `guru_edit.php` diganti (permintaan pemilik, jangan
+//       dikembalikan): *"Kata sandi diatur/diubah melalui menu Pengguna & Akun. Jika lupa sandi
+//       operator bisa mereset untuk pembuatan sandi baru."* (tanpa "(Super Admin)"). Catatan pada
+//       lembar **Cetak Data Guru** (`cetak_guru.php`) dan **Petunjuk Penggunaan** ikut menyebut
+//       tombol Reset sandi ini.
+//       Uji: `bash tests_eguru_reset_sandi.sh`.
+//   (f) **MENU SMART TEACHER & UJIAN ONLINE HANYA UNTUK LEMBAGA YANG SUDAH AKTIVASI (v1.78.0)** —
+//       permintaan pemilik: *"Pada Menu Ujian Online dan Menu Smart Teacher hanya bisa diakses oleh
+//       lembaga yang telah melakukan aktifasi. Bagi yang belum, menu ini belum bisa diakses dengan
+//       keterangan: Menu ini hanya bisa diakses oleh lembaga yang sudah melakukan aktifasi."*
+//       Kedua menu ditandai `'perlu_aktivasi' => true` pada `inc/daftar_apps.php`; penentunya
+//       **`daftar_apps_aktivasi_boleh()`** (Super Admin selalu boleh; lembaga `uji_coba` / masa aktif
+//       habis TIDAK boleh). Halamannya tetap dapat dibuka, tetapi hanya menampilkan kartu
+//       `#cardPerluAktivasi` berisi kalimat tersebut + tombol ke halaman **Status & Aktivasi**;
+//       daftar aplikasinya TIDAK ditampilkan dan POST apa pun (peran lain) tetap ditolak. Menu pada
+//       sidebar tetap tampil dengan lencana **"Aktivasi"** (`daftar_apps_aktivasi_pil()`), dan
+//       Petunjuk Penggunaan menyebut aturan yang sama. POST oleh peran selain Super Admin pada
+//       lembaga yang belum aktivasi tetap dijawab **403** (bukan 200), Super Admin selalu boleh
+//       mengisi/mengubah daftar aplikasi. Daftar aplikasi menu lain (Aplikasi Sagu,
+//       Hasil Supervisi, Bendahara) TIDAK ikut dibatasi.
+//       Uji: `bash tests_eguru_menu_aktivasi.sh` (63) + `bash check_eguru_menu_aktivasi_ui.sh`.
+//   (g) **GRAFIK "APLIKASI YANG SERING DIGUNAKAN" (v1.79.0)** — permintaan pemilik: *"Pada halaman
+//       smart teacher tambahkan Grafik Aplikasi yang Sering Digunakan. Data grafik diambil dari data
+//       seluruh pengguna yang menggunakan … Tujuannya agar pengguna tau aplikasi mana yang sering
+//       digunakan."* Pilihan pemilik: letaknya di **halaman Smart Teacher** (di atas daftar kartu),
+//       yang dihitung = **klik tombol "Buka Aplikasi"** pada semua menu daftar aplikasi, dan
+//       rentangnya = **seluruh data yang tercatat**. Lihat catatan lengkapnya pada blok
+//       "PENCATATAN PENGGUNAAN APLIKASI" di `inc/daftar_apps.php` dan pada `app_buka.php`.
+//       Uji: `bash tests_eguru_grafik_apps.sh` + `bash check_eguru_grafik_apps_ui.sh`.
 // (Versi ditulis ulang terakhir setelah SELURUH berkas aplikasi selesai disentuh.)
-define('APP_VERSION', '1.76.0');
+define('APP_VERSION', '1.79.0');
 // Unggahan berkas (logo sekolah) lewat media proxy platform. Token dibaca server-side
 // dari berkas .vibecoder-media-token dan TIDAK pernah dikirim ke browser.
 // AKTIVASI sekolah/madrasah: cadangan kunci rahasia generator KODE AKTIVASI.

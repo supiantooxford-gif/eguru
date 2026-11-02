@@ -19,7 +19,7 @@ require_once __DIR__ . '/helpers.php'; // untuk setting_default() saat seed (tid
 require_once __DIR__ . '/landing.php';
 
 /** Naikkan angka ini setiap kali skema berubah agar migrasi/seed ikut berjalan. */
-const SCHEMA_VERSION = '58';
+const SCHEMA_VERSION = '59';
 
 /**
  * Kolom yang MEMASTIKAN isi basis data sudah benar-benar versi terkini — dipakai
@@ -158,6 +158,12 @@ const SCHEMA_TABEL_WAJIB = ['app_pengaturan', 'pengawas_sekolah', 'guru_tugas',
     // beberapa pengawas dapat memberi catatan pada perangkat yang sama dan masing-masing hanya
     // dapat mengubah catatannya sendiri.
     'perangkat_catatan',
+    // v59: CATATAN PENGGUNAAN APLIKASI — satu baris setiap kali pengguna menekan tombol
+    // "Buka Aplikasi" pada menu daftar aplikasi (Smart Teacher, Aplikasi Sagu, Ujian Online,
+    // Hasil Supervisi, Bendahara Bos/Madrasah). Dasar GRAFIK "Aplikasi yang Sering Digunakan"
+    // pada halaman Smart Teacher. Nama aplikasi & asal pengguna disimpan sebagai SNAPSHOT supaya
+    // rekapnya tetap terbaca walau aplikasi/akun/sekolahnya kelak dihapus (lihat inc/daftar_apps.php).
+    'app_klik',
     'perpus_laporan',  // kepala laporan perpustakaan hasil impor e-PERPUS (skema v23)
     'perpus_baris',    // baris laporan perpustakaan hasil impor e-PERPUS (skema v23)
     'lab_barang',      // daftar inventaris barang Kepala Lab IPA/Komputer (skema v24)
@@ -2246,6 +2252,36 @@ function ensure_schema(PDO $pdo): void
             error_log('e-GURU migrasi v58: kebijakan sandi baru — ' . $jmlLama
                 . ' akun lama ditandai WAJIB ganti sandi.');
         }
+
+        // ---------------------------------------------------------------- MIGRASI v59
+        // GRAFIK "APLIKASI YANG SERING DIGUNAKAN" — permintaan pemilik: *"Pada halaman smart teacher
+        // tambahkan Grafik Aplikasi yang Sering Digunakan. Data grafik diambil dari data seluruh
+        // pengguna yang menggunakan. Tujuannya agar pengguna tau aplikasi mana yang sering
+        // digunakan."* Pilihan pemilik: grafik di halaman Smart Teacher (di atas daftar kartu),
+        // yang dihitung = **klik tombol "Buka Aplikasi"** pada SEMUA menu daftar aplikasi, dan
+        // rentangnya = **seluruh data yang tercatat** (tanpa batas waktu).
+        //
+        // Setiap klik dicatat lewat `app_buka.php` (tautan kartu diarahkan ke berkas itu, lalu
+        // dialihkan ke tautan aplikasinya). Nama aplikasi, nama pengguna, dan nama sekolah disimpan
+        // sebagai SNAPSHOT; relasi ke `users`/`sekolah` memakai ON DELETE SET NULL sehingga riwayat
+        // TIDAK hilang saat akun/sekolah dihapus.
+        // Hanya CREATE TABLE/CREATE INDEX — tidak ada tabel lama yang dibangun ulang dan tabelnya
+        // tetap KOSONG setelah migrasi (tidak ada angka penggunaan yang ditebak).
+        $pdo->exec('CREATE TABLE IF NOT EXISTS app_klik (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            menu TEXT NOT NULL,
+            app_id INTEGER,
+            nama TEXT NOT NULL,
+            sekolah_id INTEGER REFERENCES sekolah(id) ON DELETE SET NULL,
+            sekolah_nama TEXT,
+            user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            user_nama TEXT,
+            role TEXT,
+            waktu TEXT NOT NULL
+        )');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_app_klik_nama ON app_klik(nama)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_app_klik_menu ON app_klik(menu, app_id)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_app_klik_waktu ON app_klik(waktu)');
 
         // ---------------------------------------------------------------- MIGRASI v47
         // (Catatan riwayat) Halaman publik "Perangkat Guru" + KODE DOWNLOAD — kini DIHAPUS karena

@@ -4226,6 +4226,10 @@ function pengawas_berkas_boleh(): array
         'cetak_rekap_binaan.php',
         'smart_teacher.php', 'aplikasi_sagu.php', 'hasil_supervisi.php',   // daftar aplikasi GLOBAL (semua peran)
         'ujian_online.php',                           // daftar link aplikasi UJIAN ONLINE (semua peran)
+        // v1.79.0: PENGHUBUNG tombol "Buka Aplikasi" (mencatat penggunaan aplikasi lalu mengalihkan
+        // ke tautannya). GET saja — tidak menulis data lembaga, hanya baris rekap `app_klik`, jadi
+        // pengawas (hanya-lihat) tetap boleh membuka aplikasi dari daftar aplikasi.
+        'app_buka.php',
         'tugas.php',                                  // isi menu Tugas Tambahan (hanya lihat)
         'cetak_sarpras.php',                          // lembar cetak data barang (hanya cetak)
         'cetak_kesiswaan.php',                        // lembar cetak program kerja Kesiswaan (hanya cetak)

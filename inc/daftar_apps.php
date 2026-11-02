@@ -52,11 +52,19 @@ function daftar_apps_konfig(?string $menu = null): ?array
             'form_id'    => 'formSmart',
             'placeholder' => 'mis. CP Mapel Umum',
             'contoh_ket' => 'Penjelasan singkat aplikasi ini…',
+            // GRAFIK "APLIKASI YANG SERING DIGUNAKAN" (v1.79.0 — permintaan pemilik): hanya menu
+            // Smart Teacher yang menampilkannya, di ATAS daftar kartu aplikasi. Datanya = seluruh
+            // klik "Buka Aplikasi" dari SEMUA menu daftar aplikasi, semua sekolah/madrasah, seluruh
+            // data yang tercatat (lihat app_klik_ringkas()).
+            'grafik_sering' => true,
             // LENCANA "Bonus" BERKEDIP pada sidebar (PERMINTAAN PEMILIK v1.72.2): *"Pada menu Smart
             // Teacher juga tambahkan fitur 'Bonus' berkedip"*. Super Admin menandainya lewat centang
             // pada formulir aplikasinya (kolom `smart_teacher.baru_pada`, skema v53); lencana tampil
             // DI ATAS nama menu dan hilang sendiri setelah DAFTAR_APPS_BARU_HARI hari.
             'label_baru' => true,
+            // HANYA LEMBAGA YANG SUDAH MELAKUKAN AKTIVASI (permintaan pemilik, v1.78.0) — lihat
+            // catatan lengkap pada entri `ujian_online` di bawah & fungsi daftar_apps_aktivasi_boleh().
+            'perlu_aktivasi' => true,
         ],
         // ⚠️ v1.75.0: entri menu "Studio Foto Pintar" (`studio_foto`) DIHAPUS atas permintaan pemilik
         // ("Hapus menu yang saya tandai warna merah"). Halaman `studio_foto.php` ikut dihapus dan menu
@@ -107,6 +115,14 @@ function daftar_apps_konfig(?string $menu = null): ?array
             // sendiri setelah DAFTAR_APPS_BARU_HARI hari. Sejak v1.72.2 menu **Smart Teacher** juga
             // memakai fitur ini; menu daftar aplikasi lain belum.
             'label_baru' => true,
+            // HANYA LEMBAGA YANG SUDAH MELAKUKAN AKTIVASI (permintaan pemilik, v1.78.0):
+            // *"Pada Menu Ujian Online dan Menu Smart Teacher hanya bisa diakses oleh lembaga yang
+            // telah melakukan aktifasi. Bagi yang belum, menu ini belum bisa diakses dengan
+            // keterangan: Menu ini hanya bisa diakses oleh lembaga yang sudah melakukan aktifasi."*
+            // → daftar_apps_aktivasi_boleh() menolak lembaga yang masih masa uji coba (belum pernah
+            // memasukkan kode aktivasi); halamannya tetap dapat dibuka tetapi hanya menampilkan
+            // keterangan tersebut + tombol ke halaman Status & Aktivasi.
+            'perlu_aktivasi' => true,
         ],
         // Menu "Bendahara" — permintaan pemilik: "Pada menu Bendahara isinya buat seperti Menu
         // Supervisi yang isinya link aplikasi yang diisi oleh Super Admin. Tapi pada pengisian link
@@ -458,6 +474,75 @@ function daftar_apps_tampil(string $menu): bool
         return false;
     }
     return daftar_apps_sekolah_punya_akses($menu, $sid);
+}
+
+// ============================================================================================
+// HANYA LEMBAGA YANG SUDAH MELAKUKAN AKTIVASI (v1.78.0 — permintaan pemilik)
+// --------------------------------------------------------------------------------------------
+// Permintaan pemilik: *"Pada Menu Ujian Online dan Menu Smart Teacher hanya bisa diakses oleh
+// lembaga yang telah melakukan aktifasi. Bagi yang belum, menu ini belum bisa diakses dengan
+// keterangan: Menu ini hanya bisa diakses oleh lembaga yang sudah melakukan aktifasi."*
+//
+// Aturan yang dipakai (SATU tempat — jangan menyalinnya ke halaman/sidebar):
+//  • Menu yang ditandai `'perlu_aktivasi' => true` pada `daftar_apps_konfig()` (sekarang: **Smart
+//    Teacher** & **Ujian Online**) hanya boleh dibuka lembaga yang status aktivasinya BUKAN masa uji
+//    coba — yaitu `aktif` (365 hari, sudah memasukkan kode dari HD Admin) atau `permanen` (diberikan
+//    Super Admin). Lembaga yang masih `uji_coba` = **belum melakukan aktivasi** → hanya melihat
+//    keterangan pada halamannya (menu sidebar TETAP tampil supaya keterangannya dapat dibaca).
+//  • Masa aktif yang sudah HABIS (`aktivasi_terkunci()`) juga tidak boleh membuka daftar — seluruh
+//    aplikasi memang sudah terkunci lewat `gerbang_aktivasi()`; untuk pengawas (yang tidak terkena
+//    gerbang) penjagaan ini tetap berlaku.
+//  • **Super Admin SELALU boleh**: dialah pengelola daftar aplikasinya (menambah/mengubah link).
+//    Tanpa pengecualian ini, Super Admin tidak dapat mengisi daftar untuk sekolah mana pun.
+// ============================================================================================
+
+/** Apakah menu daftar aplikasi ini mensyaratkan lembaga sudah melakukan aktivasi? */
+function daftar_apps_perlu_aktivasi(string $menu): bool
+{
+    $k = daftar_apps_konfig($menu);
+    return $k !== null && !empty($k['perlu_aktivasi']);
+}
+
+/**
+ * true bila pengguna yang sedang masuk boleh MEMBUKA ISI menu daftar aplikasi ini.
+ * Lihat aturan lengkap pada blok komentar di atas.
+ */
+function daftar_apps_aktivasi_boleh(string $menu): bool
+{
+    if (!daftar_apps_perlu_aktivasi($menu)) {
+        return true;
+    }
+    if (is_super()) {
+        return true;
+    }
+    $s = current_sekolah();
+    if (!$s) {
+        return false;
+    }
+    $st = aktivasi_status($s);
+    return in_array($st['mode'], ['permanen', 'aktif'], true) && !$st['habis'];
+}
+
+/**
+ * Keterangan yang WAJIB tampil pada menu yang belum boleh diakses (kalimat permintaan pemilik,
+ * jangan diubah): dipakai halaman menu, lencana sidebar, dan panduan Petunjuk Penggunaan.
+ */
+function daftar_apps_aktivasi_pesan(): string
+{
+    return 'Menu ini hanya bisa diakses oleh lembaga yang sudah melakukan aktifasi.';
+}
+
+/**
+ * Lencana kecil pada sidebar untuk menu yang sedang terkunci karena lembaga belum melakukan
+ * aktivasi (`''` bila menu tetap boleh dibuka). Dipakai `inc/layout.php`.
+ */
+function daftar_apps_aktivasi_pil(string $menu): string
+{
+    if (daftar_apps_aktivasi_boleh($menu)) {
+        return '';
+    }
+    return '<span class="pill pill-warn" style="margin-left:auto" title="'
+        . e(daftar_apps_aktivasi_pesan()) . '">Aktivasi</span>';
 }
 
 /**
@@ -833,6 +918,121 @@ function daftar_apps_geser(string $menu, int $id, int $arah): bool
 }
 
 /**
+ * ============================================================================
+ *  PENCATATAN PENGGUNAAN APLIKASI (skema v59) — GRAFIK "Aplikasi yang Sering Digunakan"
+ * ============================================================================
+ * Permintaan pemilik: *"Pada halaman smart teacher tambahkan Grafik Aplikasi yang Sering
+ * Digunakan. Data grafik diambil dari data seluruh pengguna yang menggunakan … Tujuannya agar
+ * pengguna tau aplikasi mana yang sering digunakan."*
+ *
+ * Pilihan pemilik (jangan diubah tanpa bertanya):
+ *  1. grafik diletakkan di **halaman Smart Teacher** (di atas daftar kartu aplikasi);
+ *  2. yang dihitung = **klik tombol "Buka Aplikasi"** pada SEMUA menu daftar aplikasi
+ *     (Smart Teacher, Aplikasi Sagu, Ujian Online, Hasil Supervisi, Bendahara Bos/Madrasah);
+ *  3. rentangnya = **seluruh data yang tercatat** (tanpa batas waktu / 30 hari).
+ *
+ * Karena itu tombol "Buka Aplikasi" TIDAK lagi menunjuk langsung ke tautan aplikasinya, melainkan
+ * ke `app_buka.php` (mencatat klik lebih dulu, lalu mengalihkan ke tautan aslinya). Pencatatan
+ * dilakukan di SERVER, jadi tetap bekerja tanpa JavaScript dan tidak bisa dilewati dari tampilan.
+ */
+
+/** Alamat tombol "Buka Aplikasi" (pencatat klik + pengalihan). `$berkas` = halaman asal untuk kembali. */
+function app_buka_url(string $menu, int $appId, string $berkas = ''): string
+{
+    $q = ['m' => $menu, 'id' => $appId];
+    if ($berkas !== '') {
+        $q['b'] = $berkas;
+    }
+    return 'app_buka.php?' . http_build_query($q);
+}
+
+/**
+ * Catat SATU klik "Buka Aplikasi".
+ *
+ * Nama aplikasi, nama pengguna, dan nama sekolah disimpan sebagai SNAPSHOT supaya rekapnya tetap
+ * terbaca walau aplikasi/akun/sekolahnya kelak dihapus. Kegagalan mencatat TIDAK BOLEH menggagalkan
+ * pengalihan pengguna (pola yang sama dengan log aktivitas) — karena itu seluruh isinya try/catch.
+ */
+function app_klik_catat(string $menu, array $app): void
+{
+    try {
+        $u = current_user();
+        $s = current_sekolah();
+        $nama = trim((string) ($app['nama'] ?? ''));
+        q('INSERT INTO app_klik
+              (menu, app_id, nama, sekolah_id, sekolah_nama, user_id, user_nama, role, waktu)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+            $menu,
+            (int) ($app['id'] ?? 0),
+            $nama !== '' ? $nama : '(tanpa nama)',
+            $s ? (int) $s['id'] : null,
+            $s ? nama_sekolah_tampil($s) : null,
+            $u ? (int) $u['id'] : null,
+            $u ? (string) $u['nama'] : null,
+            $u ? (string) $u['role'] : null,
+            date('Y-m-d H:i:s'),
+        ]);
+    } catch (Throwable $ex) {
+        error_log('e-GURU app_klik: gagal mencatat penggunaan aplikasi — ' . $ex->getMessage());
+    }
+}
+
+/**
+ * Rekap aplikasi yang paling sering dibuka — SELURUH menu, SELURUH sekolah/madrasah, SEMUA data
+ * yang tercatat (permintaan pemilik: "total keseluruhan", bukan 30/90 hari).
+ *
+ * Pengelompokan memakai **menu + nama aplikasi** (tanpa membedakan huruf besar/kecil & spasi di
+ * tepi). Dua aplikasi pada menu berbeda tetap dihitung TERPISAH karena keduanya memang dua entri
+ * kartu yang berbeda (masing-masing punya tautannya sendiri), dan nama yang ditampilkan adalah
+ * ejaan dari klik TERAKHIR pada menu itu sehingga selalu sama dengan yang tertulis di kartunya.
+ * Aplikasi yang dihapus Super Admin tetap muncul karena namanya tersimpan sebagai snapshot.
+ *
+ * @return array<int, array{nama:string, jml:int, menu:string}>
+ */
+function app_klik_ringkas(int $batas = 8): array
+{
+    $batas = max(1, min(50, $batas));
+    $baris = all('SELECT a1.menu AS menu,
+                         (SELECT TRIM(a2.nama) FROM app_klik a2
+                           WHERE a2.menu = a1.menu
+                             AND LOWER(TRIM(a2.nama)) = LOWER(TRIM(a1.nama))
+                           ORDER BY a2.id DESC LIMIT 1) AS nama,
+                         COUNT(*) AS jml
+                    FROM app_klik a1
+                   GROUP BY a1.menu, LOWER(TRIM(a1.nama))
+                   ORDER BY jml DESC, nama COLLATE NOCASE ASC
+                   LIMIT ' . $batas);
+    $hasil = [];
+    foreach ($baris as $r) {
+        $hasil[] = [
+            'nama' => (string) $r['nama'],
+            'jml'  => (int) $r['jml'],
+            'menu' => (string) $r['menu'],
+        ];
+    }
+    return $hasil;
+}
+
+/** Jumlah SELURUH klik "Buka Aplikasi" yang tercatat (semua menu & semua sekolah). */
+function app_klik_total(): int
+{
+    return (int) val('SELECT COUNT(*) FROM app_klik', [], 0);
+}
+
+/** Jumlah aplikasi BERBEDA yang pernah dibuka (dasar chip "N aplikasi" pada kartu grafik). */
+function app_klik_app_jumlah(): int
+{
+    return (int) val('SELECT COUNT(*) FROM (SELECT 1 FROM app_klik GROUP BY menu, LOWER(TRIM(nama)))', [], 0);
+}
+
+/** Label menu daftar aplikasi dari kuncinya — untuk keterangan pada grafik. */
+function app_klik_menu_label(string $menu): string
+{
+    $k = daftar_apps_konfig($menu);
+    return $k !== null ? (string) ($k['menu'] ?? $menu) : $menu;
+}
+
+/**
  * Jalankan satu halaman menu daftar aplikasi: tangani POST (Super Admin saja) lalu render halaman.
  * Halaman pemanggil cukup berupa berkas tipis, mis.:
  *
@@ -878,6 +1078,54 @@ function daftar_apps_halaman(string $menu, ?array $tugas = null): void
     // Menu PER APLIKASI (Bendahara) sengaja TIDAK ditolak walaupun menunya disembunyikan dari
     // sidebar: halaman tetap dirender dengan keterangan "belum punya akses" (permintaan pemilik),
     // dan tautan aplikasinya tetap tidak dibuka (kartu terkunci).
+
+    // ------------------------------------------------- HANYA LEMBAGA YANG SUDAH AKTIVASI (v1.78.0)
+    // Permintaan pemilik: *"Pada Menu Ujian Online dan Menu Smart Teacher hanya bisa diakses oleh
+    // lembaga yang telah melakukan aktifasi. Bagi yang belum, menu ini belum bisa diakses dengan
+    // keterangan: Menu ini hanya bisa diakses oleh lembaga yang sudah melakukan aktifasi."*
+    // Halamannya sengaja TETAP dapat dibuka (menu sidebar juga tetap tampil) supaya keterangannya
+    // terbaca — yang tidak ditampilkan hanyalah daftar aplikasinya. Aturannya satu tempat:
+    // daftar_apps_aktivasi_boleh().
+    if (!daftar_apps_aktivasi_boleh($menu)) {
+        // POST dari peran selain Super Admin tetap ditolak 403 (bukan dirender 200) supaya
+        // penjagaan hak akses tidak berubah hanya karena lembaga belum beraktivasi.
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            tolak403('Daftar ' . $namaMenu . ' hanya dapat diubah oleh Super Admin.');
+        }
+        $waAdmin = aktivasi_wa();
+        page_top($namaMenu, $tugas !== null ? 'Tugas Tambahan' : '');
+        ?>
+<div class="card" id="cardPerluAktivasi">
+  <div class="card-head">
+    <div>
+      <h2><?= ikon('lock', 16) ?> <?= e($namaMenu) ?></h2>
+      <p>Daftar aplikasi ini hanya tersedia bagi lembaga yang <b>sudah melakukan aktivasi</b>.</p>
+    </div>
+    <div class="flex"><span class="pill pill-warn">Aktivasi diperlukan</span></div>
+  </div>
+  <div class="alert alert-warn" id="pesanPerluAktivasi">
+    <?= ikon('lock', 16) ?>
+    <span><b><?= e(daftar_apps_aktivasi_pesan()) ?></b>
+      Lembaga ini masih memakai <b>masa uji coba</b> / belum pernah memasukkan kode aktivasi, sehingga
+      daftar aplikasi <b><?= e($namaMenu) ?></b> belum dapat dibuka. Menu ini <b>terbuka otomatis</b>
+      begitu aktivasi lembaga berhasil — tidak ada data yang perlu diisi ulang.</span>
+  </div>
+  <div class="flex" style="margin-top:16px">
+    <?php if (boleh_aktivasi()): ?>
+      <a class="btn btn-primary" href="aktivasi.php"><?= ikon('key', 16) ?> Buka Status &amp; Aktivasi</a>
+      <span class="mut xs">Masukkan kode aktivasi yang dikirim HD Admin pada halaman itu
+        <?= $waAdmin !== '' ? '(WA ' . e($waAdmin) . ')' : '' ?>.</span>
+    <?php else: ?>
+      <span class="mut xs">Kode aktivasi dimasukkan oleh <b>Kepala Sekolah/Madrasah</b> atau
+        <b>Admin Operator</b> melalui menu <b>Status &amp; Aktivasi</b><?= $waAdmin !== ''
+            ? ' — kodenya diminta kepada HD Admin (WA ' . e($waAdmin) . ')' : '' ?>.</span>
+    <?php endif; ?>
+  </div>
+</div>
+        <?php
+        page_bottom();
+        return;
+    }
 
     // ---------------------------------------------------------------- pengubahan (Super Admin saja)
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -1026,8 +1274,51 @@ function daftar_apps_halaman(string $menu, ?array $tugas = null): void
         }
     }
 
+    // GRAFIK "APLIKASI YANG SERING DIGUNAKAN" (v1.79.0) — dihitung SEKALI di sini karena dipakai
+    // kartu grafik di atas daftar aplikasi DAN skrip penggambar grafik di bawah halaman.
+    $grafikSering = !empty($k['grafik_sering']);
+    $klikRingkas = $grafikSering ? app_klik_ringkas(8) : [];
+    $klikTotal = $grafikSering ? app_klik_total() : 0;
+    $klikAppJml = $grafikSering ? app_klik_app_jumlah() : 0;
+
     page_top($namaMenu, $tugas !== null ? 'Tugas Tambahan' : '');
     ?>
+<?php if ($grafikSering): ?>
+  <?php // Kartu GRAFIK diletakkan PALING ATAS (di atas daftar kartu aplikasi) sesuai permintaan
+        // pemilik: *"Pada halaman smart teacher tambahkan Grafik Aplikasi yang Sering Digunakan."*
+        // Datanya GLOBAL (seluruh pengguna, semua sekolah/madrasah, seluruh data yang tercatat) —
+        // sama seperti ringkasan pada dasbor Super Admin — supaya pengguna tahu aplikasi mana yang
+        // paling sering dipakai. ?>
+  <div class="card" id="cardGrafikApps">
+    <div class="card-head">
+      <div>
+        <h2><?= ikon('chart', 16) ?> Aplikasi yang Sering Digunakan</h2>
+        <p>Jumlah klik tombol <b>Buka Aplikasi</b> oleh <b>seluruh pengguna</b> dari semua
+          sekolah/madrasah — seluruh data yang tercatat (tanpa batas waktu).</p>
+      </div>
+      <div class="flex">
+        <span class="chip" id="chipKlikApps"><?= (int) $klikTotal ?> klik</span>
+        <span class="chip" id="chipAppApps"><?= (int) $klikAppJml ?> aplikasi</span>
+      </div>
+    </div>
+    <?php if (!$klikRingkas): ?>
+      <div class="empty" id="grafikAppsKosong">
+        <?= ikon('chart', 32) ?>
+        <h3>Belum ada data penggunaan</h3>
+        <p>Grafik ini terisi otomatis setiap kali pengguna menekan tombol <b>Buka Aplikasi</b> pada
+          daftar aplikasi (Smart Teacher, Aplikasi Sagu, Ujian Online, Hasil Supervisi, serta
+          Bendahara Bos/Madrasah).</p>
+      </div>
+    <?php else: ?>
+      <div class="chart-box grafik-apps" id="grafikAppsBox"><canvas id="chAppsSering"></canvas></div>
+      <p class="hint center" id="ketGrafikApps">
+        Urutan dari aplikasi yang paling sering dibuka<?= $klikAppJml > count($klikRingkas)
+            ? ' — menampilkan ' . count($klikRingkas) . ' teratas dari ' . (int) $klikAppJml . ' aplikasi' : '' ?>.
+        Angka dihitung sejak fitur ini dipasang.
+      </p>
+    <?php endif; ?>
+  </div>
+<?php endif; ?>
 <div class="card">
   <div class="card-head">
     <div>
@@ -1240,7 +1531,11 @@ function daftar_apps_halaman(string $menu, ?array $tugas = null): void
               <span class="apps-tanpa-akses"><?= ikon('lock', 15) ?>
                 <?= e(tetap_kata('Madrasah Anda belum punya akses ke aplikasi keuangan.')) ?></span>
             <?php elseif ($link !== ''): ?>
-              <a class="btn btn-primary btn-sm" href="<?= e($link) ?>" target="_blank" rel="noopener noreferrer">
+              <?php // v1.79.0: tombol ini menunjuk ke `app_buka.php` supaya SETIAP klik tercatat untuk
+                    // GRAFIK "Aplikasi yang Sering Digunakan" (data seluruh pengguna, semua sekolah),
+                    // lalu pengguna dialihkan ke tautan aplikasinya. Jangan dikembalikan ke `$link`. ?>
+              <a class="btn btn-primary btn-sm" href="<?= e(app_buka_url($menu, (int) $a['id'], $berkas)) ?>"
+                 target="_blank" rel="noopener noreferrer">
                 <?= ikon('eye', 15) ?> Buka Aplikasi
               </a>
             <?php else: ?>
@@ -1401,5 +1696,21 @@ function daftar_apps_halaman(string $menu, ?array $tugas = null): void
   </div>
 <?php endif; ?>
 <?php
+    // GRAFIK "APLIKASI YANG SERING DIGUNAKAN" (v1.79.0) — digambar di klien memakai Chart.js yang
+    // sudah di-vendor lokal (pola sama dengan index.php). Bila belum ada data, kanvas tidak dicetak
+    // sama sekali sehingga tidak ada grafik kosong.
+    if ($grafikSering && $klikRingkas):
+        $labelApp = array_map(static fn(array $r): string => $r['nama'], $klikRingkas);
+        $dataApp = array_map(static fn(array $r): int => $r['jml'], $klikRingkas);
+?>
+<script src="assets/vendor/chart.umd.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  EG.bar('chAppsSering', <?= json_encode($labelApp, JSON_UNESCAPED_UNICODE) ?>,
+    <?= json_encode($dataApp) ?>, true);
+});
+</script>
+<?php
+    endif;
     page_bottom();
 }

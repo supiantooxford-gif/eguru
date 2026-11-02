@@ -339,7 +339,8 @@ function petunjuk_daftar(): array
                     ? ['Gunakan "Tambah Guru" untuk menambah data guru satu per satu, atau "Impor Excel/CSV" untuk banyak data sekaligus.',
                        'Saat menambah guru, centang "Buat akun login" bila guru itu perlu masuk aplikasi — nama penggunanya otomatis diambil dari kata awal nama guru dan sandi awalnya guru123.',
                        'Pada lembaga berjenjang SD/MI, centang "Guru Kelas" + satu kelas: guru itu otomatis menjadi wali kelas kelas tersebut (mata pelajaran tetap dicentang manual).',
-                       'Tombol "Buat akun" pada daftar dipakai untuk membuat akun bagi guru yang belum punya.']
+                       'Tombol "Buat akun" pada daftar dipakai untuk membuat akun bagi guru yang belum punya.',
+                       'Tombol "Reset sandi" pada kolom Akun dipakai bila guru lupa sandinya: kata sandinya direset menjadi guru123 dan guru WAJIB membuat kata sandi baru sendiri saat masuk.']
                     : ['Gunakan penyaring untuk mencari guru, mata pelajaran, atau kelas.',
                        'Tombol "Cetak Data Guru" mencetak daftar sesuai penyaring yang aktif.',
                        'Penyuntingan data guru dilakukan oleh Admin Operator pada akunnya.'],
@@ -447,11 +448,18 @@ function petunjuk_daftar(): array
         $adm[] = petunjuk_baris('Ujian Online', 'clipboard', 'ujian_online.php',
             'Daftar tautan aplikasi ujian online yang disiapkan pengelola aplikasi (mis. aplikasi CBT).',
             ['Klik "Buka Aplikasi" untuk membuka aplikasinya pada tab baru.',
-             'Keterangan pada tiap kartu menjelaskan aplikasi ujiannya.']);
+             'Keterangan pada tiap kartu menjelaskan aplikasi ujiannya.'],
+            daftar_apps_aktivasi_pesan() . ' Bagi lembaga yang masih masa uji coba, halaman ini hanya '
+            . 'menampilkan keterangan tersebut sampai kode aktivasi dimasukkan pada menu Status & Aktivasi.');
         $adm[] = petunjuk_baris('Smart Teacher', 'apps', 'smart_teacher.php',
             'Daftar aplikasi pembelajaran pilihan yang disiapkan pengelola aplikasi.',
             ['Klik "Buka Aplikasi" untuk membuka aplikasinya pada tab baru.',
-             'Tiap kartu memakai ikon yang sesuai dengan nama aplikasinya, sehingga mudah dikenali.']);
+             'Tiap kartu memakai ikon yang sesuai dengan nama aplikasinya, sehingga mudah dikenali.',
+             'Di <b>atas daftar aplikasi</b> ada grafik <b>Aplikasi yang Sering Digunakan</b>: jumlah klik '
+             . '"Buka Aplikasi" dari seluruh pengguna semua sekolah/madrasah (seluruh data yang tercatat), '
+             . 'sehingga Anda tahu aplikasi mana yang paling banyak dipakai.'],
+            daftar_apps_aktivasi_pesan() . ' Bagi lembaga yang masih masa uji coba, halaman ini hanya '
+            . 'menampilkan keterangan tersebut sampai kode aktivasi dimasukkan pada menu Status & Aktivasi.');
         if (daftar_apps_tampil('aplikasi_sagu')) {
             $adm[] = petunjuk_baris('Aplikasi Sagu', 'star', 'aplikasi_sagu.php',
                 'Daftar aplikasi tambahan yang disiapkan pengelola aplikasi untuk sekolah/madrasah ini.',

@@ -491,7 +491,7 @@ function page_top(string $judul, string $sub = ''): void
             // 'Ujian Online'. Isi dari menu ini buat seperti menu smart teacher" (daftar link
             // aplikasi ujian online yang diisi Super Admin). Diletakkan TEPAT di bawah Pelanggaran
             // Siswa, sebelum Smart Teacher. ?>
-      <a class="nav-item <?= $here === 'ujian_online.php' ? 'on' : '' ?>" href="ujian_online.php"><?= ikon('clipboard') ?><?= daftar_apps_nama_sidebar('ujian_online', 'Ujian Online') ?></a>
+      <a class="nav-item <?= $here === 'ujian_online.php' ? 'on' : '' ?>" href="ujian_online.php"><?= ikon('clipboard') ?><?= daftar_apps_nama_sidebar('ujian_online', 'Ujian Online') ?><?= daftar_apps_aktivasi_pil('ujian_online') ?></a>
       <?php // Smart Teacher, Aplikasi Sagu & Hasil Supervisi: daftar aplikasi GLOBAL (diisi Super
             // Admin) — tampil untuk SEMUA pengguna, berurutan tepat di bawah Pelanggaran Siswa
             // (permintaan pemilik), dengan "Aplikasi Sagu" di bawah Smart Teacher.
@@ -499,7 +499,7 @@ function page_top(string $judul, string $sub = ''): void
             // ⚠️ v1.75.0: menu **"Studio Foto Pintar" DIHAPUS** atas permintaan pemilik ("Hapus menu
             // yang saya tandai warna merah") — aplikasi studio fotonya tetap ada sebagai salah satu
             // kartu DI DALAM menu Smart Teacher. Jangan dihidupkan kembali tanpa permintaan baru. ?>
-      <a class="nav-item <?= $here === 'smart_teacher.php' ? 'on' : '' ?>" href="smart_teacher.php"><?= ikon('apps') ?><?= daftar_apps_nama_sidebar('smart_teacher', 'Smart Teacher') ?></a>
+      <a class="nav-item <?= $here === 'smart_teacher.php' ? 'on' : '' ?>" href="smart_teacher.php"><?= ikon('apps') ?><?= daftar_apps_nama_sidebar('smart_teacher', 'Smart Teacher') ?><?= daftar_apps_aktivasi_pil('smart_teacher') ?></a>
       <?php // Aplikasi Sagu: dibatasi per sekolah (lihat daftar_apps_tampil()) — sekolah yang tidak
             // dicentang Super Admin tidak melihat menunya sama sekali. ?>
       <?php if (daftar_apps_tampil('aplikasi_sagu')): ?>
