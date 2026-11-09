@@ -278,6 +278,55 @@ function perangkat_jenis_geser(int $id, int $arah): array
     return ['ok' => true, 'pesan' => 'Urutan Nama Dokumen diperbarui.'];
 }
 
+// ------------------------------------------------------------------ pilihan KELAS (skema v60)
+
+/**
+ * Pilihan **KELAS** untuk formulir "Kirim Perangkat" (skema v60 — permintaan pemilik: *"Pada menu
+ * kirim perangkat tambahkan pilihan kelas, agar guru lebih jelas perangkat yang dikirim itu kelas
+ * berapa dan mata pelajaran apa. Karena untuk saat ini mengalami masalah saat kirim mata pelajaran
+ * yang sama"*).
+ *
+ * Urutan sumber:
+ *   1. kelas yang DIAMPU guru itu (Data Guru → kelas yang diampu, tabel `guru_kelas`);
+ *   2. bila guru belum punya kelas (data lama / jenjang tertentu), **seluruh kelas aktif** sekolah
+ *      supaya guru tetap dapat mengirim perangkat (tidak boleh buntu);
+ *   3. bila sekolah belum punya kelas sama sekali → daftar kosong dan kelas kiriman = 0
+ *      ("kelas belum ditentukan"), sehingga perilakunya sama seperti sebelum v60.
+ *
+ * @return array<int,array<string,mixed>>
+ */
+function perangkat_kelas_pilih(int $guruId = 0): array
+{
+    $guruId = $guruId > 0 ? $guruId : guru_id_saya();
+    $kelas = $guruId > 0 ? kelas_diampu($guruId) : [];
+    if (!$kelas) {
+        $kelas = kelas_list(true);
+    }
+    return $kelas;
+}
+
+/** Peta id => nama untuk pilihan kelas (dipakai pemeriksaan POST & pesan). */
+function perangkat_kelas_peta(int $guruId = 0): array
+{
+    $peta = [];
+    foreach (perangkat_kelas_pilih($guruId) as $k) {
+        $peta[(int) $k['id']] = (string) $k['nama'];
+    }
+    return $peta;
+}
+
+/**
+ * Teks kelas sebuah kiriman: nama kelas yang masih ada (`kl.nama`), atau SNAPSHOT `kelas_nama`, atau
+ * tanda "—" untuk kiriman LAMA yang dibuat sebelum ada pilihan kelas (kelas_id = 0).
+ *
+ * @param array<string,mixed> $baris
+ */
+function perangkat_kelas_teks(array $baris): string
+{
+    $nama = trim((string) ($baris['kelas_nama'] ?? ''));
+    return $nama !== '' ? $nama : '—';
+}
+
 // ------------------------------------------------------------------ data kiriman
 
 /**
@@ -294,6 +343,7 @@ function perangkat_filter(array $get): array
         'ta'    => (int) ($get['ta'] ?? 0),
         'guru'  => (int) ($get['guru'] ?? 0),
         'mapel' => (int) ($get['mapel'] ?? 0),
+        'kelas' => (int) ($get['kelas'] ?? 0),
         'jenis' => (int) ($get['jenis'] ?? 0),
         'status' => perangkat_status_awal((string) ($get['status'] ?? '')),
         'status_ada' => trim((string) ($get['status'] ?? '')) !== '',
@@ -317,6 +367,13 @@ function perangkat_filter(array $get): array
     } else {
         $f['mapel'] = 0;
     }
+    // KELAS (v60) — nilai asing/kelas sekolah lain diabaikan, bukan 403 (pola penyaring lain).
+    if ($f['kelas'] > 0) {
+        $w[] = 'k.kelas_id = ?';
+        $p[] = $f['kelas'];
+    } else {
+        $f['kelas'] = 0;
+    }
     if ($f['jenis'] > 0 && perangkat_jenis_by_id($f['jenis'])) {
         $w[] = 'k.jenis_id = ?';
         $p[] = $f['jenis'];
@@ -331,9 +388,9 @@ function perangkat_filter(array $get): array
     }
     if ($f['cari'] !== '') {
         $w[] = '(k.nama_jenis LIKE ? OR k.keterangan LIKE ? OR k.nama_berkas LIKE ?'
-            . ' OR g.nama LIKE ? OR m.nama LIKE ? OR k.catatan LIKE ?)';
+            . ' OR g.nama LIKE ? OR m.nama LIKE ? OR k.catatan LIKE ? OR COALESCE(kl.nama, k.kelas_nama) LIKE ?)';
         $like = '%' . $f['cari'] . '%';
-        array_push($p, $like, $like, $like, $like, $like, $like);
+        array_push($p, $like, $like, $like, $like, $like, $like, $like);
     }
     return [implode(' AND ', $w), $p, $f];
 }
@@ -347,16 +404,18 @@ function perangkat_filter(array $get): array
 function perangkat_kirim_sekolah(array $f): array
 {
     return all('SELECT k.*, g.nama AS guru_nama, m.nama AS mapel_nama,
+                       COALESCE(kl.nama, k.kelas_nama) AS kelas_nama,
                        COALESCE(j.nama, k.nama_jenis) AS jenis_nama,
                        COALESCE(t.nama, k.ta_nama) AS ta_teks,
                        (SELECT u.nama FROM users u WHERE u.id = k.ditinjau_oleh) AS peninjau_nama
                   FROM perangkat_kirim k
                   JOIN guru g ON g.id = k.guru_id
                   JOIN mapel m ON m.id = k.mapel_id
+                  LEFT JOIN kelas kl ON kl.id = k.kelas_id
                   LEFT JOIN perangkat_jenis j ON j.id = k.jenis_id
                   LEFT JOIN tahun_ajaran t ON t.id = k.ta_id
                  WHERE ' . $f[0] . '
-                 ORDER BY g.nama, m.urutan, m.nama, j.urutan, k.nama_jenis, k.id', $f[1]);
+                 ORDER BY g.nama, m.urutan, m.nama, kl.urutan, kl.nama, j.urutan, k.nama_jenis, k.id', $f[1]);
 }
 
 /** Daftar kiriman milik SEORANG GURU (halaman "Kirim Perangkat"), bisa disaring per tahun ajaran. */
@@ -372,15 +431,18 @@ function perangkat_kirim_guru(int $guruId, int $taId = 0): array
         $p[] = $taId;
     }
     return all('SELECT k.*, m.nama AS mapel_nama,
+                       COALESCE(kl.nama, k.kelas_nama) AS kelas_nama,
                        COALESCE(j.nama, k.nama_jenis) AS jenis_nama,
                        COALESCE(t.nama, k.ta_nama) AS ta_teks,
                        (SELECT u.nama FROM users u WHERE u.id = k.ditinjau_oleh) AS peninjau_nama
                   FROM perangkat_kirim k
                   JOIN mapel m ON m.id = k.mapel_id
+                  LEFT JOIN kelas kl ON kl.id = k.kelas_id
                   LEFT JOIN perangkat_jenis j ON j.id = k.jenis_id
                   LEFT JOIN tahun_ajaran t ON t.id = k.ta_id
                  WHERE ' . implode(' AND ', $w) . '
-                 ORDER BY COALESCE(t.nama, k.ta_nama) DESC, m.urutan, m.nama, k.nama_jenis', $p);
+                 ORDER BY COALESCE(t.nama, k.ta_nama) DESC, m.urutan, m.nama,
+                          kl.urutan, kl.nama, j.urutan, k.nama_jenis', $p);
 }
 
 /** Satu baris kiriman menurut id — dibatasi sekolah yang sedang aktif (anti-IDOR). */
@@ -391,11 +453,13 @@ function perangkat_kirim_by_id(int $id, int $sekolahId = 0): ?array
         return null;
     }
     return one('SELECT k.*, g.nama AS guru_nama, m.nama AS mapel_nama,
+                       COALESCE(kl.nama, k.kelas_nama) AS kelas_nama,
                        COALESCE(j.nama, k.nama_jenis) AS jenis_nama,
                        COALESCE(t.nama, k.ta_nama) AS ta_teks
                   FROM perangkat_kirim k
                   JOIN guru g ON g.id = k.guru_id
                   JOIN mapel m ON m.id = k.mapel_id
+                  LEFT JOIN kelas kl ON kl.id = k.kelas_id
                   LEFT JOIN perangkat_jenis j ON j.id = k.jenis_id
                   LEFT JOIN tahun_ajaran t ON t.id = k.ta_id
                  WHERE k.id = ? AND k.sekolah_id = ?', [$id, $sid]);
@@ -411,38 +475,53 @@ function perangkat_kirim_milik(int $id, int $guruId): ?array
 }
 
 /**
- * Simpan (kirim atau GANTI) satu berkas perangkat pada sel (guru × mata pelajaran × tahun ajaran ×
- * nama dokumen).
+ * Simpan (kirim atau GANTI) satu berkas perangkat pada sel (guru × mata pelajaran × **kelas** ×
+ * tahun ajaran × nama dokumen).
  *
  * Mengunggah ulang pada sel yang sama MENGGANTIKAN berkas lama dan mengembalikan status tinjauan ke
  * **'menunggu'** (catatan & peninjau dikosongkan) — kepala sekolah perlu meninjau berkas yang baru.
+ *
+ * Sejak skema v60 KELAS menjadi bagian kunci, sehingga guru yang mengampu mata pelajaran yang sama di
+ * beberapa kelas dapat mengirim perangkat BERBEDA untuk tiap kelas (dulu saling menimpa).
+ * Kiriman LAMA ber-`kelas_id` 0 (dibuat sebelum ada pilihan kelas) **diadopsi** saat guru mengunggah
+ * ulang mata pelajaran + nama dokumen + tahun ajaran yang sama, supaya tidak muncul baris kembar.
  */
-function perangkat_kirim_simpan(int $guruId, int $mapelId, int $taId, int $jenisId,
+function perangkat_kirim_simpan(int $guruId, int $mapelId, int $kelasId, int $taId, int $jenisId,
                                 array $isi, int $sekolahId = 0): int
 {
     $sid = $sekolahId > 0 ? $sekolahId : sekolah_id();
     $ta = $taId > 0 ? one('SELECT * FROM tahun_ajaran WHERE id = ?', [$taId]) : null;
     $jenis = perangkat_jenis_by_id($jenisId);
+    $kelas = $kelasId > 0 ? one('SELECT * FROM kelas WHERE id = ? AND sekolah_id = ?', [$kelasId, $sid]) : null;
     $now = date('Y-m-d H:i:s');
     $namaJenis = $jenis ? (string) $jenis['nama'] : (string) ($isi['nama_jenis'] ?? 'Perangkat');
-    $ada = one('SELECT id FROM perangkat_kirim WHERE guru_id = ? AND mapel_id = ? AND ta_id = ? AND jenis_id = ?',
-        [$guruId, $mapelId, $taId, $jenisId]);
+    $namaKelas = $kelas ? (string) $kelas['nama'] : '';
+    $ada = one('SELECT id FROM perangkat_kirim WHERE guru_id = ? AND mapel_id = ? AND kelas_id = ?
+                 AND ta_id = ? AND jenis_id = ?',
+        [$guruId, $mapelId, $kelasId, $taId, $jenisId]);
+    if (!$ada && $kelasId > 0) {
+        // Adopsi kiriman LAMA (kelas_id 0) pada sel yang sama — lihat catatan fungsi di atas.
+        $ada = one('SELECT id FROM perangkat_kirim WHERE guru_id = ? AND mapel_id = ? AND kelas_id = 0
+                     AND ta_id = ? AND jenis_id = ?', [$guruId, $mapelId, $taId, $jenisId]);
+    }
     if ($ada) {
-        q('UPDATE perangkat_kirim SET sekolah_id = ?, nama_jenis = ?, keterangan = ?, url = ?,
-                 nama_berkas = ?, jenis_berkas = ?, ukuran = ?, status = ?, catatan = NULL,
-                 ditinjau_oleh = NULL, ditinjau_pada = NULL, diubah = ?
+        q('UPDATE perangkat_kirim SET sekolah_id = ?, kelas_id = ?, kelas_nama = ?, nama_jenis = ?,
+                 keterangan = ?, url = ?, nama_berkas = ?, jenis_berkas = ?, ukuran = ?, status = ?,
+                 catatan = NULL, ditinjau_oleh = NULL, ditinjau_pada = NULL, diubah = ?
             WHERE id = ?',
-            [$sid, $namaJenis, (string) ($isi['keterangan'] ?? ''), (string) $isi['url'],
-             (string) ($isi['nama_berkas'] ?? ''), (string) ($isi['jenis_berkas'] ?? ''),
-             (int) ($isi['ukuran'] ?? 0), 'menunggu', $now, (int) $ada['id']]);
+            [$sid, $kelasId, $namaKelas, $namaJenis, (string) ($isi['keterangan'] ?? ''),
+             (string) $isi['url'], (string) ($isi['nama_berkas'] ?? ''),
+             (string) ($isi['jenis_berkas'] ?? ''), (int) ($isi['ukuran'] ?? 0), 'menunggu',
+             $now, (int) $ada['id']]);
         return (int) $ada['id'];
     }
-    q('INSERT INTO perangkat_kirim (sekolah_id, guru_id, mapel_id, ta_id, ta_nama, jenis_id, nama_jenis,
-             keterangan, url, nama_berkas, jenis_berkas, ukuran, status, dikirim, diubah)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-        [$sid, $guruId, $mapelId, $taId, $ta ? (string) $ta['nama'] : '', $jenisId, $namaJenis,
-         (string) ($isi['keterangan'] ?? ''), (string) $isi['url'], (string) ($isi['nama_berkas'] ?? ''),
-         (string) ($isi['jenis_berkas'] ?? ''), (int) ($isi['ukuran'] ?? 0), 'menunggu', $now, $now]);
+    q('INSERT INTO perangkat_kirim (sekolah_id, guru_id, mapel_id, kelas_id, kelas_nama, ta_id, ta_nama,
+             jenis_id, nama_jenis, keterangan, url, nama_berkas, jenis_berkas, ukuran, status, dikirim, diubah)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        [$sid, $guruId, $mapelId, $kelasId, $namaKelas, $taId, $ta ? (string) $ta['nama'] : '', $jenisId,
+         $namaJenis, (string) ($isi['keterangan'] ?? ''), (string) $isi['url'],
+         (string) ($isi['nama_berkas'] ?? ''), (string) ($isi['jenis_berkas'] ?? ''),
+         (int) ($isi['ukuran'] ?? 0), 'menunggu', $now, $now]);
     return (int) db()->lastInsertId();
 }
 
@@ -499,7 +578,8 @@ function perangkat_tinjau(int $id, string $status, string $catatan, int $sekolah
         WHERE id = ?', [$status, $catatan, $uid, $now, $now, (int) $k['id']]);
     return ['ok' => true, 'status' => $status, 'catatan' => $catatan,
             'pesan' => strtoupper(perangkat_status_label($status)) . ' — ' . $k['jenis_nama'] . ' ('
-                . $k['guru_nama'] . ' · ' . $k['mapel_nama'] . ').'];
+                . $k['guru_nama'] . ' · ' . $k['mapel_nama']
+                . (perangkat_kelas_teks($k) !== '—' ? ' · Kelas ' . perangkat_kelas_teks($k) : '') . ').'];
 }
 
 // ------------------------------------------------------------------ ringkasan & kelengkapan
@@ -538,7 +618,12 @@ function perangkat_jumlah_menunggu(int $sekolahId = 0): int
 
 /**
  * Kelengkapan perangkat seorang guru pada satu tahun ajaran:
- * mapel_id => ['id','nama','sel' => [jenis_id => baris|null]].
+ * DAFTAR baris per **mata pelajaran × KELAS** — ['id' => mapel_id, 'nama', 'kelas_id', 'kelas_nama',
+ * 'sel' => [jenis_id => baris|null]].
+ *
+ * Sejak skema v60 kelas menjadi bagian kunci kiriman, jadi matriksnya menampilkan satu baris untuk
+ * setiap pasangan mata pelajaran–kelas yang diampu guru. Bila sekolah belum punya kelas sama sekali,
+ * satu baris per mata pelajaran dengan kelas 0 ("kelas belum ditentukan") — sama seperti sebelum v60.
  *
  * Dipakai matriks "Kelengkapan Perangkat Saya" yang menunjukkan sel mana yang belum dikirim.
  *
@@ -552,16 +637,23 @@ function perangkat_kelengkapan(int $guruId, int $taId): array
     $jenis = perangkat_jenis_list(true);
     $ada = [];
     foreach (perangkat_kirim_guru($guruId, $taId) as $k) {
-        $ada[(int) $k['mapel_id']][(int) $k['jenis_id']] = $k;
+        $ada[(int) $k['mapel_id']][(int) $k['kelas_id']][(int) $k['jenis_id']] = $k;
     }
+    $kelas = perangkat_kelas_pilih($guruId);
     $out = [];
     foreach (mapel_diampu($guruId) as $m) {
         $mid = (int) $m['id'];
-        $sel = [];
-        foreach ($jenis as $j) {
-            $sel[(int) $j['id']] = $ada[$mid][(int) $j['id']] ?? null;
+        // Pasangan kelas yang ditampilkan; tanpa kelas sama sekali → satu baris kelas 0.
+        $pasangan = $kelas ?: [['id' => 0, 'nama' => '']];
+        foreach ($pasangan as $kl) {
+            $kid = (int) $kl['id'];
+            $sel = [];
+            foreach ($jenis as $j) {
+                $sel[(int) $j['id']] = $ada[$mid][$kid][(int) $j['id']] ?? null;
+            }
+            $out[] = ['id' => $mid, 'nama' => (string) $m['nama'],
+                      'kelas_id' => $kid, 'kelas_nama' => (string) $kl['nama'], 'sel' => $sel];
         }
-        $out[$mid] = ['id' => $mid, 'nama' => (string) $m['nama'], 'sel' => $sel];
     }
     return $out;
 }
@@ -594,11 +686,15 @@ function perangkat_tinjauan_terbaru(int $guruId, int $limit = 3): array
     }
     $limit = max(1, min(20, $limit));
     return all('SELECT k.*, m.nama AS mapel_nama,
+                       COALESCE(kl.nama, k.kelas_nama) AS kelas_nama,
                        COALESCE(j.nama, k.nama_jenis) AS jenis_nama,
+                       COALESCE(t.nama, k.ta_nama) AS ta_teks,
                        (SELECT u.nama FROM users u WHERE u.id = k.ditinjau_oleh) AS peninjau_nama
                   FROM perangkat_kirim k
                   JOIN mapel m ON m.id = k.mapel_id
+                  LEFT JOIN kelas kl ON kl.id = k.kelas_id
                   LEFT JOIN perangkat_jenis j ON j.id = k.jenis_id
+                  LEFT JOIN tahun_ajaran t ON t.id = k.ta_id
                  WHERE k.guru_id = ? AND k.status <> \'menunggu\'
                  ORDER BY k.ditinjau_pada DESC, k.id DESC LIMIT ' . $limit, [$guruId]);
 }
@@ -835,7 +931,7 @@ function perangkat_ringkas_binaan(int $sekolahId, int $pengawasId = 0): array
  */
 function perangkat_tabel(array $baris, bool $tampilGuru, bool $bolehHapus = false): void
 {
-    $kolom = 6 + ($tampilGuru ? 1 : 0) + ($bolehHapus ? 1 : 0);
+    $kolom = 7 + ($tampilGuru ? 1 : 0) + ($bolehHapus ? 1 : 0);
     // CATATAN PENGAWAS (skema v52) — diambil sekali untuk semua baris supaya tidak N+1.
     $catatanPw = perangkat_catatan_peta(array_column($baris, 'id'));
     ?>
@@ -846,6 +942,7 @@ function perangkat_tabel(array $baris, bool $tampilGuru, bool $bolehHapus = fals
         <th class="ctr pk-no">No</th>
         <?php if ($tampilGuru): ?><th class="pk-guru">Nama Guru</th><?php endif; ?>
         <th class="pk-mapel">Mata Pelajaran</th>
+        <th class="pk-kelas">Kelas</th>
         <th class="pk-jenis">Nama Dokumen</th>
         <th class="ctr pk-ta">Tahun Ajaran</th>
         <th class="pk-berkas">Berkas</th>
@@ -867,6 +964,9 @@ function perangkat_tabel(array $baris, bool $tampilGuru, bool $bolehHapus = fals
           <td class="pk-guru-cell"><b><?= e(tetap_kata((string) ($k['guru_nama'] ?? '-'))) ?></b></td>
         <?php endif; ?>
         <td class="pk-mapel-cell"><?= e(tetap_kata((string) ($k['mapel_nama'] ?? '-'))) ?></td>
+        <td class="pk-kelas-cell nowrap"><?= perangkat_kelas_teks($k) === '—'
+            ? '<span class="mut xs">kelas belum ditentukan</span>'
+            : e(tetap_kata(perangkat_kelas_teks($k))) ?></td>
         <td>
           <b><?= e(tetap_kata((string) ($k['jenis_nama'] ?? $k['nama_jenis'] ?? '-'))) ?></b>
           <?php if (trim((string) ($k['keterangan'] ?? '')) !== ''): ?>
@@ -906,7 +1006,7 @@ function perangkat_tabel(array $baris, bool $tampilGuru, bool $bolehHapus = fals
         </td>
         <?php if ($bolehHapus): ?>
           <td class="ctr pk-aksi">
-            <form method="post" data-confirm="Hapus kiriman perangkat &quot;<?= e((string) ($k['jenis_nama'] ?? '')) ?>&quot; untuk mata pelajaran <?= e((string) ($k['mapel_nama'] ?? '')) ?>?">
+            <form method="post" data-confirm="Hapus kiriman perangkat &quot;<?= e((string) ($k['jenis_nama'] ?? '')) ?>&quot; untuk mata pelajaran <?= e((string) ($k['mapel_nama'] ?? '')) ?><?= perangkat_kelas_teks($k) !== '—' ? ' kelas ' . e(perangkat_kelas_teks($k)) : '' ?>?">
               <?= csrf_field() ?>
               <input type="hidden" name="aksi" value="hapus">
               <input type="hidden" name="id" value="<?= (int) $k['id'] ?>">
@@ -983,8 +1083,8 @@ function perangkat_kartu_ringkas(array $ringkas): void
 /**
  * Halaman **"Kirim Perangkat"** (`perangkat_saya.php`) — akun GURU.
  *
- * Guru mengunggah perangkat pembelajaran per **Nama Dokumen × mata pelajaran yang diampu × Tahun
- * Ajaran**, melihat kelengkapannya, dan membaca hasil tinjauan kepala sekolah.
+ * Guru mengunggah perangkat pembelajaran per **Nama Dokumen × mata pelajaran yang diampu × KELAS ×
+ * Tahun Ajaran**, melihat kelengkapannya, dan membaca hasil tinjauan kepala sekolah.
  */
 function perangkat_saya_halaman(): void
 {
@@ -1004,10 +1104,15 @@ function perangkat_saya_halaman(): void
     $sid = sekolah_id();
     $jenis = perangkat_jenis_list(true);
     $mapelSaya = mapel_diampu($gid);
+    $kelasSaya = perangkat_kelas_pilih($gid);
     $batasKirim = dok_batas_server();
     $petaMapel = [];
     foreach ($mapelSaya as $m) {
         $petaMapel[(int) $m['id']] = (string) $m['nama'];
+    }
+    $petaKelas = [];
+    foreach ($kelasSaya as $kl) {
+        $petaKelas[(int) $kl['id']] = (string) $kl['nama'];
     }
     $petaJenis = [];
     foreach ($jenis as $j) {
@@ -1042,16 +1147,28 @@ function perangkat_saya_halaman(): void
             }
 
             $mapelId = (int) ($_POST['mapel'] ?? 0);
+            $kelasId = (int) ($_POST['kelas'] ?? 0);
             $taId = (int) ($_POST['ta'] ?? 0);
             $jenisId = (int) ($_POST['jenis'] ?? 0);
             $keterangan = trim((string) ($_POST['keterangan'] ?? ''));
             if (strlen($keterangan) > PERANGKAT_KETERANGAN_MAKS) {
                 $keterangan = substr($keterangan, 0, PERANGKAT_KETERANGAN_MAKS);
             }
-            // Anti-IDOR: mata pelajaran HARUS milik guru ini, nama dokumen HARUS ada & aktif, dan
-            // tahun ajaran harus milik sekolah ini.
+            // Anti-IDOR: mata pelajaran HARUS milik guru ini, KELAS harus kelas yang boleh dipakai
+            // guru ini, nama dokumen HARUS ada & aktif, dan tahun ajaran harus milik sekolah ini.
             if (!isset($petaMapel[$mapelId])) {
                 tolak403('Mata pelajaran itu bukan mata pelajaran yang Anda ampu.');
+            }
+            if ($petaKelas) {
+                // Daftar kelas tersedia → wajib memilih salah satunya (bukan kelas sekolah lain).
+                if (!isset($petaKelas[$kelasId])) {
+                    flash('Kelas wajib dipilih. Pilih kelas yang Anda ampu, lalu unggah berkasnya.',
+                        'err');
+                    redirect('perangkat_saya.php#formKirimPerangkat');
+                }
+            } else {
+                // Sekolah belum punya data kelas → perilaku sama seperti sebelum v60.
+                $kelasId = 0;
             }
             if (!isset($petaJenis[$jenisId])) {
                 flash('Nama Dokumen yang dipilih tidak dikenal atau sudah dinonaktifkan Admin.', 'err');
@@ -1091,9 +1208,16 @@ function perangkat_saya_halaman(): void
                 redirect('perangkat_saya.php#formKirimPerangkat');
             }
 
-            $lama = one('SELECT id, status FROM perangkat_kirim WHERE guru_id = ? AND mapel_id = ? AND ta_id = ? AND jenis_id = ?',
-                [$gid, $mapelId, $taId, $jenisId]);
-            perangkat_kirim_simpan($gid, $mapelId, $taId, $jenisId, [
+            $lama = one('SELECT id, status FROM perangkat_kirim WHERE guru_id = ? AND mapel_id = ?
+                            AND kelas_id = ? AND ta_id = ? AND jenis_id = ?',
+                [$gid, $mapelId, $kelasId, $taId, $jenisId]);
+            if (!$lama && $kelasId > 0) {
+                // Kiriman LAMA (sebelum ada pilihan kelas) pada sel yang sama ikut digantikan.
+                $lama = one('SELECT id, status FROM perangkat_kirim WHERE guru_id = ? AND mapel_id = ?
+                                AND kelas_id = 0 AND ta_id = ? AND jenis_id = ?',
+                    [$gid, $mapelId, $taId, $jenisId]);
+            }
+            perangkat_kirim_simpan($gid, $mapelId, $kelasId, $taId, $jenisId, [
                 'keterangan' => $keterangan,
                 'url' => (string) $unggah['url'],
                 'nama_berkas' => $namaAsli,
@@ -1102,7 +1226,9 @@ function perangkat_saya_halaman(): void
             ], $sid);
             $labelJenis = $petaJenis[$jenisId];
             flash('Perangkat "' . tetap_kata($labelJenis) . '" untuk mata pelajaran '
-                . tetap_kata($petaMapel[$mapelId]) . ' (' . tetap_kata((string) $ta['nama']) . ') '
+                . tetap_kata($petaMapel[$mapelId])
+                . ($kelasId > 0 ? ' kelas ' . tetap_kata($petaKelas[$kelasId]) : '')
+                . ' (' . tetap_kata((string) $ta['nama']) . ') '
                 . ($lama ? 'berhasil DIGANTI' : 'berhasil dikirim')
                 . ' dan sudah masuk ke akun Kepala Sekolah/Madrasah untuk ditinjau.', 'ok');
             redirect('perangkat_saya.php?ta=' . $taId . '#tabelPerangkat');
@@ -1128,13 +1254,14 @@ function perangkat_saya_halaman(): void
   <div class="card-head">
     <div>
       <h2><?= ikon('folder', 16) ?> Kirim Perangkat Pembelajaran</h2>
-      <p>Unggah perangkat pembelajaran Anda — <b>satu berkas untuk setiap Nama Dokumen pada tiap mata
-        pelajaran yang Anda ampu</b> (mis. <?= e(implode(', ', array_slice(PERANGKAT_JENIS_BAWAAN, 0, 4))) ?>).
+      <p>Unggah perangkat pembelajaran Anda — <b>satu berkas untuk setiap Nama Dokumen pada tiap
+        mata pelajaran dan kelas yang Anda ampu</b> (mis. <?= e(implode(', ', array_slice(PERANGKAT_JENIS_BAWAAN, 0, 4))) ?>).
         Kiriman langsung masuk ke akun <b>Kepala Sekolah/Madrasah</b> untuk ditinjau, dan hasil
         tinjuannya tampil di halaman ini.</p>
     </div>
     <div class="flex">
       <span class="chip"><?= count($mapelSaya) ?> mata pelajaran</span>
+      <span class="chip"><?= count($kelasSaya) ?> kelas</span>
       <span class="chip"><?= count($jenis) ?> nama dokumen</span>
       <span class="chip"><?= (int) $hitung['terisi'] ?>/<?= (int) $hitung['total'] ?> terkirim</span>
     </div>
@@ -1149,6 +1276,11 @@ function perangkat_saya_halaman(): void
       pelajaran</b> yang diampu. Hubungi Admin Operator sekolah/madrasah agar mata pelajaran Anda
       ditetapkan pada menu Data Guru.</span></div>
   <?php endif; ?>
+  <?php if (!$kelasSaya): ?>
+    <div class="alert alert-warn"><?= ikon('info', 16) ?><span>Belum ada <b>data kelas</b> pada
+      sekolah/madrasah ini, jadi kiriman perangkat belum dapat ditandai kelasnya. Hubungi Admin
+      Operator agar data <b>Kelas</b> diisi (menu Kelas).</span></div>
+  <?php endif; ?>
 
   <div class="divider"></div>
   <div class="section-title mb8"><?= ikon('chart', 15) ?> Keadaan Perangkat
@@ -1162,7 +1294,7 @@ function perangkat_saya_halaman(): void
         <div>
           <b>Kelengkapan perangkat</b>
           <div class="tbl-sub"><?= (int) $hitung['terisi'] ?> dari <?= (int) $hitung['total'] ?> sel
-            (mata pelajaran &times; nama dokumen) sudah dikirim.</div>
+            (mata pelajaran &times; kelas &times; nama dokumen) sudah dikirim.</div>
         </div>
       </div>
       <div class="pk-bar sm mt16"><span style="width:<?= (int) $hitung['persen'] ?>%"></span></div>
@@ -1184,15 +1316,20 @@ function perangkat_saya_halaman(): void
       <div class="card-head">
         <div>
           <h2><?= ikon('upload', 16) ?> Unggah Perangkat</h2>
-          <p>Pilih <b>Tahun Ajaran</b>, <b>Mata Pelajaran</b>, dan <b>Nama Dokumen</b>, lalu pilih
-            berkasnya.</p>
+          <p>Pilih <b>Tahun Ajaran</b>, <b>Mata Pelajaran</b>, <b>Kelas</b>, dan <b>Nama Dokumen</b>,
+            lalu pilih berkasnya. Berkas untuk mata pelajaran yang sama di kelas berbeda dikirim
+            terpisah.</p>
         </div>
       </div>
       <?php
       $mPilih = (int) ($_GET['mapel'] ?? 0);
+      $kPilih = (int) ($_GET['kelas'] ?? 0);
       $jPilih = (int) ($_GET['jenis'] ?? 0);
       if (!isset($petaMapel[$mPilih])) {
           $mPilih = (int) array_key_first($petaMapel);
+      }
+      if (!isset($petaKelas[$kPilih])) {
+          $kPilih = (int) array_key_first($petaKelas);
       }
       if (!isset($petaJenis[$jPilih])) {
           $jPilih = (int) array_key_first($petaJenis);
@@ -1201,7 +1338,7 @@ function perangkat_saya_halaman(): void
       <form method="post" enctype="multipart/form-data" class="form-grid" id="formPerangkat">
         <?= csrf_field() ?>
         <input type="hidden" name="aksi" value="kirim">
-        <div class="grid g3" style="gap:16px">
+        <div class="grid g4" style="gap:16px">
           <div>
             <label class="f" for="ta">Tahun Ajaran *</label>
             <?php if (!$taSemua): ?>
@@ -1222,6 +1359,22 @@ function perangkat_saya_halaman(): void
                 <option value="<?= $mid ?>" <?= $mid === $mPilih ? 'selected' : '' ?>><?= e((string) $m['nama']) ?></option>
               <?php endforeach; ?>
             </select>
+          </div>
+          <div>
+            <label class="f" for="kelas">Kelas *</label>
+            <?php if (!$petaKelas): ?>
+              <input type="text" value="Belum ada data kelas" disabled>
+              <div class="hint">Kiriman disimpan tanpa kelas. Hubungi Admin Operator agar data
+                <b>Kelas</b> diisi.</div>
+            <?php else: ?>
+              <select id="kelas" name="kelas" required>
+                <?php foreach ($kelasSaya as $kl): $kid = (int) $kl['id']; ?>
+                  <option value="<?= $kid ?>" <?= $kid === $kPilih ? 'selected' : '' ?>><?= e((string) $kl['nama']) ?></option>
+                <?php endforeach; ?>
+              </select>
+              <div class="hint">Kelas tempat perangkat ini dipakai — mata pelajaran yang sama di kelas
+                berbeda dikirim terpisah.</div>
+            <?php endif; ?>
           </div>
           <div>
             <label class="f" for="jenis">Nama Dokumen *</label>
@@ -1286,6 +1439,7 @@ function perangkat_saya_halaman(): void
           <tr>
             <th class="ctr pk-no">No</th>
             <th class="pk-mapel">Mata Pelajaran</th>
+            <th class="pk-kelas">Kelas</th>
             <?php foreach ($jenis as $j): ?>
               <th class="ctr pk-jenis-sel"><?= e((string) $j['nama']) ?></th>
             <?php endforeach; ?>
@@ -1296,21 +1450,24 @@ function perangkat_saya_halaman(): void
           <tr>
             <td class="ctr"><?= $n ?></td>
             <td class="pk-mapel-cell"><b><?= e(tetap_kata((string) $row['nama'])) ?></b></td>
+            <td class="pk-kelas-cell nowrap"><?= (int) $row['kelas_id'] > 0
+                ? '<b>' . e(tetap_kata((string) $row['kelas_nama'])) . '</b>'
+                : '<span class="mut xs">belum ditentukan</span>' ?></td>
             <?php foreach ($jenis as $j): $jid = (int) $j['id'];
                 $b = $row['sel'][$jid] ?? null;
                 $status = $b ? perangkat_status_awal((string) $b['status']) : '';
+                $tautanSel = 'perangkat_saya.php?ta=' . $taId . '&amp;mapel=' . (int) $row['id']
+                    . '&amp;kelas=' . (int) $row['kelas_id'] . '&amp;jenis=' . $jid . '#formKirimPerangkat';
             ?>
               <td class="ctr pk-sel">
                 <?php if ($b): ?>
                   <span class="pk-ikon ok" title="Sudah dikirim"><?= ikon('check', 15) ?></span>
                   <div class="pill <?= e(perangkat_status_pil($status)) ?>" style="margin-top:5px">
                     <?= e(perangkat_status_label($status)) ?></div>
-                  <a class="pk-link" href="perangkat_saya.php?ta=<?= $taId ?>&amp;mapel=<?= (int) $row['id'] ?>&amp;jenis=<?= $jid ?>#formKirimPerangkat">
-                    Ganti berkas</a>
+                  <a class="pk-link" href="<?= $tautanSel ?>">Ganti berkas</a>
                 <?php else: ?>
                   <span class="pk-ikon no" title="Belum dikirim"><?= ikon('x', 15) ?></span>
-                  <a class="pk-link" href="perangkat_saya.php?ta=<?= $taId ?>&amp;mapel=<?= (int) $row['id'] ?>&amp;jenis=<?= $jid ?>#formKirimPerangkat">
-                    Unggah</a>
+                  <a class="pk-link" href="<?= $tautanSel ?>">Unggah</a>
                 <?php endif; ?>
               </td>
             <?php endforeach; ?>
@@ -1319,7 +1476,7 @@ function perangkat_saya_halaman(): void
         </tbody>
         <tfoot>
           <tr>
-            <th colspan="2" class="ctr">Jumlah</th>
+            <th colspan="3" class="ctr">Jumlah</th>
             <th colspan="<?= count($jenis) ?>" class="ctr">
               <span class="tbl-sub"><?= (int) $hitung['terisi'] ?> dari <?= (int) $hitung['total'] ?> sel
                 sudah dikirim (<?= (int) $hitung['persen'] ?>%)</span>
@@ -1344,6 +1501,23 @@ function perangkat_saya_halaman(): void
     <p class="hint mt16">Hasil tinjauan kepala sekolah tampil pada kolom <b>Status Tinjauan</b>
       beserta keterangan/alasannya. Bila dinyatakan <b>Direvisi</b> atau <b>Ditolak</b>, perbaiki
       berkasnya lalu unggah ulang pada sel yang sama.</p>
+    <?php
+    // Kiriman yang dibuat SEBELUM ada pilihan kelas (skema v60) tidak diberi kelas oleh migrasi —
+    // beri tahu guru bahwa berkas itu masih tersimpan dan dapat diunggah ulang pada kelas yang benar.
+    $tanpaKelas = 0;
+    foreach ($baris as $k) {
+        if ((int) ($k['kelas_id'] ?? 0) === 0) {
+            $tanpaKelas++;
+        }
+    }
+    ?>
+    <?php if ($tanpaKelas > 0): ?>
+      <div class="alert alert-warn mt16"><?= ikon('info', 16) ?><span><b><?= $tanpaKelas ?></b> kiriman
+        di atas dibuat <b>sebelum</b> ada pilihan kelas, jadi kelasnya belum ditentukan. Berkasnya tetap
+        tersimpan dan dapat diunduh; unggah ulang pada kelas yang benar agar kiriman itu tercatat per
+        kelas (berkas lama pada mata pelajaran, kelas, dan nama dokumen yang sama akan digantikan,
+        bukan menjadi baris kembar).</span></div>
+    <?php endif; ?>
   <?php endif; ?>
 </div>
     <?php
@@ -1427,6 +1601,11 @@ function perangkat_masuk_halaman(): void
                      WHERE k.sekolah_id = ? ORDER BY g.nama', [sekolah_id()]);
     $mapelAda = all('SELECT DISTINCT m.id, m.nama FROM perangkat_kirim k JOIN mapel m ON m.id = k.mapel_id
                       WHERE k.sekolah_id = ? ORDER BY m.nama', [sekolah_id()]);
+    // KELAS (v60): pilihan dari kelas yang BENAR-BENAR punya kiriman, ditambah snapshot nama kelas
+    // untuk kiriman lama yang kelasnya sudah tidak ada.
+    $kelasAda = all('SELECT DISTINCT k.kelas_id AS id, COALESCE(kl.nama, k.kelas_nama) AS nama
+                       FROM perangkat_kirim k LEFT JOIN kelas kl ON kl.id = k.kelas_id
+                      WHERE k.sekolah_id = ? AND k.kelas_id > 0 ORDER BY nama', [sekolah_id()]);
     $jenisAda = perangkat_jenis_list(false);
     $taAda = all('SELECT DISTINCT COALESCE(t.id, 0) AS id, COALESCE(t.nama, k.ta_nama) AS nama
                     FROM perangkat_kirim k LEFT JOIN tahun_ajaran t ON t.id = k.ta_id
@@ -1492,6 +1671,15 @@ function perangkat_masuk_halaman(): void
       </select>
     </div>
     <div style="min-width:150px">
+      <label class="f" for="saringKelas">Kelas</label>
+      <select id="saringKelas" name="kelas" data-auto>
+        <option value="">— semua kelas —</option>
+        <?php foreach ($kelasAda as $kl): $kid = (int) $kl['id']; ?>
+          <option value="<?= $kid ?>" <?= $f['kelas'] === $kid ? 'selected' : '' ?>><?= e(tetap_kata((string) $kl['nama'])) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+    <div style="min-width:150px">
       <label class="f" for="saringJenis">Nama Dokumen</label>
       <select id="saringJenis" name="jenis" data-auto>
         <option value="">— semua dokumen —</option>
@@ -1513,11 +1701,11 @@ function perangkat_masuk_halaman(): void
     <div style="min-width:190px">
       <label class="f" for="saringCari">Cari</label>
       <input type="search" id="saringCari" name="cari" value="<?= e((string) $f['cari']) ?>"
-             placeholder="nama guru, dokumen, keterangan…">
+             placeholder="nama guru, dokumen, kelas, keterangan…">
     </div>
     <div class="flex" style="gap:8px">
       <button class="btn btn-primary" type="submit"><?= ikon('search', 15) ?> Terapkan</button>
-      <?php if (array_filter([$f['ta'], $f['guru'], $f['mapel'], $f['jenis'], $f['cari']]) || $f['status_ada']): ?>
+      <?php if (array_filter([$f['ta'], $f['guru'], $f['mapel'], $f['kelas'], $f['jenis'], $f['cari']]) || $f['status_ada']): ?>
         <a class="btn btn-ghost" href="perangkat_masuk.php">Reset</a>
       <?php endif; ?>
     </div>
@@ -1541,6 +1729,7 @@ function perangkat_masuk_halaman(): void
             <th class="ctr pk-no">No</th>
             <th class="pk-guru">Nama Guru</th>
             <th class="pk-mapel">Mata Pelajaran</th>
+            <th class="pk-kelas">Kelas</th>
             <th class="pk-jenis">Nama Dokumen</th>
             <th class="ctr pk-ta">T.A.</th>
             <th class="pk-berkas">Berkas</th>
@@ -1561,6 +1750,9 @@ function perangkat_masuk_halaman(): void
             <td class="pk-guru-cell"><b><?= e(tetap_kata((string) $k['guru_nama'])) ?></b>
               <span class="tbl-sub"><?= e(waktu_id_polos((string) ($k['dikirim'] ?? ''))) ?></span></td>
             <td class="pk-mapel-cell"><?= e(tetap_kata((string) $k['mapel_nama'])) ?></td>
+            <td class="pk-kelas-cell nowrap"><?= perangkat_kelas_teks($k) === '—'
+                ? '<span class="mut xs">belum ditentukan</span>'
+                : e(tetap_kata(perangkat_kelas_teks($k))) ?></td>
             <td><b><?= e(tetap_kata((string) $k['jenis_nama'])) ?></b>
               <?php if (trim((string) ($k['keterangan'] ?? '')) !== ''): ?>
                 <span class="tbl-sub"><?= nl2br(e(tetap_kata((string) $k['keterangan']))) ?></span>
@@ -1636,7 +1828,7 @@ function perangkat_masuk_halaman(): void
         <tfoot>
           <tr>
             <th colspan="2" class="ctr">Jumlah</th>
-            <th colspan="<?= $lihatSaja ? 5 : 6 ?>" class="ctr">
+            <th colspan="<?= $lihatSaja ? 6 : 7 ?>" class="ctr">
               <span class="tbl-sub"><?= (int) $ringkas['kirim'] ?> kiriman &middot;
                 <?= (int) $ringkas['menunggu'] ?> belum ditinjau &middot;
                 <?= (int) $ringkas['disetujui'] ?> disetujui &middot;
@@ -2072,7 +2264,7 @@ function perangkat_pengawas_halaman(): void
 
     // Guru yang SAMA SEKALI belum mengirim perangkat (hanya ditampilkan saat tidak ada penyaring,
     // supaya tidak membingungkan saat menyaring).
-    $adaSaring = ($f['ta'] > 0 || $f['guru'] > 0 || $f['mapel'] > 0 || $f['jenis'] > 0
+    $adaSaring = ($f['ta'] > 0 || $f['guru'] > 0 || $f['mapel'] > 0 || $f['kelas'] > 0 || $f['jenis'] > 0
         || $f['status_ada'] || $f['cari'] !== '');
     $guruKosong = [];
     if (!$adaSaring) {
@@ -2087,6 +2279,9 @@ function perangkat_pengawas_halaman(): void
     // nama guru yang diambil dari seluruh guru aktif supaya guru tanpa kiriman tetap bisa dicari.
     $mapelAda = all('SELECT DISTINCT m.id, m.nama FROM perangkat_kirim k JOIN mapel m ON m.id = k.mapel_id
                       WHERE k.sekolah_id = ? ORDER BY m.nama', [$sid]);
+    $kelasAda = all('SELECT DISTINCT k.kelas_id AS id, COALESCE(kl.nama, k.kelas_nama) AS nama
+                       FROM perangkat_kirim k LEFT JOIN kelas kl ON kl.id = k.kelas_id
+                      WHERE k.sekolah_id = ? AND k.kelas_id > 0 ORDER BY nama', [$sid]);
     $jenisAda = perangkat_jenis_list(false);
     $taAda = all('SELECT DISTINCT COALESCE(t.id, 0) AS id, COALESCE(t.nama, k.ta_nama) AS nama
                     FROM perangkat_kirim k LEFT JOIN tahun_ajaran t ON t.id = k.ta_id
@@ -2148,6 +2343,15 @@ function perangkat_pengawas_halaman(): void
       </select>
     </div>
     <div style="min-width:150px">
+      <label class="f" for="saringKelas">Kelas</label>
+      <select id="saringKelas" name="kelas" data-auto>
+        <option value="">— semua kelas —</option>
+        <?php foreach ($kelasAda as $kl): $kid = (int) $kl['id']; ?>
+          <option value="<?= $kid ?>" <?= $f['kelas'] === $kid ? 'selected' : '' ?>><?= e(tetap_kata((string) $kl['nama'])) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+    <div style="min-width:150px">
       <label class="f" for="saringJenis">Nama Dokumen</label>
       <select id="saringJenis" name="jenis" data-auto>
         <option value="">— semua dokumen —</option>
@@ -2169,7 +2373,7 @@ function perangkat_pengawas_halaman(): void
     <div style="min-width:190px">
       <label class="f" for="saringCari">Cari</label>
       <input type="search" id="saringCari" name="cari" value="<?= e((string) $f['cari']) ?>"
-             placeholder="nama guru, dokumen, keterangan…">
+             placeholder="nama guru, dokumen, kelas, keterangan…">
     </div>
     <div class="flex" style="gap:8px">
       <button class="btn btn-primary" type="submit"><?= ikon('search', 15) ?> Terapkan</button>
@@ -2216,6 +2420,7 @@ function perangkat_pengawas_halaman(): void
                     <thead>
                       <tr>
                         <th class="ctr pk-no">No</th>
+                        <th class="pk-kelas">Kelas</th>
                         <th class="pk-jenis">Nama Dokumen</th>
                         <th class="ctr pk-ta">T.A.</th>
                         <th class="pk-berkas">Berkas</th>
@@ -2233,6 +2438,9 @@ function perangkat_pengawas_halaman(): void
                     ?>
                       <tr>
                         <td class="ctr"><?= $n ?></td>
+                        <td class="pk-kelas-cell nowrap"><?= perangkat_kelas_teks($k) === '—'
+                            ? '<span class="mut xs">belum ditentukan</span>'
+                            : e(tetap_kata(perangkat_kelas_teks($k))) ?></td>
                         <td>
                           <b><?= e(tetap_kata((string) $k['jenis_nama'])) ?></b>
                           <?php if (trim((string) ($k['keterangan'] ?? '')) !== ''): ?>

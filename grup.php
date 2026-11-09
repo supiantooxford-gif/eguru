@@ -91,6 +91,12 @@ page_top('Gabung Grup e-GURU', 'Super Admin &middot; judul, link, dan keterangan
       <p>Mengatur kartu <b>Gabung Grup e-GURU</b> yang tampil pada <b>dashboard</b> akun
         Kepala Sekolah/Madrasah, Admin Operator, dan Guru — sejajar dengan kartu <b>Pengawas Bina</b>.
         Perubahan berlaku untuk semua sekolah/madrasah.</p>
+      <p class="sm mut" style="margin:6px 0 0">
+        <?= ikon('lock', 13) ?> <b>Khusus lembaga yang sudah melakukan aktivasi.</b> Tombol
+        <b>Gabung Grup WhatsApp</b> hanya dicetak untuk lembaga berstatus <b>aktif</b> (sudah memasukkan
+        kode aktivasi) atau <b>permanen</b>. Lembaga yang masih masa uji coba hanya melihat keterangan
+        di kartu tersebut — tautan grupnya tidak diberikan.
+      </p>
     </div>
     <div class="flex">
       <span class="chip"><?= $pakaiBawaan ? 'masih bawaan' : 'sudah disesuaikan' ?></span>

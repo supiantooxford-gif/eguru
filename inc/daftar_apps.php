@@ -65,6 +65,14 @@ function daftar_apps_konfig(?string $menu = null): ?array
             // HANYA LEMBAGA YANG SUDAH MELAKUKAN AKTIVASI (permintaan pemilik, v1.78.0) — lihat
             // catatan lengkap pada entri `ujian_online` di bawah & fungsi daftar_apps_aktivasi_boleh().
             'perlu_aktivasi' => true,
+            // MENU DAPAT DIAKTIFKAN / DINONAKTIFKAN SEMENTARA OLEH SUPER ADMIN (v1.81.0) —
+            // permintaan pemilik: *"Pada akun super admin tambahkan fitur/menu untuk mengaktifkan atau
+            // menonaktifkan menu Smart Teacher. Ketika dinonaktifkan oleh Super Admin maka menu
+            // tersebut jika di klik oleh pengguna/guru akan muncul peringatan 'Server AI Smart
+            // Teacher lagi mengalami gangguan. Harap coba lagi nanti. Terima Kasih'"*.
+            // Penentunya SATU tempat: daftar_apps_aktif() (lihat blok "MENGAKTIFKAN / MENONAKTIFKAN
+            // MENU" di bawah). Menunya TETAP tampil di sidebar supaya peringatannya dapat dibaca.
+            'bisa_dinonaktifkan' => true,
         ],
         // ⚠️ v1.75.0: entri menu "Studio Foto Pintar" (`studio_foto`) DIHAPUS atas permintaan pemilik
         // ("Hapus menu yang saya tandai warna merah"). Halaman `studio_foto.php` ikut dihapus dan menu
@@ -543,6 +551,86 @@ function daftar_apps_aktivasi_pil(string $menu): string
     }
     return '<span class="pill pill-warn" style="margin-left:auto" title="'
         . e(daftar_apps_aktivasi_pesan()) . '">Aktivasi</span>';
+}
+
+// ============================================================================================
+// MENGAKTIFKAN / MENONAKTIFKAN MENU (v1.81.0 — permintaan pemilik)
+// --------------------------------------------------------------------------------------------
+// Permintaan pemilik: *"Pada akun super admin tambahkan fitur/menu untuk mengaktifkan atau
+// menonaktifkan menu Smart Teacher. Ketika dinonaktifkan oleh Super Admin maka menu tersebut jika
+// di klik oleh pengguna/guru akan muncul peringatan 'Server AI Smart Teacher lagi mengalami
+// gangguan. Harap coba lagi nanti. Terima Kasih'"*
+//
+// Aturan yang dipakai (SATU tempat — jangan menyalin ke halaman/sidebar):
+//  • Keadaannya TINGKAT APLIKASI (tabel `app_pengaturan`, kunci `menu_aktif_<kunci menu>`), karena
+//    daftar aplikasi ini global (tidak per sekolah) → TIDAK ada perubahan skema.
+//  • Hanya menu yang ditandai `'bisa_dinonaktifkan' => true` pada `daftar_apps_konfig()` (sekarang:
+//    **Smart Teacher**). Menu lain selalu dianggap aktif.
+//  • Menunya **TETAP tampil di sidebar** (permintaan pemilik: "jika di klik … muncul peringatan"),
+//    diberi lencana **"Gangguan"**; halamannya tetap dapat dibuka (200) tetapi isinya diganti kartu
+//    peringatan gangguan untuk SELURUH peran **kecuali Super Admin** — Super Admin harus tetap
+//    melihat halaman penuh beserta kartu pengaktif, kalau tidak ia tidak bisa menghidupkannya lagi.
+//  • Tombol "Buka Aplikasi" ikut ditutup (`app_buka.php`) supaya tautan aplikasinya tidak bisa
+//    dibuka lewat alamat langsung selama menunya dinonaktifkan.
+// ============================================================================================
+
+/** Apakah menu ini boleh diaktifkan/dinonaktifkan Super Admin? */
+function daftar_apps_bisa_dinonaktifkan(string $menu): bool
+{
+    $k = daftar_apps_konfig($menu);
+    return $k !== null && !empty($k['bisa_dinonaktifkan']);
+}
+
+/** Kunci penyimpanan keadaan menu pada tabel `app_pengaturan`. */
+function daftar_apps_aktif_kunci(string $menu): string
+{
+    return 'menu_aktif_' . $menu;
+}
+
+/** true bila menu sedang AKTIF (menu tanpa fitur ini selalu aktif). */
+function daftar_apps_aktif(string $menu): bool
+{
+    if (!daftar_apps_bisa_dinonaktifkan($menu)) {
+        return true;
+    }
+    return app_setting(daftar_apps_aktif_kunci($menu), '1') !== '0';
+}
+
+/** Aktifkan/nonaktifkan sebuah menu (hanya berlaku untuk menu ber-`bisa_dinonaktifkan`). */
+function daftar_apps_aktif_set(string $menu, bool $aktif): void
+{
+    if (!daftar_apps_bisa_dinonaktifkan($menu)) {
+        return;
+    }
+    app_setting_set(daftar_apps_aktif_kunci($menu), $aktif ? '1' : '0');
+    app_setting_set(daftar_apps_aktif_kunci($menu) . '_pada', date('Y-m-d H:i:s'));
+}
+
+/** Kapan keadaan menu terakhir diubah ('' bila belum pernah) — dipakai kartu Super Admin. */
+function daftar_apps_aktif_diubah(string $menu): string
+{
+    return trim(app_setting(daftar_apps_aktif_kunci($menu) . '_pada', ''));
+}
+
+/**
+ * Kalimat peringatan saat menu dinonaktifkan — PERSIS permintaan pemilik untuk Smart Teacher:
+ * "Server AI Smart Teacher lagi mengalami gangguan. Harap coba lagi nanti. Terima Kasih".
+ */
+function daftar_apps_gangguan_pesan(string $menu): string
+{
+    $k = daftar_apps_konfig($menu);
+    $nama = $k !== null ? (string) ($k['menu'] ?? 'Aplikasi') : 'Aplikasi';
+    return 'Server AI ' . $nama . ' lagi mengalami gangguan. Harap coba lagi nanti. Terima Kasih';
+}
+
+/** Lencana sidebar "Gangguan" ('' bila menu aktif / menu tidak punya fitur ini). */
+function daftar_apps_gangguan_pil(string $menu): string
+{
+    if (daftar_apps_aktif($menu)) {
+        return '';
+    }
+    return '<span class="pill pill-warn" style="margin-left:auto" title="'
+        . e(daftar_apps_gangguan_pesan($menu)) . '">Gangguan</span>';
 }
 
 /**
@@ -1079,6 +1167,36 @@ function daftar_apps_halaman(string $menu, ?array $tugas = null): void
     // sidebar: halaman tetap dirender dengan keterangan "belum punya akses" (permintaan pemilik),
     // dan tautan aplikasinya tetap tidak dibuka (kartu terkunci).
 
+    // ------------------------------------ MENU DINONAKTIFKAN SEMENTARA oleh Super Admin (v1.81.0)
+    // Permintaan pemilik: *"Ketika dinonaktifkan oleh Super Admin maka menu tersebut jika di klik
+    // oleh pengguna/guru akan muncul peringatan 'Server AI Smart Teacher lagi mengalami gangguan.
+    // Harap coba lagi nanti. Terima Kasih'"*. Halamannya sengaja TETAP 200 (bukan 403) dan menunya
+    // tetap tampil di sidebar supaya peringatan itu benar-benar terbaca oleh pengguna. Super Admin
+    // DILEWATKAN: ia harus tetap melihat halaman penuh + kartu pengaktif (kalau tidak, menu yang
+    // sudah dinonaktifkan tidak akan pernah bisa dihidupkan lagi).
+    if (!$super && !daftar_apps_aktif($menu)) {
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            tolak403('Menu ' . $namaMenu . ' sedang dinonaktifkan oleh pengelola aplikasi.');
+        }
+        page_top($namaMenu, $tugas !== null ? 'Tugas Tambahan' : '');
+        ?>
+<div class="card" id="cardMenuGangguan">
+  <div class="card-head">
+    <div>
+      <h2><?= ikon('alert', 16) ?> <?= e($namaMenu) ?></h2>
+    </div>
+    <div class="flex"><span class="pill pill-gangguan" id="pilGangguan">Gangguan</span></div>
+  </div>
+  <div class="alert alert-err" id="pesanGangguan">
+    <?= ikon('alert', 16) ?>
+    <span><b><?= e(daftar_apps_gangguan_pesan($menu)) ?></b></span>
+  </div>
+</div>
+        <?php
+        page_bottom();
+        return;
+    }
+
     // ------------------------------------------------- HANYA LEMBAGA YANG SUDAH AKTIVASI (v1.78.0)
     // Permintaan pemilik: *"Pada Menu Ujian Online dan Menu Smart Teacher hanya bisa diakses oleh
     // lembaga yang telah melakukan aktifasi. Bagi yang belum, menu ini belum bisa diakses dengan
@@ -1224,6 +1342,23 @@ function daftar_apps_halaman(string $menu, ?array $tugas = null): void
             redirect($berkas . '#cardSekolahMenu');
         }
 
+        // MENGAKTIFKAN / MENONAKTIFKAN MENU (v1.81.0 — permintaan pemilik). Ditangani SEBELUM
+        // pemeriksaan "aplikasi tidak ditemukan" karena aksi ini tidak memakai satu aplikasi pun.
+        if ($aksi === 'menu_aktifkan' || $aksi === 'menu_nonaktifkan') {
+            if (!daftar_apps_bisa_dinonaktifkan($menu)) {
+                flash('Menu ' . $namaMenu . ' tidak dapat dinonaktifkan.', 'err');
+                redirect($berkas);
+            }
+            $jadi = $aksi === 'menu_aktifkan';
+            daftar_apps_aktif_set($menu, $jadi);
+            flash($jadi
+                ? 'Menu ' . $namaMenu . ' DIAKTIFKAN kembali — seluruh pengguna dapat membukanya seperti biasa.'
+                : 'Menu ' . $namaMenu . ' DINONAKTIFKAN. Pengguna yang membuka menu ini akan melihat '
+                  . 'peringatan: "' . daftar_apps_gangguan_pesan($menu) . '"',
+                $jadi ? 'ok' : 'warn');
+            redirect($berkas . '#cardStatusMenu');
+        }
+
         if (!$s) {
             flash('Aplikasi tidak ditemukan.', 'err');
             redirect($berkas);
@@ -1283,6 +1418,58 @@ function daftar_apps_halaman(string $menu, ?array $tugas = null): void
 
     page_top($namaMenu, $tugas !== null ? 'Tugas Tambahan' : '');
     ?>
+<?php if ($super && daftar_apps_bisa_dinonaktifkan($menu)): ?>
+  <?php
+  // KARTU "STATUS MENU" (v1.81.0 — permintaan pemilik: *"Pada akun super admin tambahkan
+  // fitur/menu untuk mengaktifkan atau menonaktifkan menu Smart Teacher."*).
+  // Hanya Super Admin yang melihat kartu ini; peran lain tidak pernah melihat tombol pengubah.
+  $menuAktif = daftar_apps_aktif($menu);
+  $menuDiubah = daftar_apps_aktif_diubah($menu);
+  ?>
+  <div class="card" id="cardStatusMenu">
+    <div class="card-head">
+      <div>
+        <h2><?= ikon('switch', 16) ?> Status Menu <?= e($namaMenu) ?></h2>
+        <p>Aktifkan atau nonaktifkan menu <b><?= e($namaMenu) ?></b> untuk <b>seluruh pengguna</b>
+          (guru, kepala sekolah/madrasah, admin operator, dan pengawas) di semua
+          sekolah/madrasah.</p>
+      </div>
+      <div class="flex">
+        <span class="pill <?= $menuAktif ? 'pill-ok' : 'pill-warn' ?>" id="pilStatusMenu"><?= $menuAktif ? 'Aktif' : 'Nonaktif' ?></span>
+      </div>
+    </div>
+    <div class="alert <?= $menuAktif ? 'alert-warn' : 'alert-err' ?>" id="pratinjauGangguan">
+      <?= ikon($menuAktif ? 'info' : 'alert', 16) ?>
+      <?php if ($menuAktif): ?>
+        <span>Bila menunya <b>dinonaktifkan</b>, pengguna yang mengklik menu ini akan melihat peringatan
+          <b>“<?= e(daftar_apps_gangguan_pesan($menu)) ?>”</b> dan daftar aplikasi beserta tombol
+          <b>Buka Aplikasi</b> ikut ditutup sampai menunya diaktifkan kembali. Anda sebagai
+          <b>Super Admin tetap dapat membuka</b> halaman ini untuk menghidupkannya lagi.</span>
+      <?php else: ?>
+        <span>Menu ini <b>sedang NONAKTIF</b> — guru, kepala sekolah/madrasah, admin operator, dan
+          pengawas melihat peringatan <b>“<?= e(daftar_apps_gangguan_pesan($menu)) ?>”</b> dan tidak
+          dapat membuka daftar aplikasinya. Tekan tombol di bawah untuk mengaktifkannya kembali
+          (tidak ada data yang hilang).</span>
+      <?php endif; ?>
+    </div>
+    <form method="post" class="flex" id="formStatusMenu"
+          style="flex-wrap:wrap"<?= $menuAktif
+              ? ' data-confirm="Nonaktifkan menu ' . e($namaMenu) . ' untuk seluruh pengguna? Pengguna akan melihat peringatan gangguan sampai menunya diaktifkan kembali."'
+              : '' ?>>
+      <?= csrf_field() ?>
+      <input type="hidden" name="aksi" value="<?= $menuAktif ? 'menu_nonaktifkan' : 'menu_aktifkan' ?>">
+      <button class="btn <?= $menuAktif ? 'btn-danger' : 'btn-primary' ?>" type="submit" id="btnStatusMenu">
+        <?= ikon($menuAktif ? 'x' : 'check', 16) ?>
+        <?= $menuAktif ? 'Nonaktifkan Menu ' . e($namaMenu) : 'Aktifkan Menu ' . e($namaMenu) ?>
+      </button>
+      <span class="hint" style="align-self:center">
+        <?= $menuDiubah !== ''
+            ? 'Keadaan menu terakhir diubah: <b>' . e(waktu_id_polos($menuDiubah)) . '</b>.'
+            : 'Keadaan menu belum pernah diubah.' ?>
+      </span>
+    </form>
+  </div>
+<?php endif; ?>
 <?php if ($grafikSering): ?>
   <?php // Kartu GRAFIK diletakkan PALING ATAS (di atas daftar kartu aplikasi) sesuai permintaan
         // pemilik: *"Pada halaman smart teacher tambahkan Grafik Aplikasi yang Sering Digunakan."*
@@ -1617,6 +1804,13 @@ function daftar_apps_halaman(string $menu, ?array $tugas = null): void
         <li><b>Tampil di semua akun</b> — menu <?= e($namaMenu) ?> ada pada sidebar setiap pengguna.</li>
       <?php endif; ?>
       <li><b>Tautan diperiksa</b> — hanya tautan <b>http://</b> atau <b>https://</b> yang diterima; aplikasi yang tidak dipakai bisa disembunyikan (tanpa dihapus).</li>
+      <?php if (daftar_apps_bisa_dinonaktifkan($menu)): ?>
+        <li><b>Dapat dinonaktifkan sementara</b> — kartu <b>“Status Menu <?= e($namaMenu) ?>”</b> di atas
+          mengaktifkan/menonaktifkan menu ini untuk seluruh pengguna. Selama nonaktif, menunya tetap
+          tampil di sidebar dengan lencana <b>“Gangguan”</b> dan halamannya menampilkan peringatan
+          <b>“<?= e(daftar_apps_gangguan_pesan($menu)) ?>”</b> — Super Admin tetap dapat membukanya
+          untuk menghidupkan kembali.</li>
+      <?php endif; ?>
       <?php if (daftar_apps_terbatas($menu)): ?>
         <li><b>Dibatasi per sekolah/madrasah</b> — menu ini hanya tampil pada sekolah/madrasah yang
           dicentang pada kartu <b>“Sekolah/Madrasah yang Melihat Menu Ini”</b> di bawah. Administrasi

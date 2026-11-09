@@ -728,8 +728,136 @@ const UNGGAH_MAKS_BYTE = 2 * 1024 * 1024;          // 2 MB per berkas
 //       rentangnya = **seluruh data yang tercatat**. Lihat catatan lengkapnya pada blok
 //       "PENCATATAN PENGGUNAAN APLIKASI" di `inc/daftar_apps.php` dan pada `app_buka.php`.
 //       Uji: `bash tests_eguru_grafik_apps.sh` + `bash check_eguru_grafik_apps_ui.sh`.
+//   (h) **PILIHAN KELAS pada menu "KIRIM PERANGKAT" (v1.80.0 / skema v60)** — permintaan pemilik:
+//       *"Pada menu kirim perangkat tambahkan pilihan kelas, agar guru lebih jelas perangkat yang
+//       dikirim itu kelas berapa dan mata pelajaran apa. Karena untuk saat ini mengalami masalah saat
+//       kirim mata pelajaran yang sama"*.
+//       Sebelumnya kunci kiriman = guru × mata pelajaran × tahun ajaran × nama dokumen, sehingga guru
+//       yang mengampu mata pelajaran SAMA di beberapa kelas saling **menimpa** berkasnya. Kini KELAS
+//       menjadi bagian kunci: formulir "Unggah Perangkat" memuat pilihan **Kelas** (kelas yang diampu
+//       guru; bila belum ditetapkan dipakai seluruh kelas aktif sekolah), matriks kelengkapan
+//       menampilkan baris **mata pelajaran × kelas**, dan daftar kiriman pada akun guru, kepala
+//       sekolah ("Perangkat Masuk"), pengawas, serta kartu dashboard guru memuat kolom/label Kelas
+//       beserta **penyaring Kelas** pada halaman kepala & pengawas. `perangkat_kirim` DIBANGUN ULANG
+//       (UNIQUE baru) — kiriman lama tetap utuh dengan `kelas_id` **0** ("kelas belum ditentukan",
+//       tidak ada nilai yang ditebak), dan unggahan ulang pada mata pelajaran/kelas/nama dokumen yang
+//       sama akan MEMAKAI baris lama itu (tidak muncul baris kembar).
+//       Uji: `bash tests_eguru_perangkat.sh` (176), `bash check_eguru_perangkat_ui.sh` (67),
+//       `bash cek_live_perangkat_eguru.sh` (39 — migrasi v59→v60 pada SALINAN basis data asli).
 // (Versi ditulis ulang terakhir setelah SELURUH berkas aplikasi selesai disentuh.)
-define('APP_VERSION', '1.79.0');
+//   (i) **MENGAKTIFKAN / MENONAKTIFKAN MENU SMART TEACHER (v1.81.0)** — permintaan pemilik: *"Pada
+//       akun super admin tambahkan fitur/menu untuk mengaktifkan atau menonaktifkan menu Smart
+//       Teacher. Ketika dinonaktifkan oleh Super Admin maka menu tersebut jika di klik oleh
+//       pengguna/guru akan muncul peringatan 'Server AI Smart Teacher lagi mengalami gangguan.
+//       Harap coba lagi nanti. Terima Kasih'"*.
+//       **Tanpa perubahan skema** — keadaannya disimpan sebagai pengaturan tingkat APLIKASI
+//       (`app_pengaturan`, kunci `menu_aktif_smart_teacher`). Super Admin melihat kartu **"Status
+//       Menu Smart Teacher"** (`#cardStatusMenu`, berisi pil Aktif/Nonaktif + satu tombol
+//       Aktifkan/Nonaktifkan) di bagian ATAS halaman Smart Teacher. Selama nonaktif: menu tetap
+//       tampil di sidebar dengan lencana **"Gangguan"**, halaman menu bagi peran selain Super Admin
+//       hanya menampilkan kartu peringatan `#cardMenuGangguan` berisi kalimat permintaan pemilik,
+//       POST dari mereka ditolak 403, dan tombol "Buka Aplikasi" tidak membuka tautan
+//       (`app_buka.php` mengembalikan ke halaman menu). Penentunya satu tempat:
+//       `daftar_apps_aktif()` / `daftar_apps_gangguan_pesan()` pada `inc/daftar_apps.php`.
+//       Uji: `bash tests_eguru_menu_smart_teacher_aktif.sh` + `bash check_eguru_menu_smart_teacher_aktif_ui.sh`.
+//   (j) **PENYESUAIAN TAMPILAN KARTU GANGGUAN (v1.81.1)** — permintaan pemilik (tangkapan layar):
+//       *"Yang saya tandai warna merah dihapus saja. Dan yang saya tandai warna biru dibuat
+//       berkedip-kedip warna merah sebagai bentuk peringatan bahwa lagi gangguan"*.
+//       Yang DIHAPUS dari kartu `#cardMenuGangguan`: kalimat kepala kartu "Menu ini dinonaktifkan
+//       sementara oleh pengelola aplikasi …" dan daftar dua butir (`ul.apps-catatan`). Yang TERSISA:
+//       judul menu + pil keadaan + satu kotak peringatan berisi kalimat permintaan pemilik. Pil
+//       keadaan kini berkelas **`pill-gangguan`** (merah, **berkedip** — `pilGangguanKedip` pada
+//       `assets/style.css`, dimatikan pada `prefers-reduced-motion`).
+//   (k) **KOLOM NOMOR + CETAK & UNDUH WORD pada DAFTAR SEKOLAH/MADRASAH (v1.82.0)** — permintaan
+//       pemilik (tangkapan layar dasbor Ringkasan Semua Sekolah): *"Yang saya tandai warna biru
+//       tambahkan kolom Nomor. Pada yang saya tandai warna merah tambahkan fitur download word dan
+//       cetak (kolom mapel, jurnal dan nilai tidak perlu di cetak/download). Hanya No, Nama Madrasah,
+//       Kelas, Guru, Siswa, Masa Aktif"*.
+//       (1) Tabel `#tblSekolahLintas` kini dimulai kolom **No** (nomor urut sesuai urutan tampil),
+//           sehingga judul kolom bergeser satu: No, Sekolah/Madrasah, Masa Aktif, Kelas, Guru, Siswa,
+//           Mapel, Jurnal, Nilai, Aksi. Baris JUMLAH memakai `colspan="2"` pada sel labelnya.
+//       (2) Dua tombol di kepala kartu (`.card-head`, bagian yang ditandai merah):
+//           **Cetak** → `cetak_sekolah_lintas.php` (A4 LANDSCAPE, `?auto=1` mencetak otomatis,
+//           hanya Super Admin) dan **Unduh Word** → `sekolah_lintas_word.php` (.docx, dibuat
+//           `inc/docx.php` tanpa pustaka luar).
+//       (3) Kedua keluaran itu **HANYA** memuat enam kolom: **No, Sekolah/Madrasah, Kelas, Guru,
+//           Siswa, Masa Aktif** — kolom **Mapel, Jurnal, dan Nilai sengaja TIDAK ikut** (permintaan
+//           pemilik). Jangan menambahkannya kembali tanpa bertanya.
+//       (4) Satu sumber data untuk dasbor, cetak, dan Word: **`sekolah_lintas_ringkas()`**
+//           (inc/helpers.php) — isinya baris yang sudah terurut masa aktif paling lama di atas,
+//           jumlah total tiap kolom, serta label/data grafik "Sebaran Siswa". Teks masa aktif untuk
+//           lembar cetak & Word memakai **`masa_aktif_teks()`** (tanpa HTML, tanpa tanda "·").
+//       Uji: `bash tests_eguru_cetak_lintas.sh` (+ `check_eguru_cetak_lintas_ui.sh`).
+//   (l) **CETAK & UNDUH WORD pada DAFTAR AKUN PENGAWAS (v1.83.0)** — permintaan pemilik (tangkapan
+//       layar kepala kartu "Daftar Akun Pengawas"): *"Yang saya tandai warna merah tambahkan fitur
+//       download dan cetak. Hasil cetak buat seperti contoh agar terlihat rapi"*. Dua tombol di
+//       `.card-head` kartu itu: **Cetak** → `cetak_pengawas_binaan.php` (A4 POTRAIT, `?auto=1`) dan
+//       **Unduh Word** → `pengawas_binaan_word.php` (.docx, `inc/docx.php`).
+//       Bentuk hasil (pilihan pemilik) = **sederhana seperti contohnya**: kolom **No, Pengawas Bina,
+//       Madrasah Binaan (bernomor 1..n), Masa Aktif** — TANPA kop sekolah & TANPA tanda tangan.
+//       Isi kolom Masa Aktif = **ringkasan berapa binaan permanen / aktif / sudah terkunci**
+//       (bukan tanggal; yang bermasa aktif adalah madrasah binaannya, bukan akun pengawasnya).
+//       Satu sumber data untuk halaman, cetak, dan Word: **`pengawas_binaan_ringkas()`** +
+//       `pengawas_binaan_masa()` + `pengawas_masa_teks()` (inc/helpers.php); kategori diambil dari
+//       `aktivasi_status()`, jangan menghitung sendiri.
+//       Uji: `bash tests_eguru_cetak_pengawas.sh` (+ `check_eguru_cetak_pengawas_ui.sh`).
+//   (m) **GABUNG GRUP HANYA UNTUK LEMBAGA YANG SUDAH AKTIVASI (v1.84.0)** — permintaan pemilik:
+//       *"Sekolah/madrasah yang belum melakukan aktifasi pastikan tidak bisa Gabung Grup Member
+//       Edu-Tech Innovation. Grup ini hanya khusus yang sudah melakukan aktifasi."*
+//       Aturannya di SATU tempat: **`grup_eguru_boleh()`** (inc/helpers.php) — lembaga `aktif`
+//       (sudah memasukkan kode) atau `permanen` boleh; `uji_coba` (belum aktivasi) dan masa aktif
+//       yang sudah habis TIDAK boleh; **Super Admin selalu boleh** (pengelola tautan grup).
+//       `kartu_grup_eguru()` pada lembaga yang belum boleh **TIDAK mencetak tombol/tautan grup**
+//       sama sekali — diganti keterangan "Grup ini hanya khusus lembaga yang sudah melakukan
+//       aktifasi." (`grup_eguru_pesan_aktivasi()`) + pil "Aktivasi" + jalan menuju `aktivasi.php`
+//       (untuk kepala/operator/Super Admin) atau arahan menghubungi kepala sekolah/admin operator
+//       (guru). Gaya: `.card-grup-kunci` pada `assets/style.css`.
+//       Uji: `bash tests_eguru_grup_aktivasi.sh` (+ `check_eguru_grup_aktivasi_ui.sh`).
+// 1.85.0 — PENGUMUMAN SAMBUTAN KHUSUS PENGAWAS (permintaan pemilik): *"Pada menu sambutan dan
+//       pengumuman pada halaman super admin tambahkan sambutan/pengumuman khusus pengawas"*.
+//       `pengumuman_sasaran_list()` menambah sasaran **pengawas** dan `pengumuman_sasaran_saya()`
+//       mengembalikan 'pengawas' untuk akun Pengawas Sekolah/Madrasah. Atas pilihan pemilik, sasaran
+//       ini **TERPISAH PENUH seperti tab Siswa**: pop up "Pengguna Aplikasi" kini untuk
+//       Kepala/Operator/Guru saja, dan bila tab Pengawas masih kosong akun pengawas tidak menerima
+//       popup sama sekali. Tanpa perubahan skema (kolom `pengumuman.sasaran` sudah ada sejak v46).
+// 1.86.0 — STATUS SERTIFIKASI & SATMIKAL GURU (skema v61) — permintaan pemilik: *"Pada menu data
+//       guru/edit guru tambahkan modul untuk mengisi Status (pilihan Sertifikasi atau belum
+//       Sertifikasi) dan modul Satmikal (Pilihan Satmikal atau Nonsatmikal)"* dan *"Pada dashboard
+//       pengawas tambahkan tampilan Jumlah Guru sertifikasi dan belum sertifikasi"*.
+//       Dua kolom BARU pada tabel `guru` (`sertifikasi`, `satmikal`, bawaan KOSONG = belum diisi —
+//       hanya MENAMBAH kolom, tidak ada tabel yang dibangun ulang) + pilihan pada formulir
+//       Tambah/Ubah Data Guru (satu baris bersama Email) + kartu **"Guru Sertifikasi"** pada
+//       Dashboard Pengawas (`dashboard_pengawas.php`) yang menyebut juga jumlah **belum sertifikasi**
+//       dari SELURUH binaan aktif (anti-IDOR: hanya sekolah binaan pengawas itu).
+//       Nilai sahnya ada di konstanta `GURU_SERTIFIKASI`/`GURU_SATMIKAL` — nilai lain diabaikan.
+//       Uji: `bash tests_eguru_status_guru.sh` (+ `check_eguru_status_guru_ui.sh`).
+// 1.86.1 — permintaan pemilik: *"Pada Dashboard Binaan tampilkan juga Jumlah Guru sertifikasi dan
+//       belum sertifikasi"* → kartu yang SAMA juga dipasang pada **Dashboard Binaan** (pengawas yang
+//       sudah masuk ke satu sekolah, `index.php` cabang pengawas-dalam-konteks): grid `g4` → `g5`,
+//       kartu "Guru Sertifikasi" setelah "Guru aktif", angka & baris kecilnya HANYA milik binaan yang
+//       sedang dibuka (anti-IDOR). Tanpa perubahan skema (kolom v61 sudah ada).
+// 1.87.0 — MASA AKTIF pada DAFTAR BINAAN pengawas — permintaan pemilik: *"Pada daftar binaan
+//       tambahkan masa aktif, agar pengawas mengetahui masa aktif binaannya masing-masing"*.
+//       Tabel "Hasil Rekapan Sekolah/Madrasah Binaan" mendapat kolom **Masa Aktif** tepat setelah
+//       nama lembaga (posisi yang sama dengan tabel Ringkasan Semua Sekolah milik Super Admin):
+//       pil Permanen / Aktif (sisa N hari) / Uji coba (sisa N hari) / Masa aktif habis beserta
+//       tanggal berakhirnya. Satu sumber kebenaran tetap `aktivasi_status()`; markup dipusatkan pada
+//       helper baru **`masa_aktif_pil()`** (inc/helpers.php) yang dipakai kolom ini, sehingga
+//       keadaannya tidak pernah berbeda dengan tabel lintas sekolah. Tanpa perubahan skema.
+// 1.88.0 — MENU TUGAS TAMBAHAN "PEMBINA TAHFIDZ" (skema v62) — permintaan pemilik: *"Pada menu
+//       Pembina Tahfidz isi dengan inputan modul No, nama siswa, kelas, Setor hafalan (nama surah,
+//       dari ayat ke, sampai ayat ke), keterangan. Tambahkan fitur cetak dan hasil cetak seperti
+//       contoh. Tambahkan tanda tangan Pembina tahfidz dan mengetahui kepala madrasah/sekolah. Untuk
+//       nama surah isi otomatis pilihan nama surah dari 1. Al-Fatihah - 114. An-Nas. Untuk ayatnya di
+//       sesuaikan dengan jumlah ayat setiap surah di dalam al-qur'an"*.
+//       Tabel baru `tahfidz_setoran` (satu setoran per siswa per tanggal, riwayat antar tanggal
+//       tersimpan; nama siswa & kelas disimpan sebagai snapshot) + modul `inc/tahfidz.php`
+//       (114 surah beserta jumlah ayat: batas "Dari/Sampai Ayat" mengikuti surah yang dipilih dan
+//       diperiksa ULANG di server) + lembar cetak `cetak_tahfidz.php` DUA MODE (per kelas seperti
+//       contoh pemilik — seluruh siswa kelas itu, sel kosong bila belum setor — dan rincian semua
+//       setoran) dengan tanda tangan Mengetahui Kepala (KIRI) & Pembina Tahfidz (KANAN).
+//       Uji: `bash tests_eguru_tahfidz.sh` + `check_eguru_tahfidz_ui.sh`.
+define('APP_VERSION', '1.88.0');
 // Unggahan berkas (logo sekolah) lewat media proxy platform. Token dibaca server-side
 // dari berkas .vibecoder-media-token dan TIDAK pernah dikirim ke browser.
 // AKTIVASI sekolah/madrasah: cadangan kunci rahasia generator KODE AKTIVASI.
@@ -1063,6 +1191,24 @@ const JENJANG_TINGKAT = [
 // (dan otomatis ditetapkan sebagai wali kelas kelas itu). Jenjang lain tetap seperti sebelumnya.
 const JENJANG_GURU_KELAS = ['SD', 'MI'];
 
+// ===================== STATUS SERTIFIKASI & SATMIKAL GURU (skema v61, v1.86.0) =====================
+// Permintaan pemilik: *"Pada menu data guru/edit guru tambahkan modul untuk mengisi Status (pilihan
+// Sertifikasi atau belum Sertifikasi) dan modul Satmikal (Pilihan Satmikal atau Nonsatmikal)"* dan
+// *"Pada dashboard pengawas tambahkan tampilan Jumlah Guru sertifikasi dan belum sertifikasi"*.
+//
+// Nilai disimpan pada kolom `guru.sertifikasi` dan `guru.satmikal` (TEXT). Nilai KOSONG berarti
+// BELUM DIISI (bukan salah satu pilihan) — data guru yang sudah ada sebelum fitur ini memang kosong,
+// jadi tidak ada nilai yang ditebak oleh migrasi. Peta di bawah = satu-satunya sumber nilai SAH:
+// nilai lain yang dikirim ke server selalu diabaikan (disimpan sebagai kosong).
+const GURU_SERTIFIKASI = [
+    'sertifikasi' => 'Sertifikasi',
+    'belum'       => 'Belum Sertifikasi',
+];
+const GURU_SATMIKAL = [
+    'satmikal'    => 'Satmikal',
+    'nonsatmikal' => 'Nonsatmikal',
+];
+
 // ---------------------------------------------------------------- PENILAIAN SISWA (kolom Formatif)
 // Permintaan pemilik (v1.36.0): "Pada lembar penilaian formatif guru bisa menginput nilai berupa
 // angka, huruf atau tanda centang." Kolom **Formatif** boleh berisi angka (0-100), huruf (mis. A/B/C/D),
@@ -1101,6 +1247,26 @@ const WALI_KODE_MENU = 'wali_kelas';
 // Ka. Tata Usaha). `tugas_menu_ka_tu()` tetap mencocokkan NAMA sebagai cadangan bila Super Admin
 // memakai kode lain.
 const KA_TU_KODE_MENU = 'ka-tu';
+
+// ---------------------------------------------------------------- PEMBINA TAHFIDZ
+// Menu Tugas Tambahan "Pembina Tahfidz" (lihat inc/tahfidz.php) — permintaan pemilik:
+// *"Pada menu Pembina Tahfidz isi dengan inputan modul No, nama siswa, kelas, Setor hafalan
+// (nama surah, dari ayat ke, sampai ayat ke), keterangan. Tambahkan fitur cetak dan hasil cetak
+// seperti contoh. Tambahkan tanda tangan Pembina tahfidz dan mengetahui kepala madrasah/sekolah."*
+//
+// ⚠️ Menu ini TIDAK ikut disemai `tugas_menu_bawaan()`: pada basis data pemilik menunya sudah
+// dibuat sendiri lewat "Kelola Tugas Tambahan" (dengan kode lain), dan menambahkan kode baru di
+// daftar bawaan akan membuat menu BERNAMA SAMA muncul dua kali di sidebar. Karena itu pengenalan
+// menu memakai KODE **maupun NAMA** (`tahfidz_tugas_kunci()`), pola yang sama dengan
+// `tugas_menu_ka_tu()` dan `daftar_apps_tugas_kunci()`.
+const TAHFIDZ_KODE_MENU = 'pembina_tahfidz';
+// Kode lain yang tetap dikenali sebagai menu ini (cadangan bila Super Admin memakai kode lain).
+const TAHFIDZ_KODE_LAIN = ['pembina-tahfidz', 'tahfidz', 'tahfidz_quran', 'pembina-tahfidz-quran'];
+// Nama menu (dinormalkan `tugas_nama_kunci()`: huruf kecil, tanda baca → spasi) yang dikenali.
+const TAHFIDZ_NAMA_MENU = ['pembina tahfidz', 'pembina tahfidz quran', 'tahfidz quran'];
+// Batas panjang isian keterangan setoran.
+const TAHFIDZ_KET_MAKS = 200;
+
 
 // ---------------------------------------------------------------- GRUP WhatsApp e-GURU
 // Permintaan pemilik: "Pada Akun Kepala Sekolah, Operator dan Guru pada halaman dasboard tambahkan

@@ -39,7 +39,12 @@ $nonaktif = max(0, count($binaanSemua) - count($binaan));
 // Angka per binaan (satu query ringkas per sekolah; jumlah binaan kecil sehingga aman).
 // ---------------------------------------------------------------------------
 $baris = [];
-$tot = ['guru' => 0, 'siswa' => 0, 'nilai' => 0, 'jurnal' => 0, 'hadir' => 0, 'kasus' => 0, 'kelas' => 0, 'mapel' => 0];
+$tot = ['guru' => 0, 'siswa' => 0, 'nilai' => 0, 'jurnal' => 0, 'hadir' => 0, 'kasus' => 0, 'kelas' => 0, 'mapel' => 0,
+        // v61: status sertifikasi guru — permintaan pemilik: *"Pada dashboard pengawas tambahkan
+        // tampilan Jumlah Guru sertifikasi dan belum sertifikasi"*. `sert_kosong` = guru aktif yang
+        // statusnya BELUM diisi (data lama) — ditampilkan terpisah supaya angka tetap masuk akal
+        // (sertifikasi + belum + kosong = jumlah guru aktif).
+        'sertifikasi' => 0, 'belum_sertifikasi' => 0, 'sert_kosong' => 0];
 $jenisJml = ['madrasah' => 0, 'umum' => 0];
 // SEBARAN JENJANG (v1.71.7 — permintaan pemilik: *"sebaran jenis lembaga ganti dengan sebaran
 // jenjang"*). Kuncinya = KODE jenjang (SD/SMP/SMA/SMK/MI/MTs/MA/MAK) dalam urutan baku
@@ -68,10 +73,18 @@ foreach ($binaan as $b) {
         'mapel'  => (int) val('SELECT COUNT(*) FROM mapel WHERE aktif = 1 AND sekolah_id = ?', [$bid], 0),
         'dokumen' => 0,
     ];
+    // v61: hitungan STATUS SERTIFIKASI guru aktif pada binaan ini (satu query, bukan satu per status).
+    $sertB = one("SELECT SUM(CASE WHEN sertifikasi = 'sertifikasi' THEN 1 ELSE 0 END) AS ya,
+                         SUM(CASE WHEN sertifikasi = 'belum' THEN 1 ELSE 0 END) AS belum
+                  FROM guru WHERE aktif = 1 AND sekolah_id = ?", [$bid]) ?: [];
+    $r['sertifikasi'] = (int) ($sertB['ya'] ?? 0);
+    $r['belum_sertifikasi'] = (int) ($sertB['belum'] ?? 0);
+    $r['sert_kosong'] = max(0, $r['guru'] - $r['sertifikasi'] - $r['belum_sertifikasi']);
     $jenisJml[$b['jenis'] === 'madrasah' ? 'madrasah' : 'umum']++;
     $jgj = trim((string) ($b['jenjang'] ?? ''));
     $jenjangJml[jenjang_sah($jgj, (string) ($b['jenis'] ?? 'umum')) ? $jgj : '']++;
-    foreach (['guru', 'siswa', 'nilai', 'jurnal', 'hadir', 'kasus', 'kelas', 'mapel'] as $k) {
+    foreach (['guru', 'siswa', 'nilai', 'jurnal', 'hadir', 'kasus', 'kelas', 'mapel',
+              'sertifikasi', 'belum_sertifikasi', 'sert_kosong'] as $k) {
         $tot[$k] += $r[$k];
     }
     $baris[] = $r;
@@ -140,7 +153,9 @@ page_top('Dashboard Pengawas',
     </div>
   </div>
 <?php else: ?>
-  <div class="grid g4">
+  <?php // v61: LIMA kartu (g5) — kartu "Guru Sertifikasi" disisipkan tepat setelah "Guru aktif".
+        // Angkanya menyebut jumlah BELUM sertifikasi pada baris kecilnya (permintaan pemilik). ?>
+  <div class="grid g5">
     <div class="card stat card-tight"><div class="stat-ic"><?= ikon('school', 18) ?></div>
       <div><div class="stat-num" style="font-size:1.3rem"><?= count($binaan) ?></div>
         <div class="stat-lbl">Binaan aktif</div>
@@ -148,6 +163,10 @@ page_top('Dashboard Pengawas',
     <div class="card stat card-tight"><div class="stat-ic"><?= ikon('users', 18) ?></div>
       <div><div class="stat-num" style="font-size:1.3rem"><?= (int) $tot['guru'] ?></div><div class="stat-lbl">Guru aktif</div>
       <div class="stat-hint"><?= (int) $tot['kelas'] ?> kelas &middot; <?= (int) $tot['mapel'] ?> mata pelajaran</div></div></div>
+    <div class="card stat card-tight"><div class="stat-ic p"><?= ikon('medal', 18) ?></div>
+      <div><div class="stat-num" style="font-size:1.3rem" id="numGuruSertifikasi"><?= (int) $tot['sertifikasi'] ?></div>
+        <div class="stat-lbl">Guru Sertifikasi</div>
+        <div class="stat-hint" id="hintGuruSertifikasi"><?= (int) $tot['belum_sertifikasi'] ?> belum sertifikasi<?= (int) $tot['sert_kosong'] > 0 ? ' &middot; ' . (int) $tot['sert_kosong'] . ' belum diisi' : '' ?></div></div></div>
     <div class="card stat card-tight"><div class="stat-ic s"><?= ikon('student', 18) ?></div>
       <div><div class="stat-num" style="font-size:1.3rem"><?= (int) $tot['siswa'] ?></div><div class="stat-lbl">Siswa aktif</div>
       <div class="stat-hint">seluruh binaan</div></div></div>

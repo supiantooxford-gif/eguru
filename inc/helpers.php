@@ -794,6 +794,40 @@ function grup_eguru_simpan(?string $judul, ?string $url, ?string $ket): void
 }
 
 /**
+ * Apakah pengguna yang sedang masuk BOLEH bergabung ke grup (WhatsApp) Member Edu-Tech Innovation?
+ *
+ * Permintaan pemilik (v1.84.0): *"Sekolah/madrasah yang belum melakukan aktifasi pastikan tidak bisa
+ * Gabung Grup Member Edu-Tech Innovation. Grup ini hanya khusus yang sudah melakukan aktifasi."*
+ *
+ * Aturannya SAMA dengan menu yang mensyaratkan aktivasi (`daftar_apps_aktivasi_boleh()`):
+ *  • lembaga `permanen` (diberikan Super Admin) dan `aktif` (sudah memasukkan kode aktivasi) →
+ *    **boleh**; masa aktif yang sudah HABIS → tidak boleh;
+ *  • lembaga `uji_coba` (pendaftar baru yang belum pernah memasukkan kode) → **belum boleh**;
+ *  • **Super Admin SELALU boleh** (dialah pengelola tautan grup: tanpa pengecualian ini kartu
+ *    pratinjau pada halaman `grup.php` tidak dapat disimpan/dilihat dengan benar).
+ *
+ * JANGAN menyalin aturan ini ke halaman — pakai fungsi ini (dipakai `kartu_grup_eguru()`).
+ */
+function grup_eguru_boleh(?array $sekolah = null): bool
+{
+    if (is_super()) {
+        return true;
+    }
+    $s = $sekolah ?? current_sekolah();
+    if (!$s) {
+        return false;   // tanpa konteks sekolah tidak ada lembaga yang dapat diverifikasi
+    }
+    $st = aktivasi_status($s);
+    return in_array($st['mode'], ['permanen', 'aktif'], true) && !$st['habis'];
+}
+
+/** Kalimat yang menggantikan tombol gabung bila lembaga belum melakukan aktivasi (jangan diubah). */
+function grup_eguru_pesan_aktivasi(): string
+{
+    return 'Grup ini hanya khusus lembaga yang sudah melakukan aktifasi.';
+}
+
+/**
  * Kartu "Gabung Grup e-GURU" untuk DASHBOARD akun Kepala Sekolah/Madrasah, Admin Operator, dan Guru.
  * Permintaan pemilik: *"Pada Akun Kepala Sekolah, Operator dan Guru pada halaman dasboard tambahkan
  * Fitur Gabung Grup e-Guru (link: https://chat.whatsapp.com/CSfXdQ8NE07250AJtZ4tJL) tambahkan
@@ -810,6 +844,40 @@ function kartu_grup_eguru(): void
     $judul = grup_eguru_judul();
     $url = grup_eguru_url();
     $ket = grup_eguru_ket();
+    $boleh = grup_eguru_boleh();
+
+    // LEMBAGA BELUM AKTIVASI (permintaan pemilik v1.84.0): tombol/tautan gabung TIDAK dicetak sama
+    // sekali, diganti keterangan + jalan menuju aktivasi. Kartunya tetap tampil supaya pengguna tahu
+    // MENGAPA mereka belum bisa bergabung (bukan hilang tanpa penjelasan).
+    if (!$boleh) {
+        ?>
+    <div class="card card-grup card-grup-kunci" id="cardGrupEGuru">
+      <div class="card-head">
+        <div>
+          <h2><?= ikon('whatsapp', 16) ?> <?= e($judul !== '' ? $judul : GRUP_EGURU_JUDUL) ?></h2>
+          <p id="pesanGrupAktivasi"><?= e(grup_eguru_pesan_aktivasi()) ?></p>
+        </div>
+        <span class="pill pill-warn" id="pilGrupAktivasi">Aktivasi</span>
+      </div>
+      <p class="hint" style="margin:0 0 10px">
+        Tombol <b>Gabung Grup WhatsApp</b> otomatis muncul di sini setelah lembaga melakukan
+        aktivasi (memasukkan kode aktivasi dari Admin aplikasi).
+      </p>
+      <?php if (boleh_aktivasi()): ?>
+        <a class="btn btn-primary btn-sm" id="btnGrupAktivasi" href="aktivasi.php">
+          <?= ikon('check', 15) ?> Buka Status &amp; Aktivasi</a>
+      <?php else: ?>
+        <?php // Istilah sengaja "kepala sekolah" (BUKAN "kepala sekolah atau madrasah") karena halaman
+              // madrasah menerjemahkan kata "sekolah" → "madrasah" otomatis (lihat istilah_sekolah()). ?>
+        <p class="hint" style="margin:0">
+          Minta <b>kepala sekolah</b> atau <b>admin operator</b> memasukkan kode aktivasi melalui menu
+          <b>Status &amp; Aktivasi</b>.
+        </p>
+      <?php endif; ?>
+    </div>
+        <?php
+        return;
+    }
     ?>
     <div class="card card-grup" id="cardGrupEGuru">
       <div class="card-head">
@@ -3284,6 +3352,247 @@ function aktivasi_urut_kunci(?array $sekolah = null): int
 }
 
 /**
+ * Keterangan MASA AKTIF dalam BENTUK TEKS BIASA — dipakai lembar CETAK dan unduhan Word
+ * "Daftar Sekolah/Madrasah" (tidak boleh memuat tag HTML maupun tanda "·" karena hasil cetak
+ * e-GURU memang bebas middot).
+ *
+ * Contoh: "Permanen (tanpa batas waktu)", "Aktif, sisa 363 hari s.d. 2 November 2027",
+ * "Uji coba, sisa 12 hari s.d. 5 Desember 2026", "Masa aktif habis s.d. 2 November 2027".
+ * Sumbernya tetap `aktivasi_status()` — jangan menghitung sisa hari sendiri di halaman.
+ */
+function masa_aktif_teks(?array $sekolah = null): string
+{
+    $st = aktivasi_status($sekolah);
+    $sampai = (string) ($st['sampai'] ?? '');
+    $tgl = $sampai !== '' ? tanggal_id($sampai) : '';
+    if ($st['mode'] === 'tanpa_sekolah') {
+        return '-';
+    }
+    if ($st['mode'] === 'permanen') {
+        return 'Permanen (tanpa batas waktu)';
+    }
+    $uji = $st['mode'] === 'uji_coba';
+    if ($st['habis']) {
+        return ($uji ? 'Uji coba habis' : 'Masa aktif habis') . ($tgl !== '' ? ' s.d. ' . $tgl : '');
+    }
+    if ((int) $st['sampai_ts'] === 0) {
+        // Tanpa tanggal batas → tidak pernah terkunci (perilaku lama).
+        return $uji ? 'Uji coba (tanpa batas tanggal)' : 'Aktif (tanpa batas tanggal)';
+    }
+    return ($uji ? 'Uji coba' : 'Aktif') . ', sisa ' . (int) $st['sisa_hari'] . ' hari'
+        . ($tgl !== '' ? ' s.d. ' . $tgl : '');
+}
+
+/**
+ * MASA AKTIF dalam bentuk HTML (pil + keterangan sisa hari) untuk KOLOM TABEL di layar —
+ * permintaan pemilik (v1.87.0): *"Pada daftar binaan tambahkan masa aktif, agar pengawas
+ * mengetahui masa aktif binaannya masing-masing."*
+ *
+ * Markup & keadaannya sama dengan kolom "Masa Aktif" pada Ringkasan Semua Sekolah milik Super Admin
+ * (`index.php?semua=1`) supaya satu keadaan tidak pernah tampil berbeda antar halaman:
+ *   • permanen     → pil hijau "Permanen";
+ *   • habis        → pil merah "Masa aktif habis" / "Uji coba habis" + tanggal berakhir;
+ *   • uji coba     → pil kuning "Uji coba" + sisa hari & tanggal berakhir;
+ *   • aktif/tanpa  → pil hijau "Aktif" + sisa hari (bila ada tanggal batas).
+ *
+ * Sumber kebenaran tetap `aktivasi_status()` — JANGAN menghitung sisa hari sendiri di halaman.
+ * Halaman yang mencetak hasilnya cukup `echo` (sudah di-escape di dalam fungsi ini).
+ */
+function masa_aktif_pil(?array $sekolah = null): string
+{
+    $st = aktivasi_status($sekolah);
+    if ($st['mode'] === 'tanpa_sekolah') {
+        return '<span class="mut xs">-</span>';
+    }
+    if ($st['mode'] === 'permanen') {
+        return '<span class="pill pill-ok">Permanen</span>';
+    }
+    $uji = $st['mode'] === 'uji_coba';
+    $tgl = (string) ($st['sampai'] ?? '') !== '' ? tanggal_id((string) $st['sampai']) : '';
+    if ($st['habis']) {
+        return '<span class="pill pill-D">' . ($uji ? 'Uji coba habis' : 'Masa aktif habis') . '</span>'
+            . ($tgl !== '' ? '<span class="tbl-sub">s.d. ' . e($tgl) . '</span>' : '');
+    }
+    if ((int) $st['sampai_ts'] === 0) {
+        // Tanpa tanggal batas → tidak pernah terkunci (perilaku lama).
+        return '<span class="pill ' . ($uji ? 'pill-uji' : 'pill-ok') . '">'
+            . ($uji ? 'Uji coba' : 'Aktif') . '</span>';
+    }
+    return '<span class="pill ' . ($uji ? 'pill-uji' : 'pill-ok') . '">' . ($uji ? 'Uji coba' : 'Aktif') . '</span>'
+        . '<span class="tbl-sub"><b>' . (int) $st['sisa_hari'] . ' hari lagi</b>'
+        . ($tgl !== '' ? ' &middot; s.d. ' . e($tgl) : '') . '</span>';
+}
+
+/**
+ * Bahan tabel "Daftar Sekolah/Madrasah" pada Ringkasan Semua Sekolah (Super Admin lintas sekolah).
+ *
+ * Dipakai TIGA tempat sekaligus — `index.php` (tabel + grafik "Sebaran Siswa"), lembar CETAK
+ * (`cetak_sekolah_lintas.php`) dan unduhan Word (`sekolah_lintas_word.php`) — supaya angka,
+ * keadaan masa aktif, dan URUTANNYA tidak pernah berbeda antar tempat.
+ *
+ * Kunci hasil:
+ *   daftar       : seluruh sekolah terdaftar (sekolah_list(true))
+ *   aktif        : sekolah yang sudah disetujui & aktif (urut abjad — dipakai grafik)
+ *   baris        : [sekolah, stat, akt] — TERURUT masa aktif paling lama di atas
+ *   tot          : jumlah kelas/guru/siswa/mapel/jurnal/nilai dari baris yang tampil
+ *   label_grafik : nama sekolah untuk grafik "Sebaran Siswa"
+ *   data_grafik  : jumlah siswa sejajar label_grafik
+ */
+function sekolah_lintas_ringkas(): array
+{
+    $daftar = sekolah_list(true);
+    $aktif = array_values(array_filter(
+        $daftar,
+        static fn(array $s): bool => ($s['verifikasi'] ?? '') === 'disetujui' && (int) $s['aktif'] === 1
+    ));
+
+    $baris = [];
+    $labelGrafik = [];
+    $dataGrafik = [];
+    $tot = ['kelas' => 0, 'guru' => 0, 'siswa' => 0, 'mapel' => 0, 'jurnal' => 0, 'nilai' => 0];
+    foreach ($aktif as $s) {
+        $st = sekolah_stat((int) $s['id']);
+        $baris[] = ['sekolah' => $s, 'stat' => $st, 'akt' => aktivasi_status($s)];
+        foreach ($tot as $k => $n) {
+            $tot[$k] = $n + (int) ($st[$k] ?? 0);
+        }
+        $labelGrafik[] = $s['nama'] !== '' ? (string) $s['nama'] : '(nama belum diisi)';
+        $dataGrafik[] = $st['siswa'];
+    }
+
+    // URUTAN TABEL (permintaan pemilik, v1.71.9): *"Urutkan: Paling atas adalah yang masa aktifnya
+    // paling lama."* → permanen (tanpa batas) paling atas, lalu sisa masa aktif terpanjang, dan
+    // sekolah yang masa aktifnya sudah habis di paling bawah. Nama sekolah dipakai sebagai
+    // penentu kedua supaya urutannya tetap sama setiap kali halaman dibuka.
+    // Dijalankan SESUDAH loop di atas agar urutan grafik "Sebaran Siswa" (abjad) tidak ikut berubah.
+    usort($baris, static function (array $a, array $b): int {
+        $ka = aktivasi_urut_kunci($a['sekolah']);
+        $kb = aktivasi_urut_kunci($b['sekolah']);
+        if ($ka !== $kb) {
+            return $kb <=> $ka;   // menurun: masa aktif paling lama di atas
+        }
+        return strcasecmp((string) ($a['sekolah']['nama'] ?? ''), (string) ($b['sekolah']['nama'] ?? ''));
+    });
+
+    return [
+        'daftar'       => $daftar,
+        'aktif'        => $aktif,
+        'baris'        => $baris,
+        'tot'          => $tot,
+        'label_grafik' => $labelGrafik,
+        'data_grafik'  => $dataGrafik,
+    ];
+}
+
+/**
+ * RINGKASAN MASA AKTIF binaan seorang pengawas (permintaan pemilik, v1.83.0).
+ *
+ * Pemilik meminta kolom **Masa Aktif** pada lembar cetak/Word "Akun Pengawas" berisi
+ * *"berapa binaan permanen / aktif / sudah terkunci"* — bukan tanggal, karena yang berstatus
+ * masa aktif adalah MADRASAH BINAANNYA, bukan akun pengawasnya.
+ *
+ * Kategori ditentukan `aktivasi_status()` (satu sumber kebenaran — jangan menghitung sendiri):
+ *   • permanen  → mode `permanen` (tanpa batas waktu);
+ *   • aktif     → mode `aktif` yang masih berjalan;
+ *   • uji coba  → mode `uji_coba` yang masih berjalan (dilaporkan terpisah supaya tidak menyesatkan);
+ *   • terkunci  → masa aktif/uji coba yang sudah HABIS (aplikasi lembaga itu terkunci).
+ *
+ * @param array<int,array<string,mixed>> $binaan baris tabel `sekolah` (hasil sekolah_binaan())
+ * @return array{total:int,permanen:int,aktif:int,uji:int,terkunci:int}
+ */
+function pengawas_binaan_masa(array $binaan): array
+{
+    $r = ['total' => count($binaan), 'permanen' => 0, 'aktif' => 0, 'uji' => 0, 'terkunci' => 0];
+    foreach ($binaan as $s) {
+        $st = aktivasi_status($s);
+        if ($st['mode'] === 'tanpa_sekolah') {
+            continue;
+        }
+        if ($st['mode'] === 'permanen') {
+            $r['permanen']++;
+        } elseif ($st['habis']) {
+            $r['terkunci']++;
+        } elseif ($st['mode'] === 'uji_coba') {
+            $r['uji']++;
+        } else {
+            $r['aktif']++;
+        }
+    }
+    return $r;
+}
+
+/**
+ * Teks ringkasan masa aktif binaan untuk LEMBAR CETAK & WORD — bentuk TEKS BIASA
+ * (tanpa tag HTML dan tanpa tanda "·", karena hasil cetak e-GURU memang bebas middot):
+ * mis. "3 permanen, 5 aktif, 1 terkunci". "uji coba" hanya disisipkan bila memang ada.
+ */
+function pengawas_masa_teks(array $masa): string
+{
+    if ((int) ($masa['total'] ?? 0) <= 0) {
+        return '-';
+    }
+    $bagian = [(int) $masa['permanen'] . ' permanen', (int) $masa['aktif'] . ' aktif'];
+    if ((int) ($masa['uji'] ?? 0) > 0) {
+        $bagian[] = (int) $masa['uji'] . ' uji coba';
+    }
+    $bagian[] = (int) $masa['terkunci'] . ' terkunci';
+    return implode(', ', $bagian);
+}
+
+/**
+ * Bahan "Daftar Akun Pengawas" — SATU SUMBER DATA untuk halaman Akun Pengawas, lembar CETAK
+ * (`cetak_pengawas_binaan.php`) dan unduhan Word (`pengawas_binaan_word.php`).
+ *
+ * Permintaan pemilik (v1.83.0, tangkapan layar halaman Akun Pengawas): *"Yang saya tandai warna merah
+ * tambahkan fitur download dan cetak."* Hasil cetak diminta berbentuk sederhana seperti contohnya:
+ * kolom **No, Pengawas Bina, Madrasah Binaan (bernomor), Masa Aktif** — tanpa kop sekolah dan tanpa
+ * tanda tangan.
+ *
+ * Urutan akun SAMA dengan tabel di halaman (aktif lebih dulu, lalu nama) supaya hasil cetak tidak
+ * berbeda dari yang dilihat di layar. Binaan yang dihitung = binaan AKTIF (yang benar-benar dapat
+ * dibuka pengawas); jumlah binaan nonaktif dilaporkan terpisah.
+ *
+ * Kunci hasil:
+ *   baris : [id, nama, username, aktif, ditinjau, binaan[], jumlah, nonaktif, masa[], masa_teks]
+ *   tot   : jumlah akun / akun aktif / penugasan binaan / hitungan masa aktif seluruh binaan
+ */
+function pengawas_binaan_ringkas(): array
+{
+    $akun = all('SELECT * FROM users WHERE role = "pengawas" ORDER BY aktif DESC, nama');
+    $baris = [];
+    $tot = ['akun' => 0, 'aktif' => 0, 'binaan' => 0,
+            'permanen' => 0, 'aktif_binaan' => 0, 'uji' => 0, 'terkunci' => 0];
+
+    foreach ($akun as $r) {
+        $id = (int) $r['id'];
+        $binaan = sekolah_binaan($id, true);
+        $semua = sekolah_binaan($id, false);
+        $masa = pengawas_binaan_masa($binaan);
+        $tot['akun']++;
+        $tot['aktif'] += (int) $r['aktif'] === 1 ? 1 : 0;
+        $tot['binaan'] += count($binaan);
+        $tot['permanen'] += $masa['permanen'];
+        $tot['aktif_binaan'] += $masa['aktif'];
+        $tot['uji'] += $masa['uji'];
+        $tot['terkunci'] += $masa['terkunci'];
+        $baris[] = [
+            'id'        => $id,
+            'nama'      => (string) $r['nama'],
+            'username'  => (string) $r['username'],
+            'aktif'     => (int) $r['aktif'] === 1,
+            'ditinjau'  => (int) ($r['ditinjau'] ?? 1) === 1,
+            'binaan'    => $binaan,
+            'jumlah'    => count($binaan),
+            'nonaktif'  => count($semua) - count($binaan),
+            'masa'      => $masa,
+            'masa_teks' => pengawas_masa_teks($masa),
+        ];
+    }
+
+    return ['baris' => $baris, 'tot' => $tot];
+}
+
+/**
  * true bila aplikasi sekolah TERKUNCI: masa aktif / masa uji cobanya sudah habis.
  *
  * Permintaan pemilik: "Saat masa aktif habis, buat aplikasi otomatis mengunci semua fitur tanpa
@@ -4244,6 +4553,10 @@ function pengawas_berkas_boleh(): array
         'cetak_wali_struktur.php', 'cetak_wali_bagan.php',   // lembar cetak struktur & bagan kelas
         'cetak_wali_program.php', 'cetak_wali_absensi.php',  // lembar cetak program kerja & absensi kelas
         'cetak_wali_piket.php',                       // lembar cetak jadwal piket kelas
+        // v1.88.0: LEMBAR CETAK SETORAN HAFALAN menu Tugas Tambahan "Pembina Tahfidz" (per kelas &
+        // rincian). Pengawas hanya melihat & mencetak; pengubahan data ditolak gerbang (berkas ini
+        // sengaja TIDAK ada pada `pengawas_berkas_post()`).
+        'cetak_tahfidz.php',
         // v1.69.0: LEGER NILAI KELAS (rekap semua mata pelajaran + predikat & peringkat) — pengawas
         // boleh MELIHAT & MENCETAK rekap kelas binaannya (tidak menulis apa pun).
         'cetak_wali_leger.php',
@@ -5878,14 +6191,21 @@ function pengumuman_list(bool $aktifSaja = false, ?string $sasaran = null): arra
  * Daftar SASARAN popup sambutan (kode => label).
  *
  * Permintaan pemilik: *"untuk pop up yang muncul di akun siswa diinput tersendiri oleh super admin"*
- * → isi popup dipisah menjadi dua: untuk **Pengguna Aplikasi** (Pengawas, Kepala Sekolah/Madrasah,
- * Admin Operator, Guru) dan untuk **Siswa**. Masing-masing punya daftarnya sendiri sehingga Super
- * Admin mengisi popup siswa secara terpisah dan tidak tercampur.
+ * → isi popup dipisah per sasaran. Masing-masing punya daftarnya sendiri sehingga Super Admin
+ * mengisinya terpisah dan tidak tercampur:
+ *   • **pengguna** — Kepala Sekolah/Madrasah, Admin Operator, dan Guru;
+ *   • **siswa**    — akun siswa;
+ *   • **pengawas** — akun Pengawas Sekolah/Madrasah (permintaan pemilik, v1.85.0:
+ *     *"Pada menu sambutan dan pengumuman pada halaman super admin tambahkan sambutan/pengumuman
+ *     khusus pengawas"*). Penjaga memilih "TERPISAH PENUH seperti tab Siswa" → pengawas TIDAK ikut
+ *     melihat popup sasaran *pengguna*; bila tab ini kosong, pengawas tidak menerima popup sama
+ *     sekali (jangan digabung tanpa bertanya lebih dulu).
  */
 function pengumuman_sasaran_list(): array
 {
     return [
         'pengguna' => 'Pengguna Aplikasi',
+        'pengawas' => 'Pengawas',
         'siswa'    => 'Siswa',
     ];
 }
@@ -5897,10 +6217,21 @@ function pengumuman_sasaran_sah(?string $sasaran): string
     return array_key_exists($s, pengumuman_sasaran_list()) ? $s : '';
 }
 
-/** Sasaran yang berlaku untuk pengguna yang sedang masuk (siswa → 'siswa', peran lain → 'pengguna'). */
+/**
+ * Sasaran popup yang berlaku untuk pengguna yang sedang masuk.
+ *
+ * siswa → 'siswa'; pengawas → 'pengawas' (TERPISAH PENUH, v1.85.0 — pengawas tidak ikut menerima
+ * popup sasaran "pengguna"); peran lain (kepala/operator/guru) → 'pengguna'.
+ */
 function pengumuman_sasaran_saya(): string
 {
-    return is_siswa() ? 'siswa' : 'pengguna';
+    if (is_siswa()) {
+        return 'siswa';
+    }
+    if (is_pengawas()) {
+        return 'pengawas';
+    }
+    return 'pengguna';
 }
 
 /** Satu pengumuman berdasarkan id (null bila tidak ada). */
@@ -6009,8 +6340,9 @@ function sambutan_perlu_tampil(): bool
         sambutan_selesai();
         return false;
     }
-    // Isi popup dipisah per sasaran: akun SISWA melihat popup yang diisi tersendiri oleh Super Admin
-    // (tab "Siswa"), sedangkan peran lain melihat popup untuk Pengguna Aplikasi.
+    // Isi popup dipisah per sasaran: akun SISWA melihat popup tab "Siswa", akun PENGAWAS melihat
+    // popup tab "Pengawas" (terpisah penuh sejak v1.85.0), sedangkan peran lain (kepala/operator/
+    // guru) melihat popup untuk Pengguna Aplikasi.
     return pengumuman_list(true, pengumuman_sasaran_saya()) !== [];
 }
 
@@ -6117,6 +6449,8 @@ function tugas_menu_kode_khusus(): array
 {
     return array_merge(
         [SARPRAS_KODE_MENU, KS_KODE_MENU, PERPUS_KODE_MENU, KURIKULUM_KODE_MENU, WALI_KODE_MENU],
+        // v1.88.0: menu "Pembina Tahfidz" (setoran hafalan) — kodenya tidak boleh dipakai menu baru.
+        array_merge([TAHFIDZ_KODE_MENU], TAHFIDZ_KODE_LAIN),
         OSIM_KODE_LIST,
         LAB_KODE_MENU,
         // Menu Tugas Tambahan yang isinya memakai modul daftar aplikasi (mis. "Bendahara Bos"):

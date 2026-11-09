@@ -32,6 +32,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // (ada medan `guru_kelas_ada`) supaya formulir lama / skrip lain tidak menghapus penandanya.
     $guruKelasAda = array_key_exists('guru_kelas_ada', $_POST);
     $guruKelas = ($guruKelasAda && !empty($_POST['guru_kelas']) && is_guru_kelas_jenjang()) ? 1 : 0;
+    // v61: STATUS SERTIFIKASI & SATMIKAL (permintaan pemilik). Hanya ditulis bila medannya benar-benar
+    // dikirim (formulir lama/klien lain tidak menghapus isian yang sudah ada) dan nilainya WAJIB salah
+    // satu yang terdaftar di GURU_SERTIFIKASI / GURU_SATMIKAL — nilai asing disimpan sebagai kosong.
+    $sertifikasiAda = array_key_exists('sertifikasi', $_POST);
+    $sertifikasi = $sertifikasiAda ? trim((string) $_POST['sertifikasi']) : '';
+    if ($sertifikasi !== '' && !isset(GURU_SERTIFIKASI[$sertifikasi])) {
+        $sertifikasi = '';
+    }
+    $satmikalAda = array_key_exists('satmikal', $_POST);
+    $satmikal = $satmikalAda ? trim((string) $_POST['satmikal']) : '';
+    if ($satmikal !== '' && !isset(GURU_SATMIKAL[$satmikal])) {
+        $satmikal = '';
+    }
 
     $galat = [];
     if ($nama === '') {
@@ -60,13 +73,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // v49: penanda GURU KELAS hanya ditulis bila formulirnya memuat medan `guru_kelas_ada`,
         // sehingga penyimpanan dari formulir lama tidak pernah menghapus penandanya.
         $setKelas = $guruKelasAda ? ', guru_kelas = ' . $guruKelas : '';
+        // v61: STATUS SERTIFIKASI & SATMIKAL — pola yang sama: hanya ditulis bila medannya dikirim
+        // (nilainya sudah divalidasi terhadap GURU_SERTIFIKASI / GURU_SATMIKAL di atas).
+        $setSert = $sertifikasiAda ? ', sertifikasi = ?' : '';
+        $setSat = $satmikalAda ? ', satmikal = ?' : '';
         if ($g) {
+            $paramsGuru = [$nama, $nip, $nuptk, $jk, $jabatan, $telepon, $email, $aktif];
+            if ($sertifikasiAda) {
+                $paramsGuru[] = $sertifikasi;
+            }
+            if ($satmikalAda) {
+                $paramsGuru[] = $satmikal;
+            }
+            $paramsGuru[] = $id;
+            $paramsGuru[] = sekolah_id();
             q('UPDATE guru SET nama=?, nip=?, nuptk=?, jenis_kelamin=?, jabatan=?, telepon=?, email=?, aktif=?'
-                . $setKelas . ' WHERE id=? AND sekolah_id=?',
-                [$nama, $nip, $nuptk, $jk, $jabatan, $telepon, $email, $aktif, $id, sekolah_id()]);
+                . $setKelas . $setSert . $setSat . ' WHERE id=? AND sekolah_id=?', $paramsGuru);
         } else {
-            q('INSERT INTO guru (sekolah_id, nama, nip, nuptk, jenis_kelamin, jabatan, telepon, email, guru_kelas, aktif, dibuat) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
-                [sekolah_id(), $nama, $nip, $nuptk, $jk, $jabatan, $telepon, $email, $guruKelas, $aktif, $now]);
+            q('INSERT INTO guru (sekolah_id, nama, nip, nuptk, jenis_kelamin, jabatan, telepon, email,
+                                 guru_kelas, sertifikasi, satmikal, aktif, dibuat)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                [sekolah_id(), $nama, $nip, $nuptk, $jk, $jabatan, $telepon, $email, $guruKelas,
+                 $sertifikasi, $satmikal, $aktif, $now]);
             $id = (int) db()->lastInsertId();
         }
         q('DELETE FROM guru_mapel WHERE guru_id = ?', [$id]);
@@ -188,9 +216,33 @@ page_top($g ? 'Ubah Data Guru' : 'Tambah Data Guru');
             <input type="text" id="telepon" name="telepon" value="<?= e((string) ($g['telepon'] ?? '')) ?>">
           </div>
         </div>
-        <div>
-          <label class="f" for="email">Email</label>
-          <input type="text" id="email" name="email" value="<?= e((string) ($g['email'] ?? '')) ?>">
+        <?php // v61: STATUS SERTIFIKASI & SATMIKAL (permintaan pemilik) — satu baris bersama Email.
+              // Pilihan kosong ("—") berarti BELUM DIISI, bukan pilihan ketiga: data guru yang sudah
+              // ada memang belum punya keterangan ini. Daftar nilainya dari konstanta, jangan ditulis
+              // ulang di sini. ?>
+        <div class="grid g3" style="gap:16px">
+          <div>
+            <label class="f" for="email">Email</label>
+            <input type="text" id="email" name="email" value="<?= e((string) ($g['email'] ?? '')) ?>">
+          </div>
+          <div>
+            <label class="f" for="sertifikasi">Status Sertifikasi</label>
+            <select id="sertifikasi" name="sertifikasi">
+              <option value="">— belum diisi</option>
+              <?php foreach (GURU_SERTIFIKASI as $nilaiSert => $labelSert): ?>
+                <option value="<?= e($nilaiSert) ?>" <?= ($g['sertifikasi'] ?? '') === $nilaiSert ? 'selected' : '' ?>><?= e($labelSert) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div>
+            <label class="f" for="satmikal">Satmikal</label>
+            <select id="satmikal" name="satmikal">
+              <option value="">— belum diisi</option>
+              <?php foreach (GURU_SATMIKAL as $nilaiSat => $labelSat): ?>
+                <option value="<?= e($nilaiSat) ?>" <?= ($g['satmikal'] ?? '') === $nilaiSat ? 'selected' : '' ?>><?= e($labelSat) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
         </div>
         <label class="f" style="display:flex;gap:9px;align-items:center;font-weight:600;margin:0">
           <input type="checkbox" name="aktif" value="1" <?= (int) ($g['aktif'] ?? 1) === 1 ? 'checked' : '' ?> style="width:16px;height:16px;accent-color:var(--accent)">

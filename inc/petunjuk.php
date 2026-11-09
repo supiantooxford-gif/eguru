@@ -144,7 +144,9 @@ function petunjuk_daftar(): array
                 'Daftar ini juga menjadi sumber pilihan Tugas Tambahan pada Data Guru.'),
             petunjuk_baris('Pengumuman Sambutan', 'star', 'pengumuman.php',
                 'Mengisi isi popup "Selamat datang" yang muncul sekali setiap pengguna masuk aplikasi.',
-                ['Tulis judul dan isi pengumuman, lalu simpan.',
+                ['Pilih tab sasaran lebih dulu: <b>Pengguna Aplikasi</b> (Kepala Sekolah/Madrasah, '
+                 . 'Admin Operator, Guru), <b>Pengawas</b>, atau <b>Siswa</b> — tiap sasaran diisi terpisah.',
+                 'Tulis judul dan isi pengumuman, lalu simpan.',
                  'Beberapa pengumuman dapat diaktifkan sekaligus dan diurutkan tampilannya.'],
                 'Popup tidak muncul bila tidak ada pengumuman yang aktif; akun Super Admin sendiri tidak melihat popup.'),
             petunjuk_baris('Halaman Depan (Landing)', 'apps', 'landing.php',
@@ -186,7 +188,10 @@ function petunjuk_daftar(): array
                 ['Isi Judul Grup, Link Grup (diawali http:// atau https://), dan Keterangannya, lalu simpan.',
                  'Perubahan langsung terlihat pada dashboard — lihat kartu Pratinjau di halaman itu.',
                  'Tombol "Kembalikan Bawaan" memulihkan judul, link, dan keterangan bawaan aplikasi.'],
-                'Berlaku untuk seluruh sekolah/madrasah (pengaturan tingkat aplikasi).'),
+                'Berlaku untuk seluruh sekolah/madrasah (pengaturan tingkat aplikasi). Tombol '
+                . '<b>Gabung Grup WhatsApp</b> hanya muncul pada lembaga yang <b>sudah melakukan '
+                . 'aktivasi</b> (status aktif/permanen). Lembaga yang masih masa uji coba hanya melihat '
+                . 'keterangan pada kartu itu — tautan grupnya tidak diberikan.'),
             petunjuk_baris('Biaya & WA Aktivasi', 'card', 'biaya_aktivasi.php',
                 'Mengatur nominal biaya aktivasi, biaya langganan, dan nomor WA HD Admin yang dipakai '
                 . 'seluruh sekolah/madrasah pada menu Status &amp; Aktivasi.',
@@ -206,7 +211,7 @@ function petunjuk_daftar(): array
                  'Gunakan <b>Hapus</b> untuk membuang Nama Dokumen yang tidak diperlukan — kiriman guru yang sudah masuk TIDAK ikut terhapus.'],
                 'Daftar ini berlaku untuk SELURUH sekolah/madrasah (pengaturan tingkat aplikasi). '
                 . 'Guru mengunggah perangkat lewat menu <b>Kirim Perangkat</b> pada akunnya (satu berkas '
-                . 'per Nama Dokumen pada tiap mata pelajaran yang diampu), lalu kepala sekolah/madrasah '
+                . 'per Nama Dokumen pada tiap mata pelajaran &amp; kelas yang diampu), lalu kepala sekolah/madrasah '
                 . 'meninjaunya pada menu <b>Perangkat Masuk</b>. Menu "Perangkat Guru" yang lama (halaman '
                 . 'publik + kode download) sudah dihapus karena tidak dipakai lagi.'),
             petunjuk_baris('Akun Super Admin', 'key', 'pengguna.php',                'Mengelola seluruh akun aplikasi (Super Admin, kepala sekolah/madrasah, admin operator, guru, pengawas).',
@@ -411,8 +416,9 @@ function petunjuk_daftar(): array
                 'Mengirim perangkat pembelajaran sendiri ke kepala sekolah/madrasah: Kalender Pendidikan, '
                 . 'Analisis Pekan Efektif, Capaian Pembelajaran, Alur Tujuan Pembelajaran, RPP/Modul Ajar '
                 . '(nama dokumennya ditetapkan pengelola aplikasi).',
-                ['Pilih <b>Tahun Ajaran</b>, <b>Mata Pelajaran</b> yang Anda ampu, dan <b>Nama Dokumen</b>, lalu pilih berkasnya dan tekan Kirim.',
-                 'Satu sel = satu berkas (per nama dokumen pada tiap mata pelajaran). Mengunggah ulang pada sel yang sama menggantikan berkas lama.',
+                ['Pilih <b>Tahun Ajaran</b>, <b>Mata Pelajaran</b> yang Anda ampu, <b>Kelas</b>, dan <b>Nama Dokumen</b>, lalu pilih berkasnya dan tekan Kirim.',
+                 'Satu sel = satu berkas (per nama dokumen pada tiap mata pelajaran DAN kelas). Mengunggah ulang pada sel yang sama menggantikan berkas lama.',
+                 'Mata pelajaran yang sama di kelas berbeda dikirim TERPISAH — berkas kelas satu tidak menimpa kelas lainnya.',
                  'Tabel "Kelengkapan Perangkat" memakai centang hijau (sudah dikirim) &amp; silang merah (belum) — klik Unggah pada sel yang masih merah.',
                  'Hasil tinjauan kepala sekolah (Disetujui / Direvisi / Ditolak beserta keterangannya) tampil pada kolom Status Tinjauan dan pada dashboard Anda.'],
                 'Berkas yang dinyatakan <b>Direvisi</b> atau <b>Ditolak</b> sebaiknya diperbaiki lalu diunggah '
@@ -425,7 +431,7 @@ function petunjuk_daftar(): array
             $adm[] = petunjuk_baris('Perangkat Masuk', 'folder', 'perangkat_masuk.php',
                 'Perangkat pembelajaran yang dikirim guru sekolah/madrasah ini, lengkap dengan berkasnya '
                 . 'dan keadaan tinjuannya.',
-                ['Gunakan penyaring tahun ajaran, nama guru, mata pelajaran, nama dokumen, atau status tinjauan.',
+                ['Gunakan penyaring tahun ajaran, nama guru, mata pelajaran, kelas, nama dokumen, atau status tinjauan.',
                  'Klik <b>Unduh</b> untuk membuka berkas perangkat guru itu pada tab baru.',
                  'Tekan <b>Tinjau</b> pada baris yang dituju, pilih <b>Dokumen Disetujui / Direvisi / Ditolak</b>, tulis keterangannya, lalu Simpan.'],
                 'Keterangan <b>wajib</b> diisi untuk <b>Dokumen Direvisi</b> dan <b>Dokumen Ditolak</b> — itulah '
@@ -457,7 +463,10 @@ function petunjuk_daftar(): array
              'Tiap kartu memakai ikon yang sesuai dengan nama aplikasinya, sehingga mudah dikenali.',
              'Di <b>atas daftar aplikasi</b> ada grafik <b>Aplikasi yang Sering Digunakan</b>: jumlah klik '
              . '"Buka Aplikasi" dari seluruh pengguna semua sekolah/madrasah (seluruh data yang tercatat), '
-             . 'sehingga Anda tahu aplikasi mana yang paling banyak dipakai.'],
+             . 'sehingga Anda tahu aplikasi mana yang paling banyak dipakai.',
+             'Bila menu ini <b>dinonaktifkan sementara</b> oleh pengelola aplikasi, halaman hanya '
+             . 'menampilkan pesan gangguan (mis. "Server AI Smart Teacher lagi mengalami gangguan") — '
+             . 'silakan coba lagi beberapa saat kemudian; tidak ada data yang perlu diisi ulang.'],
             daftar_apps_aktivasi_pesan() . ' Bagi lembaga yang masih masa uji coba, halaman ini hanya '
             . 'menampilkan keterangan tersebut sampai kode aktivasi dimasukkan pada menu Status & Aktivasi.');
         if (daftar_apps_tampil('aplikasi_sagu')) {

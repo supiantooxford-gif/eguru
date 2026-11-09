@@ -25,6 +25,10 @@
  *    `tugas.php?kode=…`), selain itu jatuh ke `index.php`;
  *  - kegagalan mencatat TIDAK BOLEH menghalangi pengguna membuka aplikasinya (lihat
  *    `app_klik_catat()`).
+ *  - **MENU YANG DINONAKTIFKAN SUPER ADMIN (v1.81.0)** — bila `daftar_apps_aktif($menu)` bernilai
+ *    false (sekarang hanya menu **Smart Teacher**), tombol "Buka Aplikasi" TIDAK membuka tautannya:
+ *    pengguna dikembalikan ke halaman menunya yang menampilkan peringatan gangguan. Super Admin
+ *    tetap boleh (dialah yang mengatur keadaan menu itu).
  *
  * GET saja (tidak ada POST, tidak ada CSRF): berkas ini juga terdaftar di `pengawas_berkas_boleh()`
  * supaya akun pengawas (hanya-lihat) tetap dapat membuka aplikasi dari daftar aplikasi.
@@ -65,6 +69,15 @@ if (!daftar_apps_tampil($menu) && !daftar_apps_per_aplikasi($menu)) {
 // Menu yang hanya terbuka bagi lembaga yang sudah melakukan aktivasi (v1.78.0).
 if (!daftar_apps_aktivasi_boleh($menu)) {
     tolak403(daftar_apps_aktivasi_pesan());
+}
+
+// Menu yang sedang DINONAKTIFKAN Super Admin (v1.81.0): aplikasi di dalamnya tidak boleh dibuka
+// lewat alamat langsung. Pengguna dikembalikan ke halaman menunya yang menampilkan peringatan
+// "Server AI … lagi mengalami gangguan" — bukan 403, supaya pesannya terbaca. Super Admin tetap
+// boleh (dialah yang menonaktifkan & harus bisa menguji tautannya).
+if (!daftar_apps_aktif($menu) && !is_super()) {
+    $halamanMenu = (string) ($k['berkas'] ?? '');
+    redirect($halamanMenu !== '' ? $halamanMenu : 'index.php');
 }
 
 $app = daftar_apps_by_id($menu, $appId);

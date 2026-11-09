@@ -1405,6 +1405,68 @@
     });
   }
 
+  /* ---------- MENU "PEMBINA TAHFIDZ" (v1.88.0) ----------
+     Permintaan pemilik: *"Untuk nama surah isi otomatis pilihan nama surah dari 1. Al-Fatihah - 114.
+     An-Nas. Untuk ayatnya di sesuaikan dengan jumlah ayat setiap surah di dalam al-qur'an"*.
+     Pelengkap saja — formulir TETAP bekerja tanpa JavaScript:
+       1. batas "Dari Ayat ke-" / "Sampai Ayat ke-" mengikuti jumlah ayat surah yang dipilih
+          (`data-ayat` pada tiap <option>); batas yang sama juga diperiksa ULANG di server;
+       2. pemilih Kelas menyaring daftar siswa (optgroup per kelas) supaya pencarian siswa cepat.
+     Tanpa skrip, daftar siswa tetap lengkap dan berkelompok per kelas sehingga tetap bisa dipakai. */
+  function initTahfidz() {
+    var surah = document.getElementById('surah_no');
+    var dari = document.getElementById('ayat_dari');
+    var sampai = document.getElementById('ayat_sampai');
+    var hint = document.getElementById('hintAyat');
+
+    function siapkanAyat(ubahNilai) {
+      if (!surah || !dari || !sampai) { return; }
+      var o = surah.options[surah.selectedIndex];
+      var maks = parseInt(o ? o.getAttribute('data-ayat') : '1', 10) || 1;
+      dari.max = maks;
+      sampai.max = maks;
+      if (ubahNilai) { dari.value = 1; sampai.value = maks; }
+      if (parseInt(dari.value, 10) > maks) { dari.value = maks; }
+      if (parseInt(sampai.value, 10) > maks) { sampai.value = maks; }
+      if (parseInt(sampai.value, 10) < parseInt(dari.value, 10)) {
+        sampai.value = dari.value;
+      }
+      if (hint && o) {
+        var judul = o.textContent.replace(/\s*\(\d+ ayat\)\s*$/, '');
+        hint.innerHTML = 'Batas ayat menyesuaikan surah yang dipilih: <b>' + judul +
+          '</b> memiliki <b>' + maks + '</b> ayat.';
+      }
+    }
+    if (surah) { surah.addEventListener('change', function () { siapkanAyat(true); }); }
+    if (dari) {
+      dari.addEventListener('change', function () {
+        if (parseInt(sampai.value, 10) < parseInt(dari.value, 10)) { sampai.value = dari.value; }
+      });
+    }
+
+    var kelas = document.getElementById('kelasPilih');
+    var siswa = document.getElementById('siswa_id');
+    if (kelas && siswa) {
+      kelas.addEventListener('change', function () {
+        var id = kelas.value;
+        Array.prototype.forEach.call(siswa.querySelectorAll('optgroup'), function (g) {
+          var cocok = !id;
+          Array.prototype.forEach.call(g.querySelectorAll('option'), function (op) {
+            if (id && op.getAttribute('data-kelas') === id) { cocok = true; }
+          });
+          g.hidden = !cocok;
+          g.disabled = !cocok;
+          Array.prototype.forEach.call(g.querySelectorAll('option'), function (op) { op.hidden = !cocok; });
+        });
+        if (id) {
+          Array.prototype.forEach.call(siswa.querySelectorAll('option'), function (op) {
+            if (op.value && op.getAttribute('data-kelas') === id && !siswa.value) { op.selected = true; }
+          });
+        }
+      });
+    }
+  }
+
   /* ---------- TANDA TANGAN LANGSUNG DI LAYAR SENTUH pada notulen rapat (v1.70.0) ----------
      Permintaan pemilik: "Pada notulen rapat buat tanda tangan langsung lewat HP seperti aplikasi
      TUSmart". Tombol "Tanda Tangan" sudah dicetak SERVER dengan atribut `hidden`; skrip ini hanya
@@ -1815,5 +1877,6 @@
     initPrint();
     initChat();
     initKodeUnduh();
+    initTahfidz();
   });
 })();

@@ -499,7 +499,7 @@ function page_top(string $judul, string $sub = ''): void
             // ⚠️ v1.75.0: menu **"Studio Foto Pintar" DIHAPUS** atas permintaan pemilik ("Hapus menu
             // yang saya tandai warna merah") — aplikasi studio fotonya tetap ada sebagai salah satu
             // kartu DI DALAM menu Smart Teacher. Jangan dihidupkan kembali tanpa permintaan baru. ?>
-      <a class="nav-item <?= $here === 'smart_teacher.php' ? 'on' : '' ?>" href="smart_teacher.php"><?= ikon('apps') ?><?= daftar_apps_nama_sidebar('smart_teacher', 'Smart Teacher') ?><?= daftar_apps_aktivasi_pil('smart_teacher') ?></a>
+      <a class="nav-item <?= $here === 'smart_teacher.php' ? 'on' : '' ?>" href="smart_teacher.php"><?= ikon('apps') ?><?= daftar_apps_nama_sidebar('smart_teacher', 'Smart Teacher') ?><?= daftar_apps_gangguan_pil('smart_teacher') ?><?= daftar_apps_aktivasi_pil('smart_teacher') ?></a>
       <?php // Aplikasi Sagu: dibatasi per sekolah (lihat daftar_apps_tampil()) — sekolah yang tidak
             // dicentang Super Admin tidak melihat menunya sama sekali. ?>
       <?php if (daftar_apps_tampil('aplikasi_sagu')): ?>
@@ -843,7 +843,8 @@ function page_bottom(): void
  */
 function sambutan_render(): bool
 {
-    // Hanya pengumuman untuk SASARAN pengguna yang sedang masuk (siswa ↔ pengguna aplikasi).
+    // Hanya pengumuman untuk SASARAN pengguna yang sedang masuk (siswa ↔ pengawas ↔ pengguna
+    // aplikasi) — lihat pengumuman_sasaran_saya().
     $daftar = pengumuman_list(true, pengumuman_sasaran_saya());
     sambutan_selesai();
     if ($daftar === []) {

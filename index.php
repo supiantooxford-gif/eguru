@@ -180,45 +180,24 @@ if (is_super() && !current_sekolah()) {
         redirect('index.php');
     }
 
-    $daftar = sekolah_list(true);
     $jumlahMenunggu = jumlah_pendaftaran_menunggu();
-    $semuaAktif = array_values(array_filter($daftar, static fn($s) => ($s['verifikasi'] ?? '') === 'disetujui' && (int) $s['aktif'] === 1));
     $totalGuru = (int) val('SELECT COUNT(*) FROM guru WHERE aktif = 1', [], 0);
     $totalSiswa = (int) val('SELECT COUNT(*) FROM siswa WHERE aktif = 1', [], 0);
     $totalJurnal = (int) val('SELECT COUNT(*) FROM jurnal', [], 0);
     $totalNilai = (int) val('SELECT COUNT(*) FROM nilai', [], 0);
 
-    // Ringkasan per sekolah untuk tabel & grafik.
-    // Permintaan pemilik: "pada bagian daftar sekolah/madrasah tambahkan jumlah total agar bisa
-    // mengetahui jumlah total kelas, siswa, guru, jurnal, nilai" → total DIHITUNG dari baris yang
-    // benar-benar ditampilkan ($baris) sehingga baris JUMLAH selalu sama dengan tabelnya.
-    $baris = [];
-    $labelGrafik = [];
-    $dataGrafik = [];
-    $tot = ['kelas' => 0, 'guru' => 0, 'siswa' => 0, 'mapel' => 0, 'jurnal' => 0, 'nilai' => 0];
-    foreach ($semuaAktif as $s) {
-        $st = sekolah_stat((int) $s['id']);
-        $baris[] = ['sekolah' => $s, 'stat' => $st];
-        foreach ($tot as $k => $n) {
-            $tot[$k] = $n + (int) ($st[$k] ?? 0);
-        }
-        $labelGrafik[] = $s['nama'] !== '' ? (string) $s['nama'] : '(nama belum diisi)';
-        $dataGrafik[] = $st['siswa'];
-    }
-
-    // URUTAN TABEL (permintaan pemilik, v1.71.9): *"Urutkan: Paling atas adalah yang masa aktifnya
-    // paling lama."* → permanen (tanpa batas) paling atas, lalu sisa masa aktif terpanjang, dan
-    // sekolah yang masa aktifnya sudah habis di paling bawah. Nama sekolah dipakai sebagai
-    // penentu kedua supaya urutannya tetap sama setiap kali halaman dibuka.
-    // Dijalankan SESUDAH loop di atas agar urutan grafik "Sebaran Siswa" (abjad) tidak ikut berubah.
-    usort($baris, static function (array $a, array $b): int {
-        $ka = aktivasi_urut_kunci($a['sekolah']);
-        $kb = aktivasi_urut_kunci($b['sekolah']);
-        if ($ka !== $kb) {
-            return $kb <=> $ka;   // menurun: masa aktif paling lama di atas
-        }
-        return strcasecmp((string) ($a['sekolah']['nama'] ?? ''), (string) ($b['sekolah']['nama'] ?? ''));
-    });
+    // Ringkasan per sekolah untuk tabel & grafik — SATU SUMBER dengan lembar CETAK dan unduhan
+    // Word "Daftar Sekolah/Madrasah" (helper `sekolah_lintas_ringkas()`, inc/helpers.php).
+    // Isinya: daftar sekolah terdaftar, sekolah aktif, baris tabel (TERURUT masa aktif paling lama
+    // di atas), jumlah total tiap kolom (dihitung dari baris yang benar-benar ditampilkan sehingga
+    // baris JUMLAH selalu sama dengan tabelnya), serta label & data grafik "Sebaran Siswa".
+    $ringkasLintas = sekolah_lintas_ringkas();
+    $daftar = $ringkasLintas['daftar'];
+    $semuaAktif = $ringkasLintas['aktif'];
+    $baris = $ringkasLintas['baris'];
+    $tot = $ringkasLintas['tot'];
+    $labelGrafik = $ringkasLintas['label_grafik'];
+    $dataGrafik = $ringkasLintas['data_grafik'];
 
     page_top('Ringkasan Semua Sekolah/Madrasah', 'Super Admin &middot; ' . count($semuaAktif) . ' sekolah/madrasah aktif dari '
         . count($daftar) . ' terdaftar');
@@ -307,6 +286,19 @@ if (is_super() && !current_sekolah()) {
             Klik "Kelola" untuk masuk ke data sekolah tersebut. Diurutkan dari <b>masa aktif paling
             lama</b> (permanen di paling atas, yang sudah habis di paling bawah).</p>
         </div>
+        <?php // CETAK & UNDUH WORD (v1.82.0 — permintaan pemilik: *"Pada yang saya tandai warna merah
+              // tambahkan fitur download word dan cetak (kolom mapel, jurnal dan nilai tidak perlu
+              // di cetak/download). Hanya No, Nama Madrasah, Kelas, Guru, Siswa, Masa Aktif"*).
+              // Kedua halaman memakai sumber data yang SAMA dengan tabel di bawah
+              // (`sekolah_lintas_ringkas()`) sehingga angka, keadaan masa aktif, dan urutannya sama. ?>
+        <div class="flex no-print" style="gap:8px">
+          <a class="btn btn-primary btn-sm" href="cetak_sekolah_lintas.php" target="_blank" rel="noopener">
+            <?= ikon('print', 15) ?> Cetak
+          </a>
+          <a class="btn btn-ghost btn-sm" href="sekolah_lintas_word.php">
+            <?= ikon('doc', 15) ?> Unduh Word
+          </a>
+        </div>
       </div>
       <?php if (!$baris): ?>
         <div class="empty"><?= ikon('building', 34) ?><h3>Belum ada sekolah/madrasah aktif</h3>
@@ -335,13 +327,18 @@ if (is_super() && !current_sekolah()) {
         <div class="table-wrap">
           <?php // id dipakai oleh pengukuran uji (baris JUMLAH vs baris data). ?>
           <table class="tbl" id="tblSekolahLintas">
-            <thead><tr><th>Sekolah/Madrasah</th><th class="ctr">Masa Aktif</th><th class="ctr">Kelas</th>
+            <thead><tr><th class="ctr" style="width:46px">No</th><th>Sekolah/Madrasah</th>
+              <th class="ctr">Masa Aktif</th><th class="ctr">Kelas</th>
               <th class="ctr">Guru</th><th class="ctr">Siswa</th>
               <th class="ctr">Mapel</th><th class="ctr">Jurnal</th><th class="ctr">Nilai</th>
               <th class="ctr">Aksi</th></tr></thead>
             <tbody>
-            <?php foreach ($baris as $b): $s = $b['sekolah']; $st = $b['stat']; ?>
+            <?php $noLintas = 0; foreach ($baris as $b): $noLintas++; $s = $b['sekolah']; $st = $b['stat']; ?>
               <tr>
+                <?php // KOLOM NOMOR (v1.82.0 — permintaan pemilik, bagian yang ditandai biru pada
+                      // tangkapan layar): nomor urut baris mengikuti urutan yang tampil (masa aktif
+                      // paling lama di atas), sama dengan nomor pada lembar cetak & unduhan Word. ?>
+                <td class="ctr"><?= $noLintas ?></td>
                 <td>
                   <b><?= tetap_kata(nama_sekolah_tampil($s)) ?></b>
                   <span class="tbl-sub"><?= e($s['jenis'] === 'madrasah' ? 'Madrasah' : 'Sekolah Umum') ?>
@@ -352,7 +349,7 @@ if (is_super() && !current_sekolah()) {
                 // pada daftar lintas sekolah — permanen, masa aktif 365 hari (dengan sisa harinya),
                 // masa uji coba, atau sudah berakhir (aplikasi terkunci). Satu sumber kebenaran:
                 // aktivasi_status($sekolah) — jangan menghitung sisa hari sendiri di sini.
-                $akt = aktivasi_status($s);
+                $akt = $b['akt'];
                 ?>
                 <td class="ctr">
                   <?php if ($akt['mode'] === 'permanen'): ?>
@@ -435,7 +432,7 @@ if (is_super() && !current_sekolah()) {
                   // dari SELURUH sekolah/madrasah aktif yang terdaftar pada tabel di atas. ?>
             <tfoot>
               <tr>
-                <td class="kiri"><b>JUMLAH (<?= count($baris) ?> sekolah/madrasah)</b>
+                <td class="kiri" colspan="2"><b>JUMLAH (<?= count($baris) ?> sekolah/madrasah)</b>
                   <span class="tbl-sub">Seluruh kolom dijumlahkan dari daftar di atas</span></td>
                 <td class="ctr"><span class="tbl-sub"><?= (int) $ringkasAkt['permanen'] ?> permanen
                   &middot; <?= (int) $ringkasAkt['aktif'] ?> berjangka<?= $ringkasAkt['uji_coba'] > 0 ? ' &middot; ' . (int) $ringkasAkt['uji_coba'] . ' uji coba' : '' ?><?= $ringkasAkt['habis'] > 0 ? ' &middot; ' . (int) $ringkasAkt['habis'] . ' habis' : '' ?></span></td>
@@ -525,6 +522,16 @@ if (is_pengawas()) {
         $sid = (int) $sekolah['id'];
         // ---- rekapan binaan yang sedang dilihat
         $rGuru = (int) val('SELECT COUNT(*) FROM guru WHERE aktif = 1 AND sekolah_id = ?', [$sid], 0);
+        // STATUS SERTIFIKASI (v1.86.0 — permintaan pemilik: *"Pada Dashboard Binaan tampilkan juga
+        // Jumlah Guru sertifikasi dan belum sertifikasi"*). Satu query untuk binaan ini saja;
+        // `sert_kosong` = guru aktif yang statusnya BELUM diisi (data lama) supaya angkanya utuh
+        // (sertifikasi + belum + kosong = guru aktif). Nilai sah dari GURU_SERTIFIKASI.
+        $sertBinaan = one("SELECT SUM(CASE WHEN sertifikasi = 'sertifikasi' THEN 1 ELSE 0 END) AS ya,
+                                  SUM(CASE WHEN sertifikasi = 'belum' THEN 1 ELSE 0 END) AS belum
+                           FROM guru WHERE aktif = 1 AND sekolah_id = ?", [$sid]) ?: [];
+        $rSertifikasi = (int) ($sertBinaan['ya'] ?? 0);
+        $rBelumSertifikasi = (int) ($sertBinaan['belum'] ?? 0);
+        $rSertKosong = max(0, $rGuru - $rSertifikasi - $rBelumSertifikasi);
         $rSiswa = (int) val('SELECT COUNT(*) FROM siswa WHERE aktif = 1 AND sekolah_id = ?', [$sid], 0);
         $rKelas = (int) val('SELECT COUNT(*) FROM kelas WHERE aktif = 1 AND sekolah_id = ?', [$sid], 0);
         $rMapel = (int) val('SELECT COUNT(*) FROM mapel WHERE aktif = 1 AND sekolah_id = ?', [$sid], 0);
@@ -539,14 +546,21 @@ if (is_pengawas()) {
                            (SELECT COUNT(*) FROM nilai n WHERE n.mapel_id = m.id AND n.sekolah_id = m.sekolah_id) AS jml
                          FROM mapel m WHERE m.sekolah_id = ? AND m.aktif = 1 ORDER BY m.urutan, m.nama', [$sid]);
         ?>
-      <div class="grid g4">
+      <?php // v1.86.0: kartu "Guru Sertifikasi" disisipkan setelah "Guru aktif" (permintaan pemilik),
+            // sehingga Dashboard Binaan kini memakai 5 kartu sebaris (g5) — pola yang sama dengan
+            // Dashboard Pengawas. Baris kecilnya menyebut jumlah BELUM sertifikasi. ?>
+      <div class="grid g5">
         <div class="card stat card-tight"><div class="stat-ic"><?= ikon('users', 18) ?></div>
           <div><div class="stat-num" style="font-size:1.3rem"><?= $rGuru ?></div><div class="stat-lbl">Guru aktif</div></div></div>
+        <div class="card stat card-tight"><div class="stat-ic p"><?= ikon('medal', 18) ?></div>
+          <div><div class="stat-num" style="font-size:1.3rem" id="numGuruSertifikasiBinaan"><?= $rSertifikasi ?></div>
+            <div class="stat-lbl">Guru Sertifikasi</div>
+            <div class="stat-hint" id="hintGuruSertifikasiBinaan"><?= $rBelumSertifikasi ?> belum sertifikasi<?= $rSertKosong > 0 ? ' &middot; ' . $rSertKosong . ' belum diisi' : '' ?></div></div></div>
         <div class="card stat card-tight"><div class="stat-ic s"><?= ikon('student', 18) ?></div>
           <div><div class="stat-num" style="font-size:1.3rem"><?= $rSiswa ?></div><div class="stat-lbl">Siswa aktif</div></div></div>
         <div class="card stat card-tight"><div class="stat-ic o"><?= ikon('chart', 18) ?></div>
           <div><div class="stat-num" style="font-size:1.3rem"><?= $rNilai ?></div><div class="stat-lbl">Baris nilai terisi</div></div></div>
-        <div class="card stat card-tight"><div class="stat-ic p"><?= ikon('clipboard', 18) ?></div>
+        <div class="card stat card-tight"><div class="stat-ic g"><?= ikon('clipboard', 18) ?></div>
           <div><div class="stat-num" style="font-size:1.3rem"><?= $rHadir ?></div><div class="stat-lbl">Pertemuan hadir bulan ini</div></div></div>
       </div>
 
@@ -689,7 +703,12 @@ if (is_pengawas()) {
           <div class="table-wrap">
             <table class="tbl">
               <thead>
-                <tr><th>Nama <?= tetap_kata('Sekolah/Madrasah') ?></th><th class="ctr">Jenis</th>
+                <tr><th>Nama <?= tetap_kata('Sekolah/Madrasah') ?></th>
+                  <?php // KOLOM MASA AKTIF (v1.87.0 — permintaan pemilik): *"Pada daftar binaan tambahkan
+                        // masa aktif, agar pengawas mengetahui masa aktif binaannya masing-masing."*
+                        // Diletakkan tepat setelah nama lembaga (sama dengan tabel Ringkasan Semua
+                        // Sekolah milik Super Admin) supaya mudah dibandingkan antar binaan. ?>
+                  <th class="ctr">Masa Aktif</th><th class="ctr">Jenis</th>
                   <th class="ctr">Guru</th><th class="ctr">Siswa</th><th class="ctr">Baris Nilai</th>
                   <th class="ctr">Tugas Tambahan</th>
                   <th class="ctr">Tindakan</th></tr>
@@ -702,6 +721,9 @@ if (is_pengawas()) {
                         <span class="pill pill-D">masa aktif habis</span>
                       <?php endif; ?>
                       <span class="tbl-sub">NPSN <?= e((string) ($b['s']['npsn'] ?: '-')) ?></span></td>
+                    <?php // Masa aktif binaan (v1.87.0): satu sumber kebenaran `aktivasi_status()` lewat
+                          // helper `masa_aktif_pil()` — jangan menghitung sisa hari di sini. ?>
+                    <td class="ctr"><?= masa_aktif_pil($b['s']) ?></td>
                     <td class="ctr xs"><?= e($b['s']['jenis'] === 'madrasah' ? 'Madrasah' : 'Sekolah Umum') ?></td>
                     <td class="ctr"><?= (int) $b['guru'] ?></td>
                     <td class="ctr"><?= (int) $b['siswa'] ?></td>
@@ -1049,7 +1071,9 @@ page_top('Dashboard');
                   : '<span class="mut">Tanpa keterangan dari peninjau.</span>' ?>
             </p>
             <div class="dok-kaki">
-              <span class="xs mut"><?= e(tetap_kata((string) $tj['mapel_nama'])) ?> &middot;
+              <span class="xs mut"><?= e(tetap_kata((string) $tj['mapel_nama'])) ?><?php
+                $kelasTj = trim((string) ($tj['kelas_nama'] ?? ''));
+                echo $kelasTj !== '' ? ' &middot; Kelas ' . e(tetap_kata($kelasTj)) : ''; ?> &middot;
                 <?= e((string) ($tj['ta_teks'] !== '' ? $tj['ta_teks'] : '-')) ?>
                 <?= trim((string) ($tj['peninjau_nama'] ?? '')) !== ''
                     ? ' &middot; oleh ' . e(tetap_kata((string) $tj['peninjau_nama'])) : '' ?>

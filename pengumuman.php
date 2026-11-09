@@ -15,6 +15,12 @@
  *   • tab **Siswa** — tampil HANYA pada akun siswa (diisi tersendiri, tidak tercampur).
  * Pemisahnya kolom `pengumuman.sasaran` (skema v46).
  *
+ * PEMBARUAN v1.85.0 (permintaan pemilik): *"Pada menu sambutan dan pengumuman pada halaman super
+ * admin tambahkan sambutan/pengumuman khusus pengawas"* → ditambah tab **Pengawas**. Atas pilihan
+ * pemilik, sasaran ini **TERPISAH PENUH seperti tab Siswa**: akun Pengawas Sekolah/Madrasah hanya
+ * melihat pengumuman bertanda sasaran `pengawas` (tidak lagi ikut menerima pop up "Pengguna
+ * Aplikasi"), dan tab "Pengguna Aplikasi" kini untuk Kepala Sekolah/Madrasah, Admin Operator, Guru.
+ *
  * Halaman ini KHUSUS Super Admin (peran lain 403). Daftarnya GLOBAL — tabel `pengumuman` tidak
  * punya kolom `sekolah_id`, jadi semua sekolah/madrasah melihat pengumuman yang sama.
  */
@@ -127,7 +133,6 @@ if ($tampilkanForm) {
 }
 $semua = pengumuman_list(false, $tab);
 $jmlAktif = pengumuman_jumlah_aktif($tab);
-$jmlAktifSasaranLain = pengumuman_jumlah_aktif($tab === 'siswa' ? 'pengguna' : 'siswa');
 $nilai = static fn(string $k, $bawaan = '') => $tampilkanForm
     ? (string) ($isian[$k] ?? '')
     : (string) ($edit[$k] ?? $bawaan);
@@ -139,8 +144,10 @@ $sasaranForm = $tampilkanForm
 if ($sasaranForm === '') {
     $sasaranForm = $tab;
 }
-if ($edit && pengumuman_sasaran_sah((string) $edit['sasaran']) === 'siswa') {
-    $tab = 'siswa';   // panel "Ubah" pada baris siswa membuka tab Siswa
+// Panel "Ubah" selalu membuka TAB sasaran baris yang diubah (pengguna / pengawas / siswa).
+$sasaranEdit = $edit ? pengumuman_sasaran_sah((string) $edit['sasaran']) : '';
+if ($sasaranEdit !== '') {
+    $tab = $sasaranEdit;
 }
 $semua = pengumuman_list(false, $tab);
 $jmlAktif = pengumuman_jumlah_aktif($tab);
@@ -150,18 +157,47 @@ page_top('Pengumuman Sambutan', 'Super Admin &middot; popup selamat datang saat 
 <?php
 // Dua tab = dua SASARAN popup. Permintaan pemilik: popup untuk akun siswa diisi TERSENDIRI,
 // sehingga isinya tidak pernah tercampur dengan popup untuk pengguna aplikasi.
+// v1.85.0: ditambah sasaran **Pengawas** (permintaan pemilik). Penjaga memilih "TERPISAH PENUH
+// seperti tab Siswa" → akun pengawas hanya melihat pengumuman bertanda sasaran `pengawas`.
 $labelSasaran = pengumuman_sasaran_list();
 $keteranganSasaran = [
-    'pengguna' => 'Pop up yang muncul pada akun <b>Pengawas</b>, <b>Kepala Sekolah/Madrasah</b>, '
-        . '<b>Admin Operator</b>, dan <b>Guru</b>.',
+    'pengguna' => 'Pop up yang muncul pada akun <b>Kepala Sekolah/Madrasah</b>, <b>Admin Operator</b>, '
+        . 'dan <b>Guru</b>.',
+    'pengawas' => 'Pop up yang muncul pada akun <b>Pengawas Sekolah/Madrasah</b> — diisi tersendiri '
+        . 'di tab ini. Akun pengawas <b>tidak</b> menerima pop up «Pengguna Aplikasi», dan sebaliknya.',
     'siswa'    => 'Pop up yang muncul pada akun <b>Siswa</b> — diisi tersendiri di tab ini sehingga '
         . 'isinya terpisah dari pop up pengguna aplikasi.',
 ];
+
+// Label bantu per sasaran (dipakai pada pratinjau & kalimat keadaan kosong).
+$ikonTab = ['pengguna' => 'users', 'pengawas' => 'eye', 'siswa' => 'student'];
+$sebutanTab = ['pengguna' => 'pengguna aplikasi', 'pengawas' => 'akun pengawas', 'siswa' => 'akun siswa'];
+$namaTab = ['pengguna' => 'Pengguna', 'pengawas' => 'Pengawas', 'siswa' => 'Siswa'];
+$peranTab = [
+    'pengguna' => 'Kepala Sekolah/Madrasah',
+    'pengawas' => 'Pengawas Sekolah/Madrasah',
+    'siswa'    => 'Siswa',
+];
+$sebutTab = $sebutanTab[$tab] ?? 'pengguna aplikasi';
+$namaTabIni = $namaTab[$tab] ?? 'Pengguna';
+$peranTabIni = $peranTab[$tab] ?? 'Kepala Sekolah/Madrasah';
+// Jumlah pengumuman AKTIF pada sasaran LAIN — ditampilkan sebagai chip pengingat supaya Super Admin
+// tahu ada pop up sasaran lain yang juga tayang (tidak pernah tercampur ke tab ini).
+$aktifSasaranLain = [];
+foreach ($labelSasaran as $kodeSas => $labelSas) {
+    if ($kodeSas === $tab) {
+        continue;
+    }
+    $jmlSas = pengumuman_jumlah_aktif($kodeSas);
+    if ($jmlSas > 0) {
+        $aktifSasaranLain[$kodeSas] = $jmlSas;
+    }
+}
 ?>
 <div class="chips" style="gap:8px">
   <?php foreach ($labelSasaran as $kode => $label): ?>
     <a class="chip <?= $tab === $kode ? 'on' : '' ?>" href="pengumuman.php?tab=<?= e($kode) ?>">
-      <?= ikon($kode === 'siswa' ? 'student' : 'users', 14) ?> <?= e($label) ?>
+      <?= ikon($ikonTab[$kode] ?? 'users', 14) ?> <?= e($label) ?>
       <?php if (pengumuman_jumlah_aktif($kode) > 0): ?>(<?= (int) pengumuman_jumlah_aktif($kode) ?> aktif)<?php endif; ?>
     </a>
   <?php endforeach; ?>
@@ -178,10 +214,10 @@ $keteranganSasaran = [
     <div class="flex">
       <span class="chip"><?= (int) $jmlAktif ?> aktif</span>
       <span class="chip"><?= count($semua) ?> total</span>
-      <?php if ($jmlAktifSasaranLain > 0): ?>
-        <span class="chip"><?= ikon('info', 13) ?> <?= (int) $jmlAktifSasaranLain ?> aktif untuk
-          <?= e($labelSasaran[$tab === 'siswa' ? 'pengguna' : 'siswa']) ?></span>
-      <?php endif; ?>
+      <?php foreach ($aktifSasaranLain as $kodeLain => $jmlLain): ?>
+        <span class="chip"><?= ikon('info', 13) ?> <?= (int) $jmlLain ?> aktif untuk
+          <?= e($labelSasaran[$kodeLain]) ?></span>
+      <?php endforeach; ?>
       <a class="btn btn-primary" href="pengumuman.php?tab=<?= e($tab) ?>#formPengumuman"><?= ikon('plus', 16) ?> Tambah Pengumuman</a>
     </div>
   </div>
@@ -194,7 +230,7 @@ $keteranganSasaran = [
     <div class="apps-form-judul">
       <?= ikon($edit ? 'edit' : 'plus', 16) ?>
       <b><?= $edit ? 'Ubah Pengumuman' : 'Tambah Pengumuman' ?></b>
-      <span class="pill <?= $sasaranForm === 'siswa' ? 'pill-warn' : 'pill-B' ?>">
+      <span class="pill <?= $sasaranForm === 'pengguna' ? 'pill-B' : 'pill-warn' ?>">
         untuk <?= e($labelSasaran[$sasaranForm]) ?></span>
       <?php if ($edit): ?><a class="xs" href="pengumuman.php?tab=<?= e($tab) ?>">(batal)</a><?php endif; ?>
     </div>
@@ -226,8 +262,9 @@ $keteranganSasaran = [
             <option value="<?= e($kode) ?>" <?= $sasaranForm === $kode ? 'selected' : '' ?>><?= e($label) ?></option>
           <?php endforeach; ?>
         </select>
-        <div class="hint">Pop up untuk <b>Siswa</b> diisi tersendiri di sini — tidak muncul pada akun
-          Pengawas/Kepala Sekolah/Admin Operator/Guru, dan sebaliknya.</div>
+        <div class="hint">Tiap sasaran punya daftarnya sendiri: <b>Siswa</b> dan <b>Pengawas</b> diisi
+          tersendiri di tabnya masing-masing, sehingga tidak pernah bercampur dengan pop up
+          Kepala Sekolah/Admin Operator/Guru.</div>
       </div>
       <div class="flex">
         <button class="btn btn-primary" type="submit"><?= ikon('save', 16) ?> <?= $edit ? 'Simpan Perubahan' : 'Tambah Pengumuman' ?></button>
@@ -253,7 +290,7 @@ $keteranganSasaran = [
         <?= ikon('star', 34) ?>
         <h3>Belum ada pengumuman untuk <?= e($labelSasaran[$tab]) ?></h3>
         <p>Tambahkan pengumuman pertama pada formulir di atas. Setelah diaktifkan, popup akan muncul
-          sekali kepada <?= $tab === 'siswa' ? 'akun siswa' : 'pengguna aplikasi' ?> yang baru masuk.</p>
+          sekali kepada <?= e($sebutTab) ?> yang baru masuk.</p>
       </div>
     <?php else: ?>
       <div class="grid" style="gap:16px">
@@ -307,15 +344,15 @@ $keteranganSasaran = [
     <div class="popup-contoh">
       <div class="popup-sambutan-ic"><?= ikon('star', 20) ?></div>
       <div>
-        <b>Selamat Datang, Nama <?= $tab === 'siswa' ? 'Siswa' : 'Pengguna' ?></b>
-        <div class="xs mut"><?= $tab === 'siswa' ? 'Siswa' : 'Kepala Sekolah/Madrasah' ?> &middot; nama sekolah/madrasah</div>
+        <b>Selamat Datang, Nama <?= e($namaTabIni) ?></b>
+        <div class="xs mut"><?= e($peranTabIni) ?> &middot; nama sekolah/madrasah</div>
       </div>
     </div>
     <?php $aktifList = pengumuman_list(true, $tab); ?>
     <?php if (!$aktifList): ?>
       <p class="hint" style="margin-top:12px">Belum ada pengumuman aktif untuk
         <b><?= e($labelSasaran[$tab]) ?></b>, jadi popup belum akan muncul kepada
-        <?= $tab === 'siswa' ? 'akun siswa' : 'pengguna aplikasi' ?>.</p>
+        <?= e($sebutTab) ?>.</p>
     <?php else: ?>
       <div class="popup-contoh-isi">
         <?php foreach ($aktifList as $i => $b): ?>
@@ -335,10 +372,12 @@ $keteranganSasaran = [
     <ul class="apps-catatan">
       <li><b>Tampil sekali per login</b> — popup muncul pada halaman pertama setelah pengguna masuk,
         lalu tertutup dan tidak muncul lagi sampai ia masuk ulang.</li>
-      <li><b>Hanya untuk pengguna aplikasi</b> — Pengawas, Kepala Sekolah/Madrasah, Admin Operator, dan Guru.
-        Super Admin (pengisi isi popup) tidak ikut melihatnya.</li>
-      <li><b>Dua tab, dua sasaran</b> — tab <b>Pengguna Aplikasi</b> untuk Pengawas, Kepala Sekolah/Madrasah, Admin Operator, dan Guru,
-        tab <b>Siswa</b> untuk akun siswa. Keduanya diisi terpisah dan tidak pernah tercampur.</li>
+      <li><b>Tiga tab, tiga sasaran</b> — <b>Pengguna Aplikasi</b> (Kepala Sekolah/Madrasah, Admin
+        Operator, Guru), <b>Pengawas</b> (akun Pengawas Sekolah/Madrasah), dan <b>Siswa</b>. Tiap
+        sasaran diisi terpisah dan tidak pernah tercampur: pengawas <b>hanya</b> melihat pop up tab
+        Pengawas.</li>
+      <li><b>Super Admin tidak ikut melihat popup</b> — dialah pengisi isinya, jadi popup tidak
+        dicetak pada akun Super Admin.</li>
       <li><b>Sapaan otomatis</b> — di luar isi di atas, popup selalu memuat sapaan
         “Selamat Datang, &lt;nama pengguna&gt;”, peran, sekolah/madrasah, dan tombol <b>Tutup</b>.</li>
       <li><b>Bisa dinonaktifkan</b> — pengumuman yang tidak dipakai cukup dinonaktifkan (tetap tersimpan

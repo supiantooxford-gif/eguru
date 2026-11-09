@@ -19,7 +19,7 @@ require_once __DIR__ . '/helpers.php'; // untuk setting_default() saat seed (tid
 require_once __DIR__ . '/landing.php';
 
 /** Naikkan angka ini setiap kali skema berubah agar migrasi/seed ikut berjalan. */
-const SCHEMA_VERSION = '59';
+const SCHEMA_VERSION = '62';
 
 /**
  * Kolom yang MEMASTIKAN isi basis data sudah benar-benar versi terkini — dipakai
@@ -79,10 +79,14 @@ const SCHEMA_KOLOM_WAJIB = [
                   'jenjang'],
     // v49: `guru_kelas` = penanda GURU KELAS (jenjang SD/MI). Guru kelas memegang BANYAK mata
     // pelajaran pada SATU kelas dan otomatis ditetapkan sebagai wali kelas kelas itu.
-    'guru' => 'guru_kelas',
+    // v61: `sertifikasi` = status sertifikasi ('sertifikasi' / 'belum') dan `satmikal` =
+    // 'satmikal' / 'nonsatmikal' — keduanya boleh KOSONG (= belum diisi; data guru lama memang
+    // kosong, tidak ada nilai yang ditebak oleh migrasi). Nilai sahnya ada di konstanta
+    // GURU_SERTIFIKASI / GURU_SATMIKAL (inc/config.php).
+    'guru' => ['guru_kelas', 'sertifikasi', 'satmikal'],
     'osim_pengurus' => ['bagan', 'kode'],   // v22: tingkat bagan · v25: pemisah menu OSIM/Pramuka
     'osim_program' => 'kode',               // v25: pemisah menu OSIM/Pramuka
-    // v46: `sasaran` = pemisah isi popup sambutan (pengguna / siswa).
+    // v46: `sasaran` = pemisah isi popup sambutan (pengguna / pengawas / siswa).
     'pengumuman' => 'sasaran',
     // v36: Jurnal Harian Guru — `uraian` = Uraian Kegiatan (bawaan 'Mengajar') dan `tempat` =
     // tempat kegiatan bila guru TIDAK memilih kelas (Kelas/Tempat).
@@ -100,6 +104,10 @@ const SCHEMA_KOLOM_WAJIB = [
     // v51: TINDAK LANJUT oleh guru Tugas Tambahan "Kesiswaan" — 4 kolom (lihat inc/kesiswaan.php).
     'kasus' => ['mapel_id', 'tindak_lanjut', 'tindak_lanjut_jenis',
                 'tindak_lanjut_oleh', 'tindak_lanjut_pada'],
+    // v60: PILIHAN KELAS pada menu "Kirim Perangkat" (permintaan pemilik) — `kelas_id` = kelas
+    // kiriman (0 = kiriman LAMA sebelum ada pilihan kelas, jadi tidak ada nilai yang ditebak) dan
+    // `kelas_nama` = SNAPSHOT nama kelas supaya kiriman tetap terbaca bila kelasnya kelak dihapus.
+    'perangkat_kirim' => ['kelas_id', 'kelas_nama'],
 ];
 
 /**
@@ -176,7 +184,11 @@ const SCHEMA_TABEL_WAJIB = ['app_pengaturan', 'pengawas_sekolah', 'guru_tugas',
     'notulen_ttd',
     // v57: PEMBATAS LAJU ENDPOINT PUBLIK (pendaftaran sekolah & formulir pesan halaman depan) —
     // satu baris per kejadian; lihat throttle_lewat() di inc/helpers.php.
-    'throttle'];
+    'throttle',
+    // v62: SETORAN HAFALAN menu Tugas Tambahan "Pembina Tahfidz" (permintaan pemilik) — satu baris
+    // per setoran siswa per TANGGAL, menyimpan nama siswa & kelas sebagai SNAPSHOT agar lembar
+    // cetak tetap terbaca bila siswa/kelasnya kelak dihapus. Lihat inc/tahfidz.php.
+    'tahfidz_setoran'];
 
 function db(): PDO
 {
@@ -625,6 +637,10 @@ function ensure_schema(PDO $pdo): void
             -- v49: 1 = GURU KELAS (jenjang SD/MI) — memegang banyak mata pelajaran pada satu kelas
             -- dan otomatis menjadi wali kelas kelas itu.
             guru_kelas INTEGER NOT NULL DEFAULT 0,
+            -- v61: STATUS SERTIFIKASI (sertifikasi/belum) & SATMIKAL (satmikal/nonsatmikal).
+            -- KOSONG = belum diisi (data guru lama sengaja tidak ditebak).
+            sertifikasi TEXT NOT NULL DEFAULT "",
+            satmikal TEXT NOT NULL DEFAULT "",
             aktif INTEGER NOT NULL DEFAULT 1,
             dibuat TEXT
         )');
@@ -1071,9 +1087,9 @@ function ensure_schema(PDO $pdo): void
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             judul TEXT NOT NULL,
             isi TEXT NOT NULL,
-            -- v46: SASARAN popup — pengguna (Pengawas/Kepala/Operator/Guru, BAWAAN supaya
-            -- pengumuman LAMA tetap seperti semula) atau siswa (diisi TERSENDIRI oleh Super
-            -- Admin, permintaan pemilik).
+            -- v46: SASARAN popup — pengguna (Kepala/Operator/Guru, BAWAAN supaya
+            -- pengumuman LAMA tetap seperti semula), pengawas (v1.85.0, diisi TERSENDIRI dan
+            -- terpisah penuh dari pengguna), atau siswa (diisi TERSENDIRI oleh Super Admin).
             sasaran TEXT NOT NULL DEFAULT "pengguna",
             urutan INTEGER NOT NULL DEFAULT 0,
             aktif INTEGER NOT NULL DEFAULT 1,
@@ -2091,11 +2107,16 @@ function ensure_schema(PDO $pdo): void
         //     sekolah/madrasah), diisi Super Admin lewat menu "Jenis Perangkat" (bisa ditambah atau
         //     dikurangi). `aktif` = 0 hanya menyembunyikan dari pilihan, tidak menghapus.
         //   • `perangkat_kirim` — kiriman perangkat guru, **PER SEKOLAH**: satu baris untuk setiap
-        //     kombinasi (guru × mata pelajaran × tahun ajaran × nama dokumen) — UNIQUE, sehingga
-        //     mengunggah ulang pada sel yang sama MENGGANTIKAN berkasnya (dan mengembalikan status
-        //     tinjauan ke 'menunggu'). `nama_jenis` disimpan sebagai SNAPSHOT supaya kiriman lama
-        //     tetap terbaca setelah nama dokumennya diubah/dihapus Super Admin (relasi `jenis_id`
-        //     menjadi NULL). Yang disimpan ke basis data HANYA URL CDN hasil media proxy platform.
+        //     kombinasi (guru × mata pelajaran × KELAS × tahun ajaran × nama dokumen) — UNIQUE,
+        //     sehingga mengunggah ulang pada sel yang sama MENGGANTIKAN berkasnya (dan mengembalikan
+        //     status tinjauan ke 'menunggu').
+        //     v60 (permintaan pemilik): pilihan **KELAS** ditambahkan karena sebelumnya guru yang
+        //     mengampu mata pelajaran yang SAMA di beberapa kelas saling MENIMPA kirimannya.
+        //     `kelas_id` = 0 berarti kiriman LAMA (dibuat sebelum ada pilihan kelas) — tidak ada
+        //     nilai yang ditebak oleh migrasi; `kelas_nama` = SNAPSHOT nama kelas.
+        //     `nama_jenis` disimpan sebagai SNAPSHOT supaya kiriman lama tetap terbaca setelah nama
+        //     dokumennya diubah/dihapus Super Admin (relasi `jenis_id` menjadi NULL). Yang disimpan ke
+        //     basis data HANYA URL CDN hasil media proxy platform.
         $pdo->exec('CREATE TABLE IF NOT EXISTS perangkat_jenis (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nama TEXT NOT NULL,
@@ -2110,6 +2131,8 @@ function ensure_schema(PDO $pdo): void
             sekolah_id INTEGER NOT NULL DEFAULT 1 REFERENCES sekolah(id) ON DELETE CASCADE,
             guru_id INTEGER NOT NULL REFERENCES guru(id) ON DELETE CASCADE,
             mapel_id INTEGER NOT NULL REFERENCES mapel(id) ON DELETE CASCADE,
+            kelas_id INTEGER NOT NULL DEFAULT 0,
+            kelas_nama TEXT,
             ta_id INTEGER REFERENCES tahun_ajaran(id) ON DELETE SET NULL,
             ta_nama TEXT,
             jenis_id INTEGER REFERENCES perangkat_jenis(id) ON DELETE SET NULL,
@@ -2125,7 +2148,7 @@ function ensure_schema(PDO $pdo): void
             ditinjau_pada TEXT,
             dikirim TEXT,
             diubah TEXT,
-            UNIQUE (guru_id, mapel_id, ta_id, jenis_id)
+            UNIQUE (guru_id, mapel_id, kelas_id, ta_id, jenis_id)
         )');
 
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_perangkat_kirim_sekolah
@@ -2147,6 +2170,139 @@ function ensure_schema(PDO $pdo): void
                 $insJenis->execute([$namaJenis, $urut, $nowJenis, $nowJenis]);
                 $urut += 10;
             }
+        }
+
+        // ---------------------------------------------------------------- MIGRASI v62
+        // SETORAN HAFALAN — menu Tugas Tambahan "Pembina Tahfidz" (v1.88.0) — permintaan pemilik:
+        // *"Pada menu Pembina Tahfidz isi dengan inputan modul No, nama siswa, kelas, Setor hafalan
+        // (nama surah, dari ayat ke, sampai ayat ke), keterangan. Tambahkan fitur cetak dan hasil
+        // cetak seperti contoh. Tambahkan tanda tangan Pembina tahfidz dan mengetahui kepala
+        // madrasah/sekolah."*
+        //
+        // SATU tabel BARU (hanya CREATE TABLE/CREATE INDEX — tidak ada tabel lama yang dibangun
+        // ulang dan tidak ada data yang berubah). Tabelnya KOSONG setelah migrasi: tidak ada setoran
+        // yang ditebak.
+        //   • `siswa_id`/`kelas_id` menunjuk data master (CASCADE/SET NULL) — siswa atau kelas yang
+        //     dihapus ikut membersihkan/menetralkan relasinya;
+        //   • `siswa_nama` + `kelas_nama` = SNAPSHOT supaya riwayat & lembar cetak tetap terbaca;
+        //   • `surah_no` = nomor surah 1..114 (jumlah ayat tiap surah ada di `tahfidz_surah_list()`,
+        //     bukan di basis data, supaya tidak perlu migrasi bila daftar itu diperbaiki);
+        //   • `UNIQUE (siswa_id, tanggal)` = permintaan pemilik "satu setoran per siswa per tanggal",
+        //     sehingga menyimpan ulang pada tanggal yang sama MEMPERBARUI setoran (bukan menambah
+        //     baris kembar), sedangkan riwayat antar tanggal tetap tersimpan semua.
+        $pdo->exec('CREATE TABLE IF NOT EXISTS tahfidz_setoran (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sekolah_id INTEGER NOT NULL DEFAULT 1 REFERENCES sekolah(id) ON DELETE CASCADE,
+            siswa_id INTEGER NOT NULL REFERENCES siswa(id) ON DELETE CASCADE,
+            kelas_id INTEGER REFERENCES kelas(id) ON DELETE SET NULL,
+            siswa_nama TEXT NOT NULL,
+            kelas_nama TEXT,
+            tanggal TEXT NOT NULL,
+            surah_no INTEGER NOT NULL DEFAULT 1,
+            surah_nama TEXT NOT NULL,
+            ayat_dari INTEGER NOT NULL DEFAULT 1,
+            ayat_sampai INTEGER NOT NULL DEFAULT 1,
+            keterangan TEXT,
+            dicatat_oleh INTEGER,
+            dibuat TEXT,
+            diubah TEXT,
+            UNIQUE (siswa_id, tanggal)
+        )');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_tahfidz_sekolah
+                    ON tahfidz_setoran(sekolah_id, tanggal)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_tahfidz_kelas
+                    ON tahfidz_setoran(kelas_id, tanggal)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_tahfidz_siswa
+                    ON tahfidz_setoran(siswa_id, tanggal)');
+
+        // ---------------------------------------------------------------- MIGRASI v61
+        // STATUS SERTIFIKASI & SATMIKAL GURU (v1.86.0) — permintaan pemilik: *"Pada menu data
+        // guru/edit guru tambahkan modul untuk mengisi Status (pilihan Sertifikasi atau belum
+        // Sertifikasi) dan modul Satmikal (Pilihan Satmikal atau Nonsatmikal)"*.
+        //
+        // Dua kolom BARU pada tabel `guru` (hanya MENAMBAH kolom — tidak ada tabel yang dibangun
+        // ulang dan tidak ada data guru yang berubah/hilang). Bawaannya KOSONG karena guru yang
+        // sudah ada memang BELUM punya keterangan ini — tidak ada nilai yang ditebak. Nilai sahnya
+        // hanya yang terdaftar pada GURU_SERTIFIKASI / GURU_SATMIKAL (inc/config.php); nilai lain
+        // dinormalkan menjadi kosong supaya hitungan pada dashboard pengawas tetap konsisten.
+        db_add_column($pdo, 'guru', 'sertifikasi', "TEXT NOT NULL DEFAULT ''");
+        db_add_column($pdo, 'guru', 'satmikal', "TEXT NOT NULL DEFAULT ''");
+        $pdo->exec("UPDATE guru SET sertifikasi = '' WHERE sertifikasi IS NOT NULL
+                    AND sertifikasi NOT IN ('sertifikasi', 'belum')");
+        $pdo->exec("UPDATE guru SET satmikal = '' WHERE satmikal IS NOT NULL
+                    AND satmikal NOT IN ('satmikal', 'nonsatmikal')");
+
+        // ---------------------------------------------------------------- MIGRASI v60
+        // PILIHAN KELAS pada menu "KIRIM PERANGKAT" (v1.80.0) — permintaan pemilik: *"Pada menu
+        // kirim perangkat tambahkan pilihan kelas, agar guru lebih jelas perangkat yang dikirim itu
+        // kelas berapa dan mata pelajaran apa. Karena untuk saat ini mengalami masalah saat kirim
+        // mata pelajaran yang sama"*.
+        //
+        // Masalahnya: UNIQUE lama (guru × mapel × tahun ajaran × nama dokumen) membuat guru yang
+        // mengampu mata pelajaran yang SAMA di BEBERAPA KELAS saling MENIMPA kirimannya — hanya satu
+        // berkas yang tersisa. Kuncinya sekarang menyertakan KELAS.
+        //
+        // Karena UNIQUE adalah batasan tabel, SATU-SATUNYA cara mengubahnya di SQLite adalah
+        // MEMBANGUN ULANG tabelnya (pola yang sama dengan migrasi v56 untuk `meeting_hadir`):
+        // isi tabel DISALIN (id tetap) sehingga tidak ada kiriman yang hilang, `kelas_id` kiriman
+        // lama = **0** (artinya "kelas belum ditentukan" — TIDAK ada nilai yang ditebak) dan
+        // `kelas_nama` kosong. `PRAGMA foreign_keys` sudah OFF di luar transaksi, dan tidak ada
+        // tabel lain yang menunjuk `perangkat_kirim` (jadi DROP/RENAME tidak merusak FK tabel lain).
+        //
+        // ⚠️ Kiriman lama ber-kelas_id 0 TIDAK dibuatkan kelas oleh migrasi. Ketika guru mengunggah
+        // ulang sel yang sama dengan kelas yang dipilih, baris lama itu DIPAKAI (diadopsi) supaya
+        // tidak muncul baris kembar — lihat perangkat_kirim_simpan() di inc/perangkat.php.
+        $sqlPk = (string) db_val($pdo,
+            "SELECT IFNULL(sql, '') FROM sqlite_master WHERE type = 'table' AND name = 'perangkat_kirim'", [], '');
+        if ($sqlPk !== '') {
+            $sqlPkRapi = (string) preg_replace('/\s+/', ' ', $sqlPk);
+            $punyaKolomKelas = strpos($sqlPkRapi, 'kelas_id') !== false;
+            $kunciBaru = strpos($sqlPkRapi, '(guru_id, mapel_id, kelas_id, ta_id, jenis_id)') !== false;
+            if (!$kunciBaru) {
+                $pdo->exec('CREATE TABLE IF NOT EXISTS perangkat_kirim_baru (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sekolah_id INTEGER NOT NULL DEFAULT 1 REFERENCES sekolah(id) ON DELETE CASCADE,
+                    guru_id INTEGER NOT NULL REFERENCES guru(id) ON DELETE CASCADE,
+                    mapel_id INTEGER NOT NULL REFERENCES mapel(id) ON DELETE CASCADE,
+                    kelas_id INTEGER NOT NULL DEFAULT 0,
+                    kelas_nama TEXT,
+                    ta_id INTEGER REFERENCES tahun_ajaran(id) ON DELETE SET NULL,
+                    ta_nama TEXT,
+                    jenis_id INTEGER REFERENCES perangkat_jenis(id) ON DELETE SET NULL,
+                    nama_jenis TEXT NOT NULL,
+                    keterangan TEXT,
+                    url TEXT NOT NULL,
+                    nama_berkas TEXT,
+                    jenis_berkas TEXT,
+                    ukuran INTEGER NOT NULL DEFAULT 0,
+                    status TEXT NOT NULL DEFAULT "menunggu",
+                    catatan TEXT,
+                    ditinjau_oleh INTEGER,
+                    ditinjau_pada TEXT,
+                    dikirim TEXT,
+                    diubah TEXT,
+                    UNIQUE (guru_id, mapel_id, kelas_id, ta_id, jenis_id)
+                )');
+                $pdo->exec('INSERT INTO perangkat_kirim_baru
+                              (id, sekolah_id, guru_id, mapel_id, kelas_id, kelas_nama, ta_id, ta_nama,
+                               jenis_id, nama_jenis, keterangan, url, nama_berkas, jenis_berkas, ukuran,
+                               status, catatan, ditinjau_oleh, ditinjau_pada, dikirim, diubah)
+                            SELECT id, sekolah_id, guru_id, mapel_id, '
+                            . ($punyaKolomKelas ? 'kelas_id, kelas_nama' : '0, NULL') . ', ta_id, ta_nama,
+                                   jenis_id, nama_jenis, keterangan, url, nama_berkas, jenis_berkas, ukuran,
+                                   status, catatan, ditinjau_oleh, ditinjau_pada, dikirim, diubah
+                            FROM perangkat_kirim');
+                $pdo->exec('DROP TABLE perangkat_kirim');
+                $pdo->exec('ALTER TABLE perangkat_kirim_baru RENAME TO perangkat_kirim');
+                error_log('e-GURU migrasi v60: perangkat_kirim dibangun ulang — kunci kiriman kini '
+                    . 'menyertakan KELAS (pilihan kelas pada menu Kirim Perangkat).');
+            }
+            $pdo->exec('CREATE INDEX IF NOT EXISTS idx_perangkat_kirim_sekolah
+                        ON perangkat_kirim(sekolah_id, status, dikirim)');
+            $pdo->exec('CREATE INDEX IF NOT EXISTS idx_perangkat_kirim_guru
+                        ON perangkat_kirim(guru_id, ta_id, mapel_id)');
+            $pdo->exec('CREATE INDEX IF NOT EXISTS idx_perangkat_kirim_kelas
+                        ON perangkat_kirim(guru_id, ta_id, kelas_id)');
         }
 
         // ---------------------------------------------------------------- MIGRASI v56
@@ -2412,7 +2568,8 @@ function ensure_schema(PDO $pdo): void
         // ---------------------------------------------------------------- MIGRASI v46
         // POPUP UNTUK AKUN SISWA DIISI TERSENDIRI (permintaan pemilik): *"untuk pop up yang muncul
         // di akun siswa diinput tersendiri oleh super admin"*. Kolom `sasaran` memisahkan isi popup
-        // untuk **Pengguna** (Pengawas/Kepala/Operator/Guru) dan untuk **Siswa**.
+        // untuk **Pengguna** (Kepala/Operator/Guru), **Pengawas** (v1.85.0, terpisah penuh), dan
+        // **Siswa**.
         // Bawaannya `pengguna` supaya pengumuman yang SUDAH ADA tetap tampil seperti semula.
         // Hanya MENAMBAH kolom — tidak ada tabel yang dibangun ulang.
         db_add_column($pdo, 'pengumuman', 'sasaran', 'TEXT NOT NULL DEFAULT "pengguna"');

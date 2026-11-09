@@ -18,6 +18,7 @@ require_once __DIR__ . '/inc/perpus.php';
 require_once __DIR__ . '/inc/lab.php';
 require_once __DIR__ . '/inc/dokumen.php';
 require_once __DIR__ . '/inc/wali.php';
+require_once __DIR__ . '/inc/tahfidz.php';
 
 require_login();
 
@@ -245,7 +246,12 @@ if (!$tugas) {
 // ⚠️ Blok ini WAJIB berada SETELAH halaman pemilih laporan pengawas (`$kode === ''`) di atas:
 // kalau diletakkan lebih awal, `$tugas` bernilai null untuk permintaan `tugas.php` tanpa kode
 // sehingga pengawas terlempar ke pengalihan "menu tidak ditemukan" (lingkaran pengalihan).
-if (tugas_menu_perlu_sekolah($kode) && !current_sekolah() && (is_super() || is_pengawas())) {
+// Menu Tugas Tambahan "Pembina Tahfidz" juga menampilkan data PER SEKOLAH, tetapi KODENYA bisa
+// apa saja (pada basis data pemilik menunya dibuat lewat Kelola Tugas Tambahan sehingga kodenya
+// bukan `pembina_tahfidz`) — jadi dikenali lewat `tahfidz_tugas_kunci()` (kode MAUPUN nama),
+// bukan lewat daftar kode pada tugas_menu_perlu_sekolah().
+if ((tugas_menu_perlu_sekolah($kode) || tahfidz_tugas_kunci($tugas))
+    && !current_sekolah() && (is_super() || is_pengawas())) {
     tugas_halaman_pilih_sekolah($tugas);
 }
 
@@ -290,6 +296,12 @@ if ($kode === KURIKULUM_KODE_MENU) {
 }
 if ($kode === WALI_KODE_MENU) {
     wali_halaman($tugas);
+    exit;
+}
+// "Pembina Tahfidz" — SETORAN HAFALAN siswa (`inc/tahfidz.php`). Dikenali lewat kode MAUPUN nama
+// menu karena kode menu pada data pemilik dibuat sendiri oleh Super Admin.
+if (tahfidz_tugas_kunci($tugas)) {
+    tahfidz_halaman($tugas);
     exit;
 }
 // Menu Tugas Tambahan yang isinya DAFTAR APLIKASI (mis. "Bendahara Bos"). Permintaan pemilik

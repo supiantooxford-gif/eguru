@@ -452,6 +452,20 @@ page_top('Akun Pengawas', 'Super Admin &middot; ' . count($rows) . ' akun pengaw
       <p><?= count($rows) ?> akun terdaftar &middot; <?= (int) $jmlAktif ?> aktif.
         Klik <b>Ubah &amp; Binaan</b> untuk mengubah akun atau menetapkan sekolah/madrasah binaannya.</p>
     </div>
+    <?php // CETAK & UNDUH WORD (v1.83.0 — permintaan pemilik: *"Yang saya tandai warna merah
+          // tambahkan fitur download dan cetak. Hasil cetak buat seperti contoh agar terlihat rapi"*).
+          // Bentuk hasil cetak/Word = contoh pemilik: kolom No, Pengawas Bina, Madrasah Binaan
+          // (bernomor), Masa Aktif — tanpa kop sekolah & tanpa tanda tangan. Kolom Masa Aktif berisi
+          // RINGKASAN binaan permanen/aktif/terkunci (pilihan pemilik). Kedua halaman memakai sumber
+          // data yang sama dengan tabel di bawah (`pengawas_binaan_ringkas()`). ?>
+    <div class="flex no-print" style="gap:8px">
+      <a class="btn btn-primary btn-sm" href="cetak_pengawas_binaan.php" target="_blank" rel="noopener">
+        <?= ikon('print', 15) ?> Cetak
+      </a>
+      <a class="btn btn-ghost btn-sm" href="pengawas_binaan_word.php">
+        <?= ikon('doc', 15) ?> Unduh Word
+      </a>
+    </div>
   </div>
 
   <?php if (!$rows): ?>

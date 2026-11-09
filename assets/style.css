@@ -312,6 +312,9 @@ table.tbl tfoot .tbl-sub{font-weight:400}
 .atas-dashboard{align-items:start}
 .card-grup{border-left:3px solid #25D366}
 .card-grup .card-head{margin-bottom:12px}
+/* Kartu grup untuk lembaga yang BELUM melakukan aktivasi (v1.84.0): tombol Gabung Grup TIDAK dicetak,
+   garis kirinya berwarna emas (bukan hijau WhatsApp) sebagai penanda keadaan "belum aktif". */
+.card-grup-kunci{border-left-color:var(--emas,#c9a227)}
 /* Tombol gabung grup: hijau WhatsApp (aksen tambahan khusus kartu ini, tombol utama tetap indigo). */
 .btn-wa{
   background:#25D366;color:#0b2e13;border:1px solid #1da851;font-weight:700;
@@ -1446,6 +1449,24 @@ dialog.ttd-dialog::backdrop{background:rgba(9,32,23,.55)}
 .apps-form .apps-ket{grid-column:1 / -1}
 .apps-catatan{margin:0;padding-left:20px;display:grid;gap:9px;font-size:.85rem;color:var(--muted);line-height:1.55}
 .apps-catatan b{color:var(--hijau-tua)}
+/* --- PIL "GANGGUAN" BERKEDIP MERAH (v1.81.1) ------------------------------------------------
+   PERMINTAAN PEMILIK: *"yang saya tandai warna biru dibuat berkedip-kedip warna merah sebagai
+   bentuk peringatan bahwa lagi gangguan"* — pil keadaan pada kartu peringatan
+   `#cardMenuGangguan` (halaman menu yang dinonaktifkan Super Admin).
+   Kedipan memakai `opacity` (bukan warna) supaya kontras huruf tetap terjaga, dan dimatikan bagi
+   pengguna yang mengaktifkan "kurangi gerakan" pada perangkatnya. */
+@keyframes pilGangguanKedip{
+  0%,100%{opacity:1;box-shadow:0 4px 12px -6px rgba(153,27,27,.9)}
+  50%{opacity:.35;box-shadow:none}
+}
+.pill-gangguan{
+  background:linear-gradient(145deg,#dc2626,#991b1b);color:#fff;border-color:rgba(153,27,27,.55);
+  font-weight:800;letter-spacing:.04em;
+  animation:pilGangguanKedip 1.15s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce){
+  .pill-gangguan{animation:none}
+}
 @media (max-width:1080px){
   .apps-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
@@ -2160,13 +2181,17 @@ table.tbl-perangkat{font-size:.84rem}
 table.tbl-perangkat thead th{
   background:linear-gradient(150deg,rgba(11,74,51,.1),rgba(201,162,39,.12));
   color:var(--hijau-tua);font-size:.74rem;letter-spacing:.02em;text-align:center;
+  /* v1.80.0: judul kolom Nama Dokumen panjang ("Alur Tujuan Pembelajaran") — dibiarkan MEMBUNGKUS
+     supaya matriks kelengkapan (mata pelajaran × kelas × nama dokumen) muat tanpa geser mendatar. */
+  white-space:normal;
 }
 table.tbl-perangkat td{vertical-align:middle}
 table.tbl-perangkat .pk-no{width:52px}
 table.tbl-perangkat .pk-guru{width:200px}
 table.tbl-perangkat .pk-mapel{width:165px}
+table.tbl-perangkat .pk-kelas{width:96px}
 table.tbl-perangkat .pk-jenis{width:210px}
-table.tbl-perangkat .pk-jenis-sel{min-width:150px}
+table.tbl-perangkat .pk-jenis-sel{min-width:128px}
 table.tbl-perangkat .pk-ta{width:118px}
 table.tbl-perangkat .pk-berkas{width:210px}
 table.tbl-perangkat .pk-status{width:230px}
@@ -2174,6 +2199,9 @@ table.tbl-perangkat .pk-aksi{width:190px}
 table.tbl-perangkat .pk-guru-cell{text-align:left}
 table.tbl-perangkat .pk-guru-cell b{display:block;line-height:1.3}
 table.tbl-perangkat .pk-mapel-cell{font-weight:600;color:var(--hijau-tua)}
+/* v60: kolom KELAS pada menu Kirim Perangkat (permintaan pemilik) — kelas kiriman per mata pelajaran. */
+table.tbl-perangkat .pk-kelas-cell{color:var(--hijau-tua)}
+table.tbl-perangkat .pk-kelas-cell b{font-weight:700}
 table.tbl-perangkat .pk-berkas-cell .tbl-sub,
 table.tbl-perangkat .pk-status-cell .tbl-sub{display:block}
 .pk-sel{text-align:center;white-space:normal}
@@ -2225,6 +2253,7 @@ details.pk-tinjau[open] summary{margin-bottom:8px}
   table.tbl-perangkat{font-size:.78rem}
   table.tbl-perangkat .pk-guru,
   table.tbl-perangkat .pk-mapel,
+  table.tbl-perangkat .pk-kelas,
   table.tbl-perangkat .pk-jenis,
   table.tbl-perangkat .pk-berkas,
   table.tbl-perangkat .pk-status{width:auto}
