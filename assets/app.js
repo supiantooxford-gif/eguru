@@ -1847,6 +1847,45 @@
     });
   }
 
+  /* ==========================================================================
+     GAMBAR HALAMAN DEPAN DILINDUNGI (v1.91.0) — permintaan pemilik: gambar slider, foto testimoni,
+     dan foto pengembang "tidak bisa dibuka atau diklik kanan atau dilihat alamat sumbernya agar
+     tidak bisa diambil atau di download oleh pengunjung".
+
+     Penjagaan utama ada di CSS (`pointer-events:none` → gambar bukan sasaran klik/sentuh) dan di
+     server (`gambar.php` menolak permintaan yang bukan dari halaman aplikasi ini). Fungsi ini
+     lapisan KEDUA: menutup menu klik-kanan pada wadah gambar (beberapa peramban memunculkan menu
+     dari elemen induk) dan mematikan seret-lepas (`dragstart`).
+
+     Catatan: alamat CDN foto memang TIDAK PERNAH ada di HTML — yang tercetak hanya
+     `gambar.php?j=…&id=…&v=…`, jadi "View page source" pun tidak memperlihatkan sumbernya.
+     ========================================================================== */
+  function initLindungGambar() {
+    var gambar = document.querySelectorAll('img[data-lindung]');
+    if (!gambar.length) return;
+
+    for (var i = 0; i < gambar.length; i++) {
+      var im = gambar[i];
+      im.setAttribute('draggable', 'false');
+      im.addEventListener('dragstart', function (e) { e.preventDefault(); });
+    }
+
+    function terlindung(t) {
+      if (!t || !t.closest) return false;
+      return !!(t.closest('[data-lindung-wadah]') || t.closest('img[data-lindung]'));
+    }
+
+    document.addEventListener('contextmenu', function (e) {
+      if (!terlindung(e.target)) return;
+      e.preventDefault();
+      return false;
+    });
+
+    document.addEventListener('dragstart', function (e) {
+      if (terlindung(e.target)) e.preventDefault();
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     initWajibSandi();
     initKartuApps3D();
@@ -1870,6 +1909,7 @@
     initFotoNotulen();
     initTtdSentuh();
     initLanding();
+    initLindungGambar();
     initSalinKode();
     initHitungMundur();
     initSambutan();

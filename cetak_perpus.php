@@ -42,7 +42,7 @@ $baris = $D['baris'];
 if (!$laporan || !$baris) {
     flash($laporan
         ? 'Tidak ada baris yang cocok dengan pencarian "' . $cari . '" pada ' . perpus_jenis_nama($jenis) . '.'
-        : 'Belum ada data ' . perpus_jenis_nama($jenis) . ' yang diimpor dari e-PERPUS.', 'warn');
+        : 'Belum ada data ' . perpus_jenis_nama($jenis) . '. Isilah laporannya lebih dulu dari halaman Ka. Perpustakaan.', 'warn');
     redirect(perpus_url($jenis, $cari));
 }
 
@@ -107,9 +107,11 @@ $judulLaporan = perpus_jenis_nama($jenis);
     <?php kop_cetak($judulLaporan, ['Perpustakaan ' . istilah_sekolah('Sekolah')]); ?>
 
     <?php sheet_meta([
-        'Sumber Data'   => 'Hasil unduhan aplikasi e-PERPUS',
-        'Berkas'        => (string) ($laporan['berkas'] ?: '(berkas tanpa nama)'),
-        'Diimpor'       => $tsImpor !== false ? tanggal_id(date('Y-m-d', $tsImpor)) . ' pukul ' . date('H:i', $tsImpor) : '-',
+        'Sumber Data'   => perpus_sumber_teks($laporan) === 'e-PERPUS'
+            ? 'Hasil unduhan aplikasi e-PERPUS'
+            : 'Input manual (Ka. Perpustakaan)',
+        'Berkas'        => (string) ($laporan['berkas'] ?: '-'),
+        'Diperbarui'    => $tsImpor !== false ? tanggal_id(date('Y-m-d', $tsImpor)) . ' pukul ' . date('H:i', $tsImpor) : '-',
         'Jumlah Baris'  => (string) count($baris) . ' baris' . (count($header) > 0 ? ', ' . count($header) . ' kolom' : ''),
         'Saringan'      => $cari !== '' ? 'Kata kunci: ' . $cari : 'Seluruh baris laporan',
     ]); ?>

@@ -25,6 +25,9 @@
  */
 declare(strict_types=1);
 require_once __DIR__ . '/inc/init.php';
+// GAMBAR HALAMAN DEPAN (v1.91.0): slider, foto testimoni, foto "Tentang Aplikasi", dan logo tidak
+// dicetak dengan alamat CDN-nya lagi — dipakai `gambar_tag()` (lihat inc/gambar.php & gambar.php).
+require_once __DIR__ . '/inc/gambar.php';
 
 if (current_user()) {
     redirect('index.php');
@@ -280,9 +283,10 @@ $menuLanding = [
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= e(APP_NAME) ?> &middot; <?= e(APP_SUB) ?></title>
 <link rel="stylesheet" href="assets/style.css?v=<?= e(APP_VERSION) ?>">
-<?php // Favicon & logo memakai LOGO APLIKASI bila Super Admin sudah mengunggahnya (menu "Logo Aplikasi"). ?>
+<?php // Favicon & logo memakai LOGO APLIKASI bila Super Admin sudah mengunggahnya (menu "Logo Aplikasi").
+      // v1.91.0: favicon pun lewat `gambar.php` supaya alamat CDN logo tidak terlihat di HTML. ?>
 <?php if (ada_logo_aplikasi()): ?>
-<link rel="icon" href="<?= e(logo_aplikasi()) ?>">
+<link rel="icon" href="<?= e(gambar_url('logo', logo_aplikasi())) ?>">
 <?php else: ?>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128218;</text></svg>">
 <?php endif; ?>
@@ -296,7 +300,7 @@ $menuLanding = [
     <?php // Brand memakai kelas `portal-brand`/`portal-logo` supaya gaya & uji lama tetap berlaku. ?>
     <div class="lp-brand portal-brand">
       <?php if (ada_logo_aplikasi()): ?>
-        <span class="lp-logo portal-logo portal-logo-img"><img src="<?= e(logo_aplikasi()) ?>" alt="Logo <?= e(APP_NAME) ?>"></span>
+        <span class="lp-logo portal-logo portal-logo-img" data-lindung-wadah="1"><?= gambar_tag('logo', logo_aplikasi(), 'Logo ' . APP_NAME) ?></span>
       <?php else: ?>
         <span class="lp-logo portal-logo"><?= ikon('mosque', 26) ?></span>
       <?php endif; ?>
@@ -335,11 +339,15 @@ $menuLanding = [
           <div class="lp-slider" id="lpSlider" data-otomatis="6000">
             <div class="lp-slider-track">
               <?php foreach ($slider as $i => $sl): ?>
-                <?php $gambar = landing_slider_gambar($sl); ?>
+                <?php
+                $gambar = landing_slider_gambar($sl);
+                $altGambar = trim((string) $sl['judul']) !== '' ? (string) $sl['judul'] : 'Gambar slider ' . ($i + 1);
+                $tagGambar = $gambar !== '' ? gambar_tag('slider', $gambar, $altGambar, (int) $sl['id'], 0, '', $i !== 0) : '';
+                ?>
                 <figure class="lp-slide">
-                  <div class="lp-slide-gambar">
-                    <?php if ($gambar !== ''): ?>
-                      <img src="<?= e($gambar) ?>" alt="<?= e(trim((string) $sl['judul']) !== '' ? (string) $sl['judul'] : 'Gambar slider ' . ($i + 1)) ?>"<?= $i === 0 ? '' : ' loading="lazy"' ?>>
+                  <div class="lp-slide-gambar" data-lindung-wadah="1">
+                    <?php if ($tagGambar !== ''): ?>
+                      <?= $tagGambar ?>
                     <?php else: ?>
                       <span class="lp-slide-kosong">
                         <?= ikon('school', 46) ?>
@@ -578,10 +586,11 @@ $menuLanding = [
                 <?php if (trim((string) $t['isi']) !== ''): ?>
                   <blockquote><?= nl2br(e((string) $t['isi'])) ?></blockquote>
                 <?php endif; ?>
-                <figcaption class="lp-testi-sumber">
+                <figcaption class="lp-testi-sumber" data-lindung-wadah="1">
                   <?php $foto = trim((string) ($t['foto'] ?? '')); ?>
-                  <?php if ($foto !== ''): ?>
-                    <img class="lp-testi-foto" src="<?= e($foto) ?>" alt="Foto <?= e((string) $t['nama']) ?>">
+                  <?php $tagFoto = $foto !== '' ? gambar_tag('testimoni', $foto, 'Foto ' . (string) $t['nama'], (int) $t['id'], 0, 'lp-testi-foto') : ''; ?>
+                  <?php if ($tagFoto !== ''): ?>
+                    <?= $tagFoto ?>
                   <?php else: ?>
                     <span class="lp-testi-foto lp-testi-inisial"><?= e(strtoupper(substr(trim((string) $t['nama']), 0, 1))) ?></span>
                   <?php endif; ?>
@@ -623,10 +632,11 @@ $menuLanding = [
                 <?php foreach (tentang_slot_list() as $n): ?>
                   <?php $sl = $tentang['slot'][$n]; ?>
                   <?php if ($sl['foto'] === '' && $sl['nama'] === '') { continue; } ?>
+                  <?php $tagFoto = $sl['foto'] !== '' ? gambar_tag('tentang', $sl['foto'], $sl['nama'] !== '' ? $sl['nama'] : 'Foto ' . $n, 0, (int) $n, '', true) : ''; ?>
                   <figure class="tentang-slot">
-                    <div class="tentang-bingkai">
-                      <?php if ($sl['foto'] !== ''): ?>
-                        <img src="<?= e($sl['foto']) ?>" alt="<?= e($sl['nama'] !== '' ? $sl['nama'] : 'Foto ' . $n) ?>" loading="lazy">
+                    <div class="tentang-bingkai" data-lindung-wadah="1">
+                      <?php if ($tagFoto !== ''): ?>
+                        <?= $tagFoto ?>
                       <?php else: ?>
                         <span class="tentang-kosong"><?= ikon('user', 26) ?></span>
                       <?php endif; ?>

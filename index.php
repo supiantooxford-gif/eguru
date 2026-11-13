@@ -191,13 +191,23 @@ if (is_super() && !current_sekolah()) {
     // Isinya: daftar sekolah terdaftar, sekolah aktif, baris tabel (TERURUT masa aktif paling lama
     // di atas), jumlah total tiap kolom (dihitung dari baris yang benar-benar ditampilkan sehingga
     // baris JUMLAH selalu sama dengan tabelnya), serta label & data grafik "Sebaran Siswa".
-    $ringkasLintas = sekolah_lintas_ringkas();
+    //
+    // PENCARIAN (v1.90.0) — permintaan pemilik: *"Tambahkan fitur cari pada yang ditandai warna
+    // merah untuk mempermudah pencarian nama madrasah"* (kotak merah di samping tombol Cetak/Unduh
+    // Word). Kata kunci dibaca dari `?cari=` (bekerja TANPA JavaScript) dan diteruskan ke lembar
+    // cetak & unduhan Word supaya yang tampil = yang tercetak.
+    $cariLintas = trim((string) ($_GET['cari'] ?? ''));
+    $adaCariLintas = $cariLintas !== '';
+    $ringkasLintas = sekolah_lintas_ringkas($cariLintas);
     $daftar = $ringkasLintas['daftar'];
     $semuaAktif = $ringkasLintas['aktif'];
     $baris = $ringkasLintas['baris'];
     $tot = $ringkasLintas['tot'];
     $labelGrafik = $ringkasLintas['label_grafik'];
     $dataGrafik = $ringkasLintas['data_grafik'];
+    // Tautan cetak/Word/halaman ini membawa kata kunci yang sedang dipakai.
+    $qLintas = $adaCariLintas ? '?cari=' . rawurlencode($cariLintas) : '';
+    $qLintasAuto = $adaCariLintas ? '?cari=' . rawurlencode($cariLintas) . '&amp;auto=1' : '?auto=1';
 
     page_top('Ringkasan Semua Sekolah/Madrasah', 'Super Admin &middot; ' . count($semuaAktif) . ' sekolah/madrasah aktif dari '
         . count($daftar) . ' terdaftar');
@@ -277,30 +287,63 @@ if (is_super() && !current_sekolah()) {
               // menggulir ke baris JUMLAH di bawah tabel (permintaan pemilik). ?>
         <div>
           <h2>Daftar Sekolah/Madrasah</h2>
-          <p><?= count($baris) ?> sekolah/madrasah aktif &middot; jumlah total:
-            <b><?= (int) $tot['kelas'] ?></b> kelas,
-            <b><?= (int) $tot['siswa'] ?></b> siswa,
-            <b><?= (int) $tot['guru'] ?></b> guru,
-            <b><?= (int) $tot['jurnal'] ?></b> jurnal,
-            <b><?= (int) $tot['nilai'] ?></b> nilai.
-            Klik "Kelola" untuk masuk ke data sekolah tersebut. Diurutkan dari <b>masa aktif paling
-            lama</b> (permanen di paling atas, yang sudah habis di paling bawah).</p>
+          <?php if ($adaCariLintas): ?>
+            <p>Menampilkan <b><?= count($baris) ?></b> dari <b><?= count($semuaAktif) ?></b>
+              sekolah/madrasah aktif untuk pencarian
+              <b>&ldquo;<?= e($cariLintas) ?>&rdquo;</b> &middot; jumlah pada daftar ini:
+              <b><?= (int) $tot['kelas'] ?></b> kelas,
+              <b><?= (int) $tot['siswa'] ?></b> siswa,
+              <b><?= (int) $tot['guru'] ?></b> guru,
+              <b><?= (int) $tot['jurnal'] ?></b> jurnal,
+              <b><?= (int) $tot['nilai'] ?></b> nilai.
+              <a href="index.php?semua=1">Tampilkan semua</a>.</p>
+          <?php else: ?>
+            <p><?= count($baris) ?> sekolah/madrasah aktif &middot; jumlah total:
+              <b><?= (int) $tot['kelas'] ?></b> kelas,
+              <b><?= (int) $tot['siswa'] ?></b> siswa,
+              <b><?= (int) $tot['guru'] ?></b> guru,
+              <b><?= (int) $tot['jurnal'] ?></b> jurnal,
+              <b><?= (int) $tot['nilai'] ?></b> nilai.
+              Klik "Kelola" untuk masuk ke data sekolah tersebut. Diurutkan dari <b>masa aktif paling
+              lama</b> (permanen di paling atas, yang sudah habis di paling bawah).</p>
+          <?php endif; ?>
         </div>
-        <?php // CETAK & UNDUH WORD (v1.82.0 — permintaan pemilik: *"Pada yang saya tandai warna merah
-              // tambahkan fitur download word dan cetak (kolom mapel, jurnal dan nilai tidak perlu
-              // di cetak/download). Hanya No, Nama Madrasah, Kelas, Guru, Siswa, Masa Aktif"*).
-              // Kedua halaman memakai sumber data yang SAMA dengan tabel di bawah
-              // (`sekolah_lintas_ringkas()`) sehingga angka, keadaan masa aktif, dan urutannya sama. ?>
-        <div class="flex no-print" style="gap:8px">
-          <a class="btn btn-primary btn-sm" href="cetak_sekolah_lintas.php" target="_blank" rel="noopener">
+        <?php // CETAK, UNDUH WORD, dan PENCARIAN (v1.82.0 & v1.90.0) — permintaan pemilik:
+              // *"Pada yang saya tandai warna merah tambahkan fitur download word dan cetak …"* lalu
+              // *"Tambahkan fitur cari pada yang ditandai warna merah untuk mempermudah pencarian nama
+              // madrasah"*. Ketiga halaman memakai sumber data yang SAMA (`sekolah_lintas_ringkas()`)
+              // dan kata kunci pencarian ikut dibawa ke Cetak & Unduh Word (yang tampil = yang tercetak). ?>
+        <div class="flex no-print lintas-alat" style="gap:8px">
+          <a class="btn btn-primary btn-sm" href="cetak_sekolah_lintas.php<?= $qLintas ?>" target="_blank" rel="noopener">
             <?= ikon('print', 15) ?> Cetak
           </a>
-          <a class="btn btn-ghost btn-sm" href="sekolah_lintas_word.php">
+          <a class="btn btn-ghost btn-sm" href="sekolah_lintas_word.php<?= $qLintas ?>">
             <?= ikon('doc', 15) ?> Unduh Word
           </a>
+          <?php // KOTAK CARI (permintaan pemilik) — formulir GET biasa sehingga bekerja TANPA
+                // JavaScript: ketik nama madrasah lalu tekan Enter / tombol Cari. ?>
+          <form class="lintas-cari" method="get" action="index.php">
+            <input type="hidden" name="semua" value="1">
+            <input type="search" id="cariLintas" name="cari" value="<?= e($cariLintas) ?>"
+                   placeholder="Cari nama sekolah/madrasah…" aria-label="Cari nama sekolah/madrasah"
+                   autocomplete="off">
+            <button class="btn btn-primary btn-sm" type="submit"><?= ikon('search', 15) ?> Cari</button>
+            <?php if ($adaCariLintas): ?>
+              <a class="btn btn-ghost btn-sm" href="index.php?semua=1" title="Hapus pencarian">Reset</a>
+            <?php endif; ?>
+          </form>
         </div>
       </div>
       <?php if (!$baris): ?>
+        <?php if ($adaCariLintas): ?>
+          <div class="empty"><?= ikon('search', 34) ?><h3>Tidak ada sekolah/madrasah yang cocok</h3>
+            <p>Tidak ada lembaga yang namanya memuat <b>&ldquo;<?= e($cariLintas) ?>&rdquo;</b>.
+              Coba kata kunci lain (mis. bagian awal nama madrasah atau NPSN-nya).</p>
+            <div class="flex" style="justify-content:center">
+              <a class="btn btn-ghost" href="index.php?semua=1">Tampilkan semua sekolah/madrasah</a>
+            </div>
+          </div>
+        <?php else: ?>
         <div class="empty"><?= ikon('building', 34) ?><h3>Belum ada sekolah/madrasah aktif</h3>
           <p>Tambahkan lewat menu Kelola Sekolah, atau setujui pendaftaran yang masuk.</p>
           <div class="flex" style="justify-content:center">
@@ -308,6 +351,7 @@ if (is_super() && !current_sekolah()) {
             <a class="btn btn-ghost" href="pendaftaran.php"><?= ikon('star', 16) ?> Tinjau Pendaftaran</a>
           </div>
         </div>
+        <?php endif; ?>
       <?php else: ?>
         <?php
         // Ringkasan MASA AKTIF untuk baris JUMLAH — dihitung dari daftar yang benar-benar tampil

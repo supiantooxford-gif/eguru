@@ -19,6 +19,7 @@ require_once __DIR__ . '/inc/lab.php';
 require_once __DIR__ . '/inc/dokumen.php';
 require_once __DIR__ . '/inc/wali.php';
 require_once __DIR__ . '/inc/tahfidz.php';
+require_once __DIR__ . '/inc/bk.php';
 
 require_login();
 
@@ -250,7 +251,7 @@ if (!$tugas) {
 // apa saja (pada basis data pemilik menunya dibuat lewat Kelola Tugas Tambahan sehingga kodenya
 // bukan `pembina_tahfidz`) — jadi dikenali lewat `tahfidz_tugas_kunci()` (kode MAUPUN nama),
 // bukan lewat daftar kode pada tugas_menu_perlu_sekolah().
-if ((tugas_menu_perlu_sekolah($kode) || tahfidz_tugas_kunci($tugas))
+if ((tugas_menu_perlu_sekolah($kode) || tahfidz_tugas_kunci($tugas) || bk_tugas_kunci($tugas))
     && !current_sekolah() && (is_super() || is_pengawas())) {
     tugas_halaman_pilih_sekolah($tugas);
 }
@@ -266,7 +267,9 @@ require_tugas_menu($tugas);
 //   - "Kepala Lab IPA" &
 //     "Kepala Lab Komputer"  → DAFTAR INVENTARIS BARANG + LAPORAN PROGRAM KERJA lab (`inc/lab.php`);
 //   - "Kurikulum"            → KIRIM DOKUMEN KEPADA GURU (`inc/dokumen.php`);
-//   - "Wali Kelas"           → EMPAT laporan kelas (`inc/wali.php`).
+//   - "Wali Kelas"           → EMPAT laporan kelas (`inc/wali.php`);
+//   - "Bimbingan Konseling"  → KIRIM DOKUMEN PER BUTIR INSTRUMEN + progres + hasil supervisi
+//                              pengawas (`inc/bk.php`, skema v63).
 // Menu Tugas Tambahan lain tetap "Masih dalam Pengembangan" (blok di bawah).
 if ($kode === SARPRAS_KODE_MENU) {
     sarpras_halaman($tugas);
@@ -302,6 +305,13 @@ if ($kode === WALI_KODE_MENU) {
 // menu karena kode menu pada data pemilik dibuat sendiri oleh Super Admin.
 if (tahfidz_tugas_kunci($tugas)) {
     tahfidz_halaman($tugas);
+    exit;
+}
+// "Bimbingan Konseling" — KIRIM DOKUMEN TIAP BUTIR INSTRUMEN (maks 2 MB) + progres pengiriman +
+// hasil supervisi pengawas (`inc/bk.php`). Kode menunya pada data pemilik `bimbingan-konseling`
+// (dibuat lewat Kelola Tugas Tambahan), jadi dikenali lewat kode MAUPUN nama.
+if (bk_tugas_kunci($tugas)) {
+    bk_halaman($tugas);
     exit;
 }
 // Menu Tugas Tambahan yang isinya DAFTAR APLIKASI (mis. "Bendahara Bos"). Permintaan pemilik

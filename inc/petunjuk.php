@@ -119,6 +119,18 @@ function petunjuk_daftar(): array
                  'Tombol "Masuk" memindahkan Anda ke konteks sekolah tersebut.',
                  'Penonaktifan menyembunyikan sekolah tanpa menghapus datanya; penghapusan permanen wajib mengetik HAPUS.'],
                 'Setiap kartu sekolah menampilkan kode aktivasi lembaganya dan tombol untuk mengaktifkan/membatasi.'),
+            petunjuk_baris('Rekap Kepala & Operator', 'users', 'rekap_kepala_operator.php',
+                'Menampilkan rekapan tiap lembaga: nama sekolah/madrasah, nama kepala sekolah/madrasah, '
+                . 'nama admin operator, dan nomor HP kepala sekolah/madrasah.',
+                ['Pakai kotak <b>Cari</b> untuk menemukan lembaga, kepala, operator, atau nomor HP tertentu.',
+                 'Klik nama lembaga untuk membuka <b>Kelola Sekolah</b> lembaga itu (mengubah nama kepala, '
+                 . 'nomor HP, dan seterusnya).',
+                 'Tombol <b>WA</b> membuka percakapan WhatsApp ke nomor kepala sekolah/madrasah.',
+                 'Tombol <b>Cetak / Simpan PDF</b> membuka lembar rekap A4 landscape — pilih "Simpan sebagai PDF" '
+                 . 'pada dialog cetak peramban bila ingin berkas PDF.'],
+                'Nama kepala dibaca dari AKUN kepala lembaga; bila belum ada akunnya, yang tampil adalah nama '
+                . 'kepala pada identitas lembaga (bertanda "dari identitas lembaga"). Lembaga nonaktif ikut '
+                . 'ditampilkan supaya tidak ada yang terlewat. Halaman ini hanya membaca data.'),
             petunjuk_baris('Pendaftaran', 'star', 'pendaftaran.php',
                 'Meninjau sekolah/madrasah yang mendaftar sendiri lewat halaman pendaftaran: menyetujui, '
                 . 'menolak dengan alasan, meninjau ulang, atau menghapus.',
@@ -312,6 +324,14 @@ function petunjuk_daftar(): array
                 . 'status tinjauan kepala sekolah. Mengosongkan isi catatan lalu menyimpannya akan menghapus '
                 . 'catatan Anda. Peninjauan (Disetujui / Direvisi / Ditolak) tetap dilakukan kepala '
                 . 'sekolah/madrasah pada akunnya.'),
+            petunjuk_baris('Supervisi Guru BK', 'support', 'supervisi_bk.php',
+                'Menilai instrumen supervisi Bimbingan Konseling (22 butir) milik guru BK setiap '
+                . 'sekolah/madrasah binaan, beserta rekapan hasilnya.',
+                ['Halaman pertama hanya memuat binaan yang <b>punya guru Bimbingan Konseling</b> — pilih salah satunya.',
+                 'Pilih guru BK, lalu isi <b>Ketersediaan</b> (Ada/Tidak), <b>Skor</b> (2/1/0), dan <b>Keterangan</b> tiap butir; dokumen yang dikirim guru BK dapat dibuka dari kolom <b>Dokumen</b>.',
+                 'Simpan — hasilnya otomatis tampil pada akun guru Bimbingan Konseling, dan rekapan seluruh binaan ada di halaman pertama.'],
+                'Nilai akhir dihitung dari total skor dibagi 44 x 100 dengan predikat mengikuti ambang '
+                . 'sekolah/madrasah masing-masing. Lembar cetak supervisi dapat dibuka dari rekap.'),
         ]), 'Menu ini untuk memeriksa keadaan binaan — penginputan data dilakukan oleh guru dan admin sekolah/madrasah.'));
 
         $tugasBinaan = tugas_menu_semua_aktif();
@@ -321,8 +341,9 @@ function petunjuk_daftar(): array
                 ['Pilih salah satu menu yang diaktifkan untuk membuka laporannya.',
                  'Laporan hanya memuat data binaan itu, dan hanya bisa dilihat serta dicetak.'])];
             foreach ($tugasBinaan as $t) {
-                $adaIsi = in_array((string) $t['kode'], ['sarpras', 'kesiswaan', 'osim', 'pramuka', 'pmr',
-                    'kepala_perpus', 'kepala_lab', 'tata_usaha', 'kurikulum', 'wali_kelas'], true);
+                $adaIsi = tugas_menu_bk($t) || in_array((string) $t['kode'],
+                    ['sarpras', 'kesiswaan', 'osim', 'pramuka', 'pmr', 'kepala_perpus', 'kepala_lab',
+                     'tata_usaha', 'kurikulum', 'wali_kelas'], true);
                 $isi[] = petunjuk_baris((string) $t['nama'], 'star', 'tugas.php?kode=' . urlencode((string) $t['kode']),
                     $adaIsi
                         ? 'Laporan isi menu ' . (string) $t['nama'] . ' pada binaan yang sedang dilihat.'
@@ -510,7 +531,9 @@ function petunjuk_daftar(): array
                 'pramuka' => 'Susunan organisasi Pramuka beserta bagannya dan laporan program kerjanya.',
                 'pmr' => 'Susunan organisasi PMR beserta bagannya dan laporan program kerjanya.',
                 'kepala_perpus' => 'Laporan perpustakaan: anggota, data buku, peminjaman, pengembalian, dan '
-                    . 'pengunjung, diimpor dari hasil unduhan aplikasi e-PERPUS.',
+                    . 'pengunjung. Laporannya dapat diisi MANUAL satu baris sekaligus, atau — khusus '
+                    . 'sekolah/madrasah yang ditetapkan Admin aplikasi (mis. MA. Sirojuth Tholibiin '
+                    . 'Mootilango) — diimpor dari hasil unduhan aplikasi e-PERPUS.',
                 'kepala_lab' => 'Daftar inventaris barang laboratorium dan laporan program kerja lab.',
                 'tata_usaha' => 'Daftar inventaris barang laboratorium komputer dan laporan program kerja unitnya.',
                 'kurikulum' => 'Mengirim dokumen kepada guru sekolah/madrasah ini beserta judul dan catatannya.',
@@ -521,7 +544,11 @@ function petunjuk_daftar(): array
             // Menu Tugas Tambahan yang isinya daftar aplikasi (mis. "Bendahara Bos") —
             // kode & ringkasannya diambil dari konfigurasi modulnya agar tidak ditulis dua kali.
             $ringkas += petunjuk_ringkas_apps();
-            $ringkas = $ringkas[$kode] ?? 'Isi menu Tugas Tambahan.';
+            $ringkas = $ringkas[$kode] ?? (tugas_menu_bk($t)
+                ? 'Mengirim dokumen <b>setiap butir instrumen Bimbingan Konseling</b> (satu berkas per '
+                  . 'butir, maksimal 2 MB) kepada pengawas, lengkap dengan progres pengiriman. Hasil '
+                  . 'supervisi pengawas otomatis tampil di halaman ini.'
+                : 'Isi menu Tugas Tambahan.');
             $langkah = $bolehUbah
                 ? ['Isi atau ubah datanya melalui formulir yang tersedia.',
                    'Gunakan tombol Impor untuk memasukkan banyak data dari berkas Excel/CSV bila perlu.',

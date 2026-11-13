@@ -7,10 +7,16 @@
  * Bentuknya sederhana seperti contoh: judul + tabel berkolom **No, Pengawas Bina, Madrasah Binaan
  * (bernomor 1..n), Masa Aktif** — tanpa kop sekolah dan tanpa tanda tangan.
  *
- * Isi kolom Masa Aktif = ringkasan binaan **permanen / aktif / terkunci** (pilihan pemilik).
- * Sumber data = `pengawas_binaan_ringkas()` (sama dengan halaman Akun Pengawas & lembar cetak),
- * jadi urutan akun, daftar binaan, dan angkanya selalu sama. Berkas .docx dibuat sendiri oleh
- * `inc/docx.php` (tanpa pustaka luar/ZipArchive).
+ * Isi kolom Masa Aktif (v1.94.0 — permintaan pemilik): *"Pada bagian daftar akun pengawas pada fitur
+ * download word, buat hasil download word pada bagian masa aktif tampilkan masa aktif jumlah hari
+ * pada setiap lembaganya"* → kolom itu kini memuat **sisa masa aktif (jumlah hari) TIAP lembaga
+ * binaan**, bernomor sama dengan daftar madrasah di kolom sebelahnya (mis. "1. 45 hari",
+ * "2. Tanpa batas", "3. 13 hari (uji coba)", "4. Habis"). Baris JUMLAH tetap merangkum seluruh
+ * binaan (permanen/aktif/uji coba/terkunci).
+ *
+ * Sumber data = `pengawas_binaan_ringkas()` (sama dengan halaman Akun Pengawas & lembar cetak);
+ * angka harinya dari `pengawas_binaan_hari()` yang membaca `aktivasi_status()` — jangan menghitung
+ * sisa hari di berkas ini. Berkas .docx dibuat sendiri oleh `inc/docx.php` (tanpa ZipArchive).
  *
  * Akses: Super Admin.
  */
@@ -28,20 +34,23 @@ $ringkas = pengawas_binaan_ringkas();
 $baris = $ringkas['baris'];
 $tot = $ringkas['tot'];
 
-// Susun baris tabel: nomor urut, nama pengawas, daftar binaan bernomor, ringkasan masa aktif.
+// Susun baris tabel: nomor urut, nama pengawas, daftar binaan bernomor, sisa masa aktif TIAP binaan.
 $isiBaris = [];
 $n = 0;
 foreach ($baris as $b) {
     $n++;
     $daftar = [];
+    $masaHari = [];
     foreach ($b['binaan'] as $i => $sk) {
         $daftar[] = ($i + 1) . '. ' . (string) $sk['nama'];
+        // Nomor di kolom Masa Aktif SENGAJA sama dengan nomor madrasahnya supaya mudah dipasangkan.
+        $masaHari[] = ($i + 1) . '. ' . (string) ($b['masa_hari'][$i]['teks'] ?? '-');
     }
     $isiBaris[] = [
         (string) $n,
         (string) $b['nama'] . ($b['aktif'] ? '' : "\n(Nonaktif)"),
         $daftar ? implode("\n", $daftar) : 'Belum ada sekolah/madrasah binaan',
-        (string) $b['masa_teks'],
+        $masaHari ? implode("\n", $masaHari) : '-',
     ];
 }
 $isiBaris[] = [
@@ -65,11 +74,13 @@ $blok = [
         ['No', 'Pengawas Bina', 'Madrasah Binaan', 'Masa Aktif'],
         $isiBaris,
     ]],
-    ['teks' => 'Keterangan: kolom Masa Aktif merangkum status masa aktif seluruh madrasah binaan aktif '
-        . 'pada baris itu - permanen (tanpa batas waktu), aktif (masa aktif berjalan), uji coba '
-        . '(hanya dicantumkan bila ada), dan terkunci (masa aktif/uji coba sudah habis sehingga '
-        . 'aplikasi lembaga itu terkunci). Yang dihitung hanya binaan aktif; binaan nonaktif tidak '
-        . 'dapat dibuka pengawas.', 'ukuran' => 18, 'jarak' => 60],
+    ['teks' => 'Keterangan: kolom Masa Aktif memuat SISA MASA AKTIF (jumlah hari) setiap madrasah '
+        . 'binaan pada baris itu - nomornya sama dengan nomor madrasah di kolom sebelumnya. '
+        . 'Tanpa batas = masa aktif permanen / tanpa tanggal berakhir; N hari = sisa masa aktif yang '
+        . 'masih berjalan; N hari (uji coba) = sisa masa uji coba; Habis = masa aktif atau masa uji '
+        . 'coba sudah berakhir sehingga aplikasi lembaga itu terkunci. Yang dihitung hanya binaan '
+        . 'aktif; binaan nonaktif tidak dapat dibuka pengawas. Baris JUMLAH merangkum jumlah binaan '
+        . 'per keadaan (permanen, aktif, uji coba, terkunci).', 'ukuran' => 18, 'jarak' => 60],
 ];
 
 docx_kirim('Daftar-Akun-Pengawas-' . date('Y-m-d') . '.docx',

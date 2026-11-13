@@ -258,7 +258,7 @@ function page_top(string $judul, string $sub = ''): void
       // ==========================================================================================
       $layananAktif = in_array($here, ['pendaftaran.php', 'pengawas.php', 'tugas_menu.php',
           'pengumuman.php', 'tentang.php', 'logo.php', 'grup.php', 'biaya_aktivasi.php',
-          'landing.php', 'perangkat_jenis.php'], true);
+          'landing.php', 'perangkat_jenis.php', 'rekap_kepala_operator.php'], true);
       $jmlTugasAktif = (int) val('SELECT COUNT(*) FROM tugas_menu WHERE aktif = 1', [], 0);
       $jmlPengumuman = pengumuman_jumlah_aktif();
       // Pesan kontak dari formulir halaman depan yang belum dibaca (menu "Halaman Depan").
@@ -272,6 +272,8 @@ function page_top(string $judul, string $sub = ''): void
       $tugasAktifHalaman = $here === 'tugas.php';
       // Jumlah Nama Dokumen perangkat (menu "Jenis Perangkat", v1.67.0) — dipakai lencana sub menu.
       $jmlPerangkatJenis = perangkat_jenis_jumlah(true);
+      // Jumlah SELURUH lembaga terdaftar (menu "Rekap Kepala & Operator", v1.89.0) — lencana sub menu.
+      $jmlLembagaSemua = (int) val('SELECT COUNT(*) FROM sekolah', [], 0);
       ?>
       <div class="nav-sec"><?= tetap_kata('Lintas Sekolah/Madrasah') ?></div>
       <a class="nav-item <?= $here === 'index.php' && !$sekolah ? 'on' : '' ?>" href="index.php"><?= ikon('chart') ?><span>Ringkasan Semua</span></a>
@@ -336,6 +338,13 @@ function page_top(string $judul, string $sub = ''): void
           <a class="nav-item <?= $here === 'perangkat_jenis.php' ? 'on' : '' ?>" href="perangkat_jenis.php"><?= ikon('folder') ?><span>Jenis Perangkat</span>
             <?php if ($jmlPerangkatJenis > 0): ?><span class="pill pill-ok" style="margin-left:auto"><?= (int) $jmlPerangkatJenis ?></span><?php endif; ?>
           </a>
+          <?php // REKAP KEPALA & OPERATOR (v1.89.0) — permintaan pemilik: *"Pada halaman super admin pada
+                // bagian layanan tambahkan menu yang menampilkan rekapan: No, nama sekolah/madrasah, nama
+                // kepala sekolah, nama operator, Nomer HP kepala sekolah. Tujuannya untuk mempermudah
+                // super admin mengecek kepala sekolah dan operator disetiap lembaga."* ?>
+          <a class="nav-item <?= $here === 'rekap_kepala_operator.php' ? 'on' : '' ?>" href="rekap_kepala_operator.php"><?= ikon('users') ?><span>Rekap Kepala &amp; Operator</span>
+            <?php if ($jmlLembagaSemua > 0): ?><span class="pill pill-ok" style="margin-left:auto"><?= $jmlLembagaSemua ?></span><?php endif; ?>
+          </a>
         </div>
       </details>
 
@@ -390,6 +399,11 @@ function page_top(string $judul, string $sub = ''): void
             // agar tidak ada dua menu bernama sama — halamannya tetap dapat dibuka langsung dan tetap
             // terdaftar pada `pengawas_berkas_boleh()`. JANGAN dikembalikan ke blok binaan. ?>
       <a class="nav-item <?= $here === 'perangkat_pengawas.php' ? 'on' : '' ?>" href="perangkat_pengawas.php"><?= ikon('folder') ?><span>Perangkat Guru</span></a>
+      <?php // SUPERVISI GURU BK (v1.95.0/skema v63 — permintaan pemilik): *"pada halaman pengawas
+            // tambahkan menu Supervisi Guru BK ( didalamnya akan menampilkan daftar madrasah yang ada
+            // guru BKnya untuk di supervisi)"*. Diletakkan di blok LINTAS SEKOLAH supaya SELALU
+            // terlihat — halamannya sendiri yang menampilkan daftar binaan yang punya Guru BK. ?>
+      <a class="nav-item <?= $here === 'supervisi_bk.php' ? 'on' : '' ?>" href="supervisi_bk.php"><?= ikon('support') ?><span>Supervisi Guru BK</span></a>
       <?php if ($sekolah): ?>
         <div class="nav-sec">Binaan yang Dilihat</div>
         <a class="nav-item <?= $here === 'index.php' && $sekolah ? 'on' : '' ?>" href="index.php"><?= ikon('chart') ?><span>Dashboard Binaan</span></a>
@@ -734,6 +748,10 @@ function page_top(string $judul, string $sub = ''): void
     // v1.73.0: pada halaman Daftar Hadir Meeting pengawas juga MEMBUAT pertemuan & menandatangani
     // sebagai Pemimpin Meeting, jadi kalimat "seluruh pengubahan data tidak tersedia" menyesatkan.
     $pengawasBolehMeeting = in_array($here, ['meeting.php', 'upload_meeting_ttd.php'], true);
+    // v1.95.0: pada halaman Supervisi Guru BK pengawas MEMANG menyimpan hasil penilaian instrumen
+    // (bukan mengubah data sekolah/madrasah binaan), jadi kalimat "seluruh pengubahan data tidak
+    // tersedia" akan menyesatkan bila dicetak apa adanya.
+    $pengawasBolehSupervisi = $here === 'supervisi_bk.php';
     ?>
     <div class="alert alert-warn" style="margin-bottom:18px">
       <?= ikon('eye', 16) ?>
@@ -742,6 +760,11 @@ function page_top(string $judul, string $sub = ''): void
         <?php if ($pengawasBolehKirim): ?>
           pada halaman ini Anda dapat <b>mengirim dokumen</b> kepada guru sekolah/madrasah binaan, serta
           menghapus dokumen yang Anda kirim sendiri. Data sekolah/madrasah lainnya tetap
+          <b>hanya dapat dilihat dan dicetak</b>.
+        <?php elseif ($pengawasBolehSupervisi): ?>
+          pada halaman ini Anda dapat <b>menilai instrumen supervisi Guru Bimbingan Konseling</b>
+          (Ketersediaan, Skor 2/1/0, dan Keterangan tiap butir). Hasilnya otomatis masuk ke akun guru
+          Bimbingan Konseling sekolah/madrasah binaan. Data binaan lainnya tetap
           <b>hanya dapat dilihat dan dicetak</b>.
         <?php elseif ($pengawasBolehMeeting): ?>
           pada halaman ini Anda dapat <b>membuat pertemuan/meeting</b>, mengaktifkan daftar hadirnya

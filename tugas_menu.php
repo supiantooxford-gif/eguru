@@ -108,6 +108,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('tugas_menu.php');
     }
 
+    // HAPUS menu Tugas Tambahan yang tidak diperlukan (permintaan pemilik, v1.92.0). Menu yang
+    // isinya masih menyimpan data DITOLAK oleh `tugas_menu_hapus()` dan diarahkan untuk dinonaktifkan.
+    if ($aksi === 'hapus') {
+        $hasil = tugas_menu_hapus($id);
+        flash((string) $hasil['pesan'], $hasil['ok'] ? 'ok' : 'err');
+        redirect('tugas_menu.php');
+    }
+
     redirect('tugas_menu.php');
 }
 
@@ -133,7 +141,8 @@ page_top('Menu Tugas Tambahan', 'Super Admin &middot; ' . $jumlahAktif . ' dari 
     (di atas Data Master). <b>Isinya hanya dapat dibuka</b> pengguna yang ditugaskan oleh
     <b>Admin Operator</b> atau <b>Kepala Sekolah/Madrasah</b>. Isi setiap menu saat ini:
     <b><?= e(TUGAS_ISI_PESAN) ?></b>. Di halaman ini juga bisa <b>menambah tugas tambahan baru</b>
-    di samping 10 menu bawaan.</span>
+    di samping 10 menu bawaan, serta <b>menghapus</b> menu yang tidak diperlukan lewat tombol
+    <b>Hapus</b> pada kolom Tindakan.</span>
 </div>
 
 <?php // Kartu DAFTAR MENU lebih dulu (isi utama halaman), kartu "Tambah Tugas Tambahan" di bawahnya. ?>
@@ -141,8 +150,10 @@ page_top('Menu Tugas Tambahan', 'Super Admin &middot; ' . $jumlahAktif . ' dari 
   <div class="card-head">
     <div>
       <h2><?= ikon('star', 16) ?> Daftar Menu Tugas Tambahan</h2>
-      <p>Ubah nama menu, aktifkan/nonaktifkan, dan atur urutannya. Menu <b>nonaktif</b> belum tampil
-        di sidebar siapa pun; begitu <b>diaktifkan</b>, menu langsung muncul untuk semua pengguna.</p>
+      <p>Ubah nama menu, aktifkan/nonaktifkan, atur urutannya, dan <b>hapus</b> menu yang tidak
+        diperlukan. Menu <b>nonaktif</b> belum tampil di sidebar siapa pun; begitu <b>diaktifkan</b>,
+        menu langsung muncul untuk semua pengguna. Menu yang isinya <b>masih menyimpan data</b>
+        tidak dapat dihapus — cukup dinonaktifkan agar datanya tetap tersimpan.</p>
     </div>
     <div class="flex">
       <span class="chip"><?= (int) $jumlahAktif ?> aktif</span>
@@ -155,9 +166,17 @@ page_top('Menu Tugas Tambahan', 'Super Admin &middot; ' . $jumlahAktif . ' dari 
   <div class="table-wrap">
     <table class="tbl" id="tblMenu">
       <thead><tr><th class="ctr" style="width:34px">No</th><th>Nama Menu</th><th>Kode</th>
-        <th class="ctr">Status</th><th class="ctr">Ditugaskan</th><th class="ctr" style="width:190px">Tindakan</th></tr></thead>
+        <th class="ctr">Status</th><th class="ctr">Ditugaskan</th><th class="ctr" style="width:320px">Tindakan</th></tr></thead>
       <tbody>
-      <?php $n = 0; foreach ($daftar as $t): $n++; $tid = (int) $t['id']; ?>
+      <?php $n = 0; foreach ($daftar as $t): $n++; $tid = (int) $t['id'];
+        // Menu yang isinya masih berisi data tidak boleh dihapus (hanya boleh dinonaktifkan) —
+        // aturannya sama dengan yang ditegakkan `tugas_menu_hapus()` di server.
+        $pakaiData = tugas_menu_data_pakai($t);
+        $alasanData = [];
+        foreach ($pakaiData as $pd) {
+            $alasanData[] = $pd['label'] . ' (' . number_format((int) $pd['jumlah'], 0, ',', '.') . ')';
+        }
+      ?>
         <tr>
           <td class="ctr"><?= $n ?></td>
           <td><b><?= e((string) $t['nama']) ?></b></td>
@@ -185,6 +204,18 @@ page_top('Menu Tugas Tambahan', 'Super Admin &middot; ' . $jumlahAktif . ' dari 
                 <input type="hidden" name="id" value="<?= $tid ?>">
                 <button class="btn btn-ghost btn-sm" type="submit"><?= ikon('eye', 14) ?> <?= (int) $t['aktif'] === 1 ? 'Nonaktifkan' : 'Aktifkan' ?></button>
               </form>
+              <?php if ($pakaiData): ?>
+                <?php // Isinya masih berisi data → tombol hapus dinonaktifkan (server juga menolak). ?>
+                <button class="btn btn-ghost btn-sm" type="button" disabled
+                        title="Tidak dapat dihapus: isinya masih menyimpan <?= e(implode(', ', $alasanData)) ?>. Nonaktifkan saja menu ini agar datanya tetap tersimpan."><?= ikon('trash', 14) ?> Hapus</button>
+              <?php else: ?>
+                <form method="post" data-confirm="Hapus Tugas Tambahan &quot;<?= e((string) $t['nama']) ?>&quot; (kode <?= e((string) $t['kode']) ?>) secara permanen? Penugasan <?= (int) ($jumlahDitugaskan[$tid] ?? 0) ?> pengguna pada menu ini ikut dilepas. Tindakan ini tidak dapat dibatalkan.">
+                  <?= csrf_field() ?>
+                  <input type="hidden" name="aksi" value="hapus">
+                  <input type="hidden" name="id" value="<?= $tid ?>">
+                  <button class="btn btn-danger btn-sm" type="submit" title="Hapus menu ini"><?= ikon('trash', 14) ?> Hapus</button>
+                </form>
+              <?php endif; ?>
             </div>
           </td>
         </tr>
@@ -282,6 +313,12 @@ page_top('Menu Tugas Tambahan', 'Super Admin &middot; ' . $jumlahAktif . ' dari 
       tombol Ubah.</li>
     <li><b>Tampil untuk semua pengguna</b> — begitu diaktifkan di halaman ini, menu muncul pada
       sidebar SEMUA pengguna (di atas Data Master).</li>
+    <li><b>Menghapus menu</b> — tombol <b>Hapus</b> pada kolom <b>Tindakan</b> menghapus menu yang
+      tidak diperlukan beserta <b>penugasannya</b> (daftar pengguna yang ditugaskan dan tugasan pada
+      Data Guru). Menu yang isinya <b>masih menyimpan data</b> (mis. data barang Sarana &amp;
+      Prasarana, program kerja, dokumen Kurikulum, konfigurasi aplikasi Bendahara) <b>tidak
+      dihapus</b>; nonaktifkan saja menu itu supaya datanya tidak hilang. Data sekolah/madrasah
+      lain tidak terpengaruh.</li>
     <li><b>Isinya terbatas</b> — hanya pengguna yang ditugaskan oleh Admin Operator / Kepala
       Sekolah/Madrasah yang dapat membukanya; pengguna lain menerima pesan bahwa menu itu belum
       ditugaskan kepadanya.</li>

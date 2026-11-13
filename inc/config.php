@@ -797,9 +797,16 @@ const UNGGAH_MAKS_BYTE = 2 * 1024 * 1024;          // 2 MB per berkas
 //       Madrasah Binaan (bernomor 1..n), Masa Aktif** — TANPA kop sekolah & TANPA tanda tangan.
 //       Isi kolom Masa Aktif = **ringkasan berapa binaan permanen / aktif / sudah terkunci**
 //       (bukan tanggal; yang bermasa aktif adalah madrasah binaannya, bukan akun pengawasnya).
+//       **v1.94.0 — UNDUHAN WORD menampilkan SISA HARI TIAP LEMBAGA** (permintaan pemilik): kolom
+//       Masa Aktif pada .docx kini berisi baris bernomor yang **sama nomornya dengan daftar madrasah
+//       binaan** dan memuat sisa masa aktifnya — "N hari", "N hari (uji coba)", "Tanpa batas",
+//       atau "Habis" — lewat helper **`pengawas_binaan_hari()`** (kunci `masa_hari` pada
+//       `pengawas_binaan_ringkas()`); baris JUMLAH tetap merangkum per keadaan. Lembar CETAK
+//       (`cetak_pengawas_binaan.php`) masih memakai ringkasan `pengawas_masa_teks()`.
 //       Satu sumber data untuk halaman, cetak, dan Word: **`pengawas_binaan_ringkas()`** +
-//       `pengawas_binaan_masa()` + `pengawas_masa_teks()` (inc/helpers.php); kategori diambil dari
-//       `aktivasi_status()`, jangan menghitung sendiri.
+//       `pengawas_binaan_masa()` + `pengawas_masa_teks()` + `pengawas_binaan_hari()`
+//       (inc/helpers.php); kategori & sisa hari diambil dari `aktivasi_status()`, jangan menghitung
+//       sendiri.
 //       Uji: `bash tests_eguru_cetak_pengawas.sh` (+ `check_eguru_cetak_pengawas_ui.sh`).
 //   (m) **GABUNG GRUP HANYA UNTUK LEMBAGA YANG SUDAH AKTIVASI (v1.84.0)** — permintaan pemilik:
 //       *"Sekolah/madrasah yang belum melakukan aktifasi pastikan tidak bisa Gabung Grup Member
@@ -857,7 +864,53 @@ const UNGGAH_MAKS_BYTE = 2 * 1024 * 1024;          // 2 MB per berkas
 //       contoh pemilik — seluruh siswa kelas itu, sel kosong bila belum setor — dan rincian semua
 //       setoran) dengan tanda tangan Mengetahui Kepala (KIRI) & Pembina Tahfidz (KANAN).
 //       Uji: `bash tests_eguru_tahfidz.sh` + `check_eguru_tahfidz_ui.sh`.
-define('APP_VERSION', '1.88.0');
+// 1.89.0 — MENU "REKAP KEPALA & OPERATOR" pada sub menu Layanan — permintaan pemilik: *"Pada halaman
+//       super admin pada bagian layanan tambahkan menu yang menampilkan rekapan: No, nama
+//       sekolah/madrasah, nama kepala sekolah, nama operator, Nomer HP kepala sekolah. Tujuannya untuk
+//       mempermudah super admin mengecek kepala sekolah dan operator disetiap lembaga. tambahkan fitur
+//       cetak pdf"*. Halaman `rekap_kepala_operator.php` (khusus Super Admin, lintas sekolah) memuat
+//       SELURUH lembaga (aktif maupun nonaktif, urut nama A–Z) beserta akun kepala & operator serta
+//       tombol WA; lembar cetak `cetak_rekap_kepala_operator.php` = A4 landscape, lima kolom seperti
+//       permintaan + baris JUMLAH (Cetak / Simpan PDF). Satu sumber data: helper
+//       `rekap_kepala_operator()` + `rekap_kepala_operator_saring()`. Tanpa perubahan skema.
+//       Uji: `bash tests_eguru_rekap_kepala_operator.sh` + `check_eguru_rekap_kepala_operator_ui.sh`.
+// 1.90.0 — FITUR CARI pada kartu "Daftar Sekolah/Madrasah" (Ringkasan Semua Sekolah) — permintaan
+//       pemilik: *"Tambahkan fitur cari pada yang ditandai warna merah untuk mempermudah pencarian
+//       nama madrasah"* (kotak merah di samping tombol Cetak/Unduh Word). Kotak cari `?cari=` beserta
+//       tombol Cari/Reset diletakkan pada baris tombol yang sama; formulir GET biasa sehingga bekerja
+//       TANPA JavaScript. `sekolah_lintas_ringkas($cari)` + `sekolah_lintas_saring()` (inc/helpers.php)
+//       menyaring baris SETELAH pengurutan, dan `tot` dihitung dari baris yang tampil sehingga baris
+//       JUMLAH selalu cocok; grafik "Sebaran Siswa" TIDAK ikut disaring. Kata kunci ikut dibawa ke
+//       lembar CETAK & unduhan WORD (yang tampil = yang tercetak/terunduh). Tanpa perubahan skema.
+//       Uji: `bash tests_eguru_cari_lintas.sh` + `check_eguru_cari_lintas_ui.sh`.
+// 1.92.0 — FITUR HAPUS pada kolom "Tindakan" di halaman Kelola Tugas Tambahan (permintaan pemilik:
+//       *"Pada bagian tindakan yang saya beri tanda merah tambahkan fitur hapus untuk menghapus tugas
+//       tambahan yang tidak diperlukan"*). Tombol **Hapus** (merah, ber-dialog konfirmasi) menghapus
+//       menu beserta penugasannya; menu yang isinya MASIH MENYIMPAN DATA ditolak & diarahkan untuk
+//       dinonaktifkan (`tugas_menu_hapus()` + `tugas_menu_data_pakai()` di inc/helpers.php).
+//       Tanpa perubahan skema. Uji: `bash tests_eguru_tugas_menu_hapus.sh`.
+// 1.93.0 — IMPOR e-PERPUS DIBATASI + INPUT MANUAL (permintaan pemilik): impor laporan dari e-PERPUS
+//       hanya berlaku untuk MA. Sirojuth Tholibiin Mootilango (daftar sekolahnya dapat diatur Super
+//       Admin), sekolah/madrasah lain mengisi laporan perpustakaan secara MANUAL lewat formulir di
+//       halaman Ka. Perpustakaan. Tanpa perubahan skema. Uji: `bash tests_eguru_perpus_manual.sh`.
+// 1.94.0 — UNDUHAN WORD "Daftar Akun Pengawas": kolom MASA AKTIF menampilkan **JUMLAH HARI setiap
+//       lembaga binaan** (permintaan pemilik: *"pada bagian masa aktif tampilkan masa aktif jumlah
+//       hari pada setiap lembaganya"*). Kolom berisi baris bernomor yang sama dengan nomor madrasah
+//       binaan — "N hari", "N hari (uji coba)", "Tanpa batas", atau "Habis" — lewat helper baru
+//       `pengawas_binaan_hari()` (dibaca dari `aktivasi_status()`); baris JUMLAH tetap merangkum per
+//       keadaan. Lembar CETAK belum diubah (masih ringkasan). Tanpa perubahan skema.
+//       Uji: `bash tests_eguru_cetak_pengawas.sh`.
+// 1.95.0 (skema v63) — MENU TUGAS TAMBAHAN "BIMBINGAN KONSELING" + SUPERVISI GURU BK. Permintaan
+//       pemilik: *"pada tugas tambahan Bimbingan Konseling tambahkan modul untuk mengirim dokumen
+//       (maksimal 2mb) setiap butir penilaian ke pengawas seperti yang saya upload (bisa pdf, gambar,
+//       word). Tampilkan progres pengiriman dokumen. Dan pada halaman pengawas tambahkan menu
+//       Supervisi Guru BK ( didalamnya akan menampilkan daftar madrasah yang ada guru BKnya untuk di
+//       supervisi). Contoh instrumen supervisi dan penilainnya seperti yang saya kirim. Hasil
+//       supervisi otomatis akan masuk ke Guru yang ditugaskan Bimbingan Konseling dan ada rekapannya
+//       di akun pengawas."* → modul `inc/bk.php`, halaman `supervisi_bk.php`,
+//       `cetak_supervisi_bk.php`, tabel `bk_dokumen`/`bk_supervisi`/`bk_supervisi_nilai`.
+//       Uji: `bash tests_eguru_bk.sh`.
+define('APP_VERSION', '1.95.0');
 // Unggahan berkas (logo sekolah) lewat media proxy platform. Token dibaca server-side
 // dari berkas .vibecoder-media-token dan TIDAK pernah dikirim ke browser.
 // AKTIVASI sekolah/madrasah: cadangan kunci rahasia generator KODE AKTIVASI.
@@ -1027,6 +1080,17 @@ const PERPUS_MAKS_KOLOM = 30;     // jumlah kolom yang diterima dari satu berkas
 const PERPUS_MAKS_BARIS = 3000;   // jumlah baris yang diterima dari satu berkas laporan
 const PERPUS_SEL_MAKS   = 200;    // panjang maksimal isi satu sel
 const PERPUS_PER_HALAMAN = 50;    // baris per halaman pada tampilan layar (cetak mencetak semua)
+
+// IMPOR dari e-PERPUS HANYA UNTUK SEKOLAH/MADRASAH TERTENTU (permintaan pemilik, v1.93.0):
+// *"Impor dari e-Perpus itu hanya berlaku untuk MA. Sirojuth Tholibiin Mootilango. Madrasah/sekolah
+//  lain tidak bisa melakukan impor dari e-Perpus tapi mereka bisa mengisi atau menginput manual"*.
+//
+// Daftar nama di bawah adalah BAWAAN untuk penyemaian pertama saja (nama dinormalkan
+// `sekolah_nama_kunci()`: huruf kecil, tanda baca dibuang). Setelah tersemai, Super Admin dapat
+// mengubah daftar sekolahnya lewat kartu "Sekolah/Madrasah yang Boleh Mengimpor dari e-PERPUS" pada
+// halaman Ka. Perpustakaan (disimpan di `app_pengaturan` kunci `perpus_impor_sekolah`).
+// Sekolah di luar daftar tetap dapat MENGISI laporan secara MANUAL (`perpus_manual_simpan()`).
+const PERPUS_IMPOR_NAMA = ['ma sirojuth tholibiin mootilango'];
 
 // ---------------------------------------------------------------- KEPALA LAB (IPA & KOMPUTER)
 // Permintaan pemilik: "Pada Menu Kepala Lab IPA dan Lab Komputer menu isi dengan:
@@ -1267,6 +1331,30 @@ const TAHFIDZ_NAMA_MENU = ['pembina tahfidz', 'pembina tahfidz quran', 'tahfidz 
 // Batas panjang isian keterangan setoran.
 const TAHFIDZ_KET_MAKS = 200;
 
+// ---------------------------------------------------------------- BIMBINGAN KONSELING (Guru BK)
+// Menu Tugas Tambahan "Bimbingan Konseling" + halaman pengawas "Supervisi Guru BK"
+// (lihat inc/bk.php) — permintaan pemilik:
+// *"pada tugas tambahan Bimbingan Konseling tambahkan modul untuk mengirim dokumen (maksimal 2mb)
+// setiap butir penilaian ke pengawas seperti yang saya upload (bisa pdf, gambar, word). Tampilkan
+// progres pengiriman dokumen. Dan pada halaman pengawas tambahkan menu Supervisi Guru BK (didalamnya
+// akan menampilkan daftar madrasah yang ada guru BKnya untuk di supervisi)."*
+//
+// ⚠️ Sama seperti Pembina Tahfidz: menunya TIDAK disemai `tugas_menu_bawaan()` karena pada basis
+// data pemilik menunya sudah dibuat lewat "Kelola Tugas Tambahan" (kode `bimbingan-konseling`).
+// Pengenalan menu memakai KODE **maupun NAMA** (`bk_tugas_kunci()`).
+const BK_KODE_MENU = 'bimbingan_konseling';
+// Kode lain yang tetap dikenali sebagai menu ini (kode buatan Kelola Tugas Tambahan memakai
+// tanda hubung, jadi `bimbingan-konseling` WAJIB ada di sini).
+const BK_KODE_LAIN = ['bimbingan-konseling', 'bk', 'guru-bk', 'guru_bk', 'bimbingan_konseling'];
+// Nama menu (dinormalkan `tugas_nama_kunci()`) yang dikenali sebagai menu Bimbingan Konseling.
+const BK_NAMA_MENU = ['bimbingan konseling', 'bimbingan dan konseling', 'guru bk', 'bk'];
+// Skor maksimal TIAP BUTIR (kolom "Skor 2 / 1 / 0" pada instrumen pemilik) → skor maksimal
+// seluruh instrumen = 22 butir x 2 = 44.
+const BK_SKOR_MAKS = 2;
+// Batas panjang keterangan per butir & kesimpulan/saran supervisi.
+const BK_KET_MAKS = 300;
+const BK_KESIMPULAN_MAKS = 2000;
+
 
 // ---------------------------------------------------------------- GRUP WhatsApp e-GURU
 // Permintaan pemilik: "Pada Akun Kepala Sekolah, Operator dan Guru pada halaman dasboard tambahkan
@@ -1298,6 +1386,11 @@ const DAFTAR_APPS_BARU_HARI = 30;
 const DAFTAR_APPS_BARU_TEKS = 'Bonus';
 
 define('MEDIA_ENDPOINT', 'http://127.0.0.1:4310/api/app-media/upload');
+// Host yang boleh diambil server saat meneruskan GAMBAR HALAMAN DEPAN ke peramban
+// (`gambar.php`, v1.91.0). Foto halaman depan tidak lagi dicetak dengan alamat CDN-nya;
+// server mengambilnya dari sini lalu meneruskannya. Hanya http/https pada host ini yang diizinkan
+// (sekaligus mencegah aplikasi dipakai mengambil alamat sembarang / SSRF).
+define('GAMBAR_HOST_IZIN', ['media.vibecoder.co.id']);
 define('FOTO_MAKS_BYTE', UNGGAH_MAKS_BYTE); // batas per berkas — lihat UNGGAH_MAKS_BYTE di atas
 define('FOTO_EKSTENSI', ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg']);
 
@@ -1328,7 +1421,11 @@ if (function_exists('mb_internal_encoding')) {
     mb_internal_encoding('UTF-8');
 }
 
-if (session_status() !== PHP_SESSION_ACTIVE) {
+// v1.91.0 — endpoint gambar (`gambar.php`) sengaja TIDAK memakai sesi: satu halaman depan memuat
+// belasan gambar sekaligus, dan setiap permintaan gambar yang membuka sesi akan mengunci berkas sesi
+// (permintaan lain menunggu) serta mengirim cookie pada balasan gambar. Berkas itu menetapkan
+// `EGURU_TANPA_SESI` sebelum memuat konfigurasi ini.
+if (session_status() !== PHP_SESSION_ACTIVE && !defined('EGURU_TANPA_SESI')) {
     // Simpan berkas sesi di dalam folder aplikasi (folder sesi sistem bisa tidak writable).
     $sessDir = __DIR__ . '/../data/sessions';
     if (!is_dir($sessDir)) {

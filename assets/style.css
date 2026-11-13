@@ -2305,6 +2305,24 @@ details.sekolah-hapus[open]>summary{margin-bottom:8px}
 .sekolah-hapus-form input{width:100%}
 .sekolah-hapus-form .hint{line-height:1.4}
 
+/* ===== PENCARIAN pada kepala kartu "Daftar Sekolah/Madrasah" (v1.90.0) =====
+   Permintaan pemilik: *"Tambahkan fitur cari pada yang ditandai warna merah untuk mempermudah
+   pencarian nama madrasah"* — kotak merah pada tangkapan layar berada di samping tombol
+   Cetak/Unduh Word, sehingga formulir cari diletakkan pada baris yang SAMA (`.lintas-alat`).
+   Formulir GET biasa → tetap bekerja tanpa JavaScript; di layar sempit isiannya turun ke bawah
+   tombol dengan lebar penuh supaya tidak ada luapan mendatar. */
+.lintas-alat{align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.lintas-alat .lintas-cari{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;margin:0}
+.lintas-alat .lintas-cari input[type=search]{
+  width:210px;min-width:0;padding:7px 11px;font-size:.83rem;border-radius:10px;
+}
+.lintas-alat .lintas-cari .btn{width:auto;flex:0 0 auto}
+@media (max-width:640px){
+  .lintas-alat{width:100%;justify-content:flex-start}
+  .lintas-alat .lintas-cari{width:100%;flex-wrap:wrap}
+  .lintas-alat .lintas-cari input[type=search]{width:100%;flex:1 1 160px}
+}
+
 /* ===== CATATAN PENGAWAS + HALAMAN PENGAWAS "PERANGKAT GURU" (v1.72.0 / skema v52) =====
    Permintaan pemilik: *"Pada akun pengawas tambahkan menu Perangkat Guru (Perangkat guru ditampilkan
    per lembaga yang di dalamnya ada daftar guru + mata pelajaran dan daftar perangkatnya). Pengawas
@@ -2486,3 +2504,97 @@ ul.meeting-hadir-list>li{
   .meeting-kartu-kaki{flex-direction:column;align-items:stretch}
   .meeting-kartu-kaki .btn{width:100%;justify-content:center}
 }
+
+/* ============================================================================
+   GAMBAR HALAMAN DEPAN (LANDING) — DILINDUNGI (v1.91.0)
+   Permintaan pemilik: gambar slider, foto testimoni, dan foto pengembang pada halaman depan
+   "tidak bisa dibuka atau diklik kanan atau dilihat alamat sumbernya agar tidak bisa diambil atau
+   di download oleh pengunjung".
+
+   • `pointer-events:none` → gambar tidak pernah menjadi sasaran sentuhan/klik, sehingga menu bawaan
+     peramban ("Simpan gambar sebagai…", "Buka gambar di tab baru"), seret-lepas ke desktop, dan menu
+     tekan-lama di HP tidak pernah muncul untuk gambar itu. Sentuhan jatuh ke wadahnya.
+   • `data-lindung-wadah` → wadah di sekitar gambar: lapisan tembus pandang (::after) menutup area
+     gambar supaya perilaku peramban untuk elemen gambar tidak terpicu, dan teks di dalamnya tidak
+     ikut terseleksi saat ditekan lama (`-webkit-touch-callout:none`).
+   • `initLindungGambar()` (assets/app.js) menutup menu klik-kanan pada wadah gambar sebagai lapisan
+     kedua (untuk peramban yang tetap memunculkan menu dari elemen induk).
+   Alamat sumber foto sendiri tidak pernah tercetak di HTML — lihat `gambar.php` + `inc/gambar.php`.
+   ============================================================================ */
+img.lp-lindung{
+  pointer-events:none;
+  -webkit-user-select:none;user-select:none;
+  -webkit-user-drag:none;
+  -webkit-touch-callout:none;
+}
+[data-lindung-wadah]{position:relative;-webkit-touch-callout:none}
+[data-lindung-wadah]::after{content:"";position:absolute;inset:0;z-index:2}
+[data-lindung-wadah] img.lp-lindung{position:relative;z-index:1}
+/* Saat dicetak, lapisan penutup tidak diperlukan (dan tidak boleh menutupi gambar). */
+@media print{
+  [data-lindung-wadah]::after{display:none}
+  img.lp-lindung{pointer-events:auto}
+}
+
+/* ============================================================================
+   SUPERVISI BIMBINGAN KONSELING (v1.95.0 / skema v63)
+   Dipakai DUA halaman: menu Tugas Tambahan "Bimbingan Konseling" (guru BK mengirim dokumen tiap
+   butir + progresnya) dan menu pengawas "Supervisi Guru BK" (`supervisi_bk.php`). Gaya tanda tangan
+   & lembar cetak memakai kelas `.sheet*`/`.ttd-*` yang sudah ada — jangan membuat duplikatnya.
+   ============================================================================ */
+
+/* --- Bilah progres pengiriman dokumen (jumlah butir + persentase) --- */
+.bk-progress{margin-top:12px}
+.bk-progress-kepala{display:flex;gap:10px;align-items:baseline;justify-content:space-between;flex-wrap:wrap;margin-bottom:6px}
+.bk-progress-kepala b{font-variant-numeric:tabular-nums;color:var(--hijau-tua)}
+.bk-progress-jalur{
+  position:relative;height:10px;border-radius:99px;overflow:hidden;
+  background:rgba(11,74,51,.10);border:1px solid rgba(11,74,51,.14);
+}
+.bk-progress-isi{
+  display:block;height:100%;border-radius:99px;
+  background:linear-gradient(90deg,var(--hijau-tua),var(--emas));
+  transition:width .35s ease;
+}
+.bk-progress-besar .bk-progress-jalur{height:16px}
+.bk-progress-besar .bk-progress-kepala b{font-size:1.05rem}
+
+/* --- Tabel instrumen (22 butir, 5 kelompok) --- */
+table.bk-tbl th,table.bk-tbl td{vertical-align:top}
+table.bk-tbl tr.bk-grup > td{background:rgba(11,74,51,.07);border-top:2px solid rgba(201,162,39,.55)}
+table.bk-tbl tr.bk-sub > td{background:rgba(201,162,39,.08);font-style:italic}
+table.bk-tbl td.bk-dok{font-size:.78rem}
+table.bk-tbl .bk-berkas{
+  display:inline-flex;gap:5px;align-items:center;max-width:100%;
+  color:var(--hijau-tua);font-weight:600;text-decoration:none;overflow-wrap:anywhere;
+}
+table.bk-tbl .bk-berkas:hover{text-decoration:underline;color:var(--hijau)}
+table.bk-tbl .bk-sel{width:100%;min-width:64px;padding:6px 24px 6px 8px;font-size:.82rem}
+table.bk-tbl .bk-sel-skor{min-width:56px}
+table.bk-tbl .bk-ket{font-size:.82rem;padding:6px 9px}
+.bk-hapus-form{display:inline-block;margin:6px 0 0}
+form.inline{display:inline-block;margin:0}
+table.tbl tr.baris-terpilih{background:rgba(201,162,39,.12)}
+
+/* --- Kartu hasil supervisi (dibaca guru BK / kepala / pengawas) --- */
+.bk-hasil-kepala{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.bk-hasil-teks{margin:10px 0 0;font-size:.82rem;line-height:1.5;color:var(--ink)}
+.bk-hasil .sheet-meta{margin:0;font-size:.78rem}
+
+/* --- Daftar binaan pada halaman pengawas --- */
+.bk-binaan{display:flex;flex-direction:column;justify-content:space-between}
+.bk-binaan-kepala{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+
+/* --- Formulir unggah dokumen --- */
+.bk-form .grid{gap:16px}
+@media (max-width:640px){
+  .bk-progress-kepala{font-size:.8rem}
+  table.bk-tbl .bk-sel{min-width:58px}
+  .bk-form .g21{grid-template-columns:minmax(0,1fr)}
+}
+
+/* Rincian penilaian tiap butir pada kartu hasil supervisi (akun guru BK). */
+.bk-hasil-detail > summary{cursor:pointer;color:var(--hijau);font-weight:600;font-size:.82rem}
+.bk-hasil-detail[open] > summary{margin-bottom:8px}
+.bk-tbl-detail th,.bk-tbl-detail td{padding:5px 7px;font-size:.76rem}
+.bk-tbl-detail td.xs{font-size:.72rem;line-height:1.35}

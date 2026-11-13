@@ -25,7 +25,10 @@ if (!is_super()) {
 }
 $GLOBALS['__vs_istilah_nonaktif'] = true;   // istilah generik "Sekolah/Madrasah"
 
-$ringkas = sekolah_lintas_ringkas();
+// PENCARIAN (v1.90.0): unduhan Word mengikuti kata kunci yang sedang dipakai pada dasbor
+// (`index.php?semua=1&cari=…`) sehingga YANG TAMPIL = YANG TERUNDUH.
+$cari = trim((string) ($_GET['cari'] ?? ''));
+$ringkas = sekolah_lintas_ringkas($cari);
 $baris = $ringkas['baris'];
 $tot = $ringkas['tot'];
 
@@ -55,7 +58,8 @@ $isiBaris[] = [
 $blok = [
     ['teks' => APP_NAME . ' — ' . APP_SUB, 'ukuran' => 20, 'jarak' => 20],
     ['teks' => 'Daftar Sekolah/Madrasah', 'tebal' => true, 'tengah' => true, 'ukuran' => 32, 'jarak' => 40],
-    ['teks' => 'Seluruh sekolah/madrasah aktif: ' . count($baris) . ' lembaga', 'tengah' => true, 'ukuran' => 20, 'jarak' => 20],
+    ['teks' => ($cari !== '' ? 'Pencarian "' . $cari . '": ' : 'Seluruh sekolah/madrasah aktif: ')
+        . count($baris) . ' lembaga', 'tengah' => true, 'ukuran' => 20, 'jarak' => 20],
     ['teks' => 'Urutan: masa aktif paling lama di atas. Dicetak: '
         . tanggal_id(date('Y-m-d'), true) . ', ' . date('H:i')
         . ' oleh ' . (string) $u['nama'] . ' (' . role_label('super') . ').', 'ukuran' => 18, 'jarak' => 120],

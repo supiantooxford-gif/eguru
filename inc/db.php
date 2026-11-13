@@ -19,7 +19,7 @@ require_once __DIR__ . '/helpers.php'; // untuk setting_default() saat seed (tid
 require_once __DIR__ . '/landing.php';
 
 /** Naikkan angka ini setiap kali skema berubah agar migrasi/seed ikut berjalan. */
-const SCHEMA_VERSION = '62';
+const SCHEMA_VERSION = '63';
 
 /**
  * Kolom yang MEMASTIKAN isi basis data sudah benar-benar versi terkini — dipakai
@@ -108,6 +108,12 @@ const SCHEMA_KOLOM_WAJIB = [
     // kiriman (0 = kiriman LAMA sebelum ada pilihan kelas, jadi tidak ada nilai yang ditebak) dan
     // `kelas_nama` = SNAPSHOT nama kelas supaya kiriman tetap terbaca bila kelasnya kelak dihapus.
     'perangkat_kirim' => ['kelas_id', 'kelas_nama'],
+    // v63: SUPERVISI GURU BK — dokumen per butir instrumen (menu Tugas Tambahan "Bimbingan
+    // Konseling") + supervisi pengawas beserta nilai tiap butir. `butir_no` = nomor butir 1..22
+    // (daftar butirnya ada di KODE, lihat bk_instrumen() pada inc/bk.php).
+    'bk_dokumen' => ['butir_no', 'nama_berkas'],
+    'bk_supervisi' => ['total_skor', 'skor_maks', 'nilai', 'predikat'],
+    'bk_supervisi_nilai' => ['butir_no', 'ketersediaan', 'skor'],
 ];
 
 /**
@@ -172,6 +178,9 @@ const SCHEMA_TABEL_WAJIB = ['app_pengaturan', 'pengawas_sekolah', 'guru_tugas',
     // pada halaman Smart Teacher. Nama aplikasi & asal pengguna disimpan sebagai SNAPSHOT supaya
     // rekapnya tetap terbaca walau aplikasi/akun/sekolahnya kelak dihapus (lihat inc/daftar_apps.php).
     'app_klik',
+    // v63: SUPERVISI GURU BK — `bk_dokumen` (satu berkas per butir instrumen yang dikirim Guru BK),
+    // `bk_supervisi` (hasil penilaian pengawas) dan `bk_supervisi_nilai` (skor tiap butir).
+    'bk_dokumen', 'bk_supervisi', 'bk_supervisi_nilai',
     'perpus_laporan',  // kepala laporan perpustakaan hasil impor e-PERPUS (skema v23)
     'perpus_baris',    // baris laporan perpustakaan hasil impor e-PERPUS (skema v23)
     'lab_barang',      // daftar inventaris barang Kepala Lab IPA/Komputer (skema v24)
@@ -2171,6 +2180,76 @@ function ensure_schema(PDO $pdo): void
                 $urut += 10;
             }
         }
+
+        // ---------------------------------------------------------------- MIGRASI v63
+        // SUPERVISI GURU BK & DOKUMEN PER BUTIR INSTRUMEN (v1.95.0) — permintaan pemilik:
+        // *"pada tugas tambahan Bimbingan Konseling tambahkan modul untuk mengirim dokumen (maksimal
+        // 2mb) setiap butir penilaian ke pengawas … Tampilkan progres pengiriman dokumen. Dan pada
+        // halaman pengawas tambahkan menu Supervisi Guru BK …"*
+        //
+        // TIGA tabel BARU (hanya CREATE TABLE/CREATE INDEX — tidak ada tabel lama yang dibangun
+        // ulang dan tidak ada data yang berubah). Ketiganya KOSONG setelah migrasi: tidak ada
+        // dokumen/supervisi yang ditebak.
+        //   • `bk_dokumen` — satu berkas per (sekolah x guru BK x butir). UNIQUE pada ketiganya
+        //     membuat unggahan ulang MENGGANTIKAN berkas lama, sehingga progres pengiriman tidak
+        //     pernah menghitung butir yang sama dua kali. Yang disimpan HANYA URL CDN hasil media
+        //     proxy platform.
+        //   • `bk_supervisi` — hasil penilaian PENGAWAS satu guru BK: tanggal, total skor, skor
+        //     maksimal (22 butir x 2 = 44), nilai (0..100), predikat (ambang sekolah), kesimpulan,
+        //     saran, dan snapshot nama pengawas. Banyak baris per guru = riwayat supervisi.
+        //   • `bk_supervisi_nilai` — nilai TIAP BUTIR (ketersediaan ada/tidak, skor 2/1/0,
+        //     keterangan). Ikut terhapus bila supervisinya dihapus (CASCADE).
+        // ⚠️ Daftar butir instrumen (22 butir, 5 kelompok) ada di KODE (`bk_instrumen()` pada
+        // inc/bk.php), BUKAN di basis data — supaya tidak perlu migrasi bila ejaannya diperbaiki.
+        $pdo->exec('CREATE TABLE IF NOT EXISTS bk_dokumen (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sekolah_id INTEGER NOT NULL DEFAULT 1 REFERENCES sekolah(id) ON DELETE CASCADE,
+            guru_id INTEGER NOT NULL REFERENCES guru(id) ON DELETE CASCADE,
+            butir_no INTEGER NOT NULL,
+            url TEXT NOT NULL,
+            nama_berkas TEXT,
+            jenis_berkas TEXT,
+            ukuran INTEGER NOT NULL DEFAULT 0,
+            keterangan TEXT,
+            dibuat TEXT,
+            diubah TEXT,
+            UNIQUE (sekolah_id, guru_id, butir_no)
+        )');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_bk_dokumen_guru
+                    ON bk_dokumen(guru_id, butir_no)');
+
+        $pdo->exec('CREATE TABLE IF NOT EXISTS bk_supervisi (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sekolah_id INTEGER NOT NULL DEFAULT 1 REFERENCES sekolah(id) ON DELETE CASCADE,
+            guru_id INTEGER NOT NULL REFERENCES guru(id) ON DELETE CASCADE,
+            pengawas_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            pengawas_nama TEXT,
+            tanggal TEXT NOT NULL,
+            total_skor INTEGER NOT NULL DEFAULT 0,
+            skor_maks INTEGER NOT NULL DEFAULT 44,
+            nilai REAL NOT NULL DEFAULT 0,
+            predikat TEXT,
+            kesimpulan TEXT,
+            saran TEXT,
+            dibuat TEXT,
+            diubah TEXT
+        )');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_bk_supervisi_sekolah
+                    ON bk_supervisi(sekolah_id, tanggal)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_bk_supervisi_guru
+                    ON bk_supervisi(guru_id, tanggal)');
+
+        $pdo->exec('CREATE TABLE IF NOT EXISTS bk_supervisi_nilai (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            supervisi_id INTEGER NOT NULL REFERENCES bk_supervisi(id) ON DELETE CASCADE,
+            butir_no INTEGER NOT NULL,
+            ketersediaan TEXT,
+            skor INTEGER,
+            keterangan TEXT,
+            UNIQUE (supervisi_id, butir_no)
+        )');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_bk_nilai_supervisi
+                    ON bk_supervisi_nilai(supervisi_id)');
 
         // ---------------------------------------------------------------- MIGRASI v62
         // SETORAN HAFALAN — menu Tugas Tambahan "Pembina Tahfidz" (v1.88.0) — permintaan pemilik:

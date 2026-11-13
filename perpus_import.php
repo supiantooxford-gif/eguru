@@ -30,6 +30,15 @@ if (is_pengawas()) {
     tolak403('Akun Pengawas Sekolah/Madrasah hanya dapat melihat dan mencetak laporan perpustakaan.');
 }
 
+// IMPOR e-PERPUS HANYA UNTUK SEKOLAH/MADRASAH TERTENTU (permintaan pemilik, v1.93.0).
+// Sekolah lain TIDAK dianggap gagal berhak: mereka diarahkan mengisi laporan secara MANUAL.
+if (!perpus_impor_boleh()) {
+    flash('Impor dari e-PERPUS hanya berlaku untuk ' . (perpus_impor_sekolah_nama() ?: 'sekolah/madrasah yang ditetapkan Admin')
+        . '. ' . nama_sekolah_tampil() . ' mengisi laporan perpustakaan secara MANUAL lewat formulir '
+        . '"Input Manual" pada halaman Ka. Perpustakaan.', 'warn');
+    redirect(perpus_url(perpus_jenis_ada((string) ($_GET['jenis'] ?? '')) ? (string) $_GET['jenis'] : ''));
+}
+
 $ringkasan = null;
 $galat = [];
 $terlaluBesar = false;

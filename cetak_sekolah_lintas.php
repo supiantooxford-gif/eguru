@@ -33,9 +33,14 @@ if (!is_super()) {
 // "Madrasah" walaupun konteks sekolah yang sedang dibuka adalah madrasah).
 $GLOBALS['__vs_istilah_nonaktif'] = true;
 
-$ringkas = sekolah_lintas_ringkas();
+// PENCARIAN (v1.90.0): lembar cetak mengikuti kata kunci yang sedang dipakai pada dasbor
+// (`index.php?semua=1&cari=…`) sehingga YANG TAMPIL = YANG TERCETAK.
+$cari = trim((string) ($_GET['cari'] ?? ''));
+$ringkas = sekolah_lintas_ringkas($cari);
 $baris = $ringkas['baris'];
 $tot = $ringkas['tot'];
+$q = $cari !== '' ? '?cari=' . rawurlencode($cari) : '';
+$qAuto = $cari !== '' ? '?cari=' . rawurlencode($cari) . '&amp;auto=1' : '?auto=1';
 $autoPrint = isset($_GET['auto']);
 $waktuCetak = tanggal_id(date('Y-m-d'), true) . ', ' . date('H:i');
 ?>
@@ -73,9 +78,9 @@ $waktuCetak = tanggal_id(date('Y-m-d'), true) . ', ' . date('H:i');
 <div class="bg-deco" aria-hidden="true"><span class="b1"></span><span class="b2"></span><span class="b3"></span></div>
 
 <div class="toolbar no-print">
-  <a class="btn btn-ghost" href="index.php">Kembali</a>
-  <a class="btn btn-ghost" href="sekolah_lintas_word.php"><?= ikon('doc', 16) ?> Unduh Word</a>
-  <a class="btn btn-primary" href="cetak_sekolah_lintas.php?auto=1">
+  <a class="btn btn-ghost" href="index.php?semua=1<?= $cari !== '' ? '&amp;cari=' . e(rawurlencode($cari)) : '' ?>">Kembali</a>
+  <a class="btn btn-ghost" href="sekolah_lintas_word.php<?= $q ?>"><?= ikon('doc', 16) ?> Unduh Word</a>
+  <a class="btn btn-primary" href="cetak_sekolah_lintas.php<?= $qAuto ?>">
     <?= ikon('print', 16) ?> Cetak / Simpan PDF
   </a>
 </div>
@@ -92,14 +97,16 @@ $waktuCetak = tanggal_id(date('Y-m-d'), true) . ', ' . date('H:i');
     </div>
 
     <?php sheet_meta([
-        'Lingkup'        => 'Seluruh sekolah/madrasah aktif (' . count($baris) . ' lembaga)',
+        'Lingkup'        => ($cari !== '' ? 'Pencarian "' . $cari . '" — ' : 'Seluruh sekolah/madrasah aktif (')
+            . count($baris) . ' lembaga' . ($cari !== '' ? ' cocok' : '') . ')',
         'Urutan'         => 'Masa aktif paling lama di atas',
         'Dicetak'        => $waktuCetak,
         'Oleh'           => (string) $u['nama'] . ' (' . role_label('super') . ')',
     ]); ?>
 
     <?php if (!$baris): ?>
-      <p><i>Belum ada sekolah/madrasah aktif untuk dicetak.</i></p>
+      <p><i><?= $cari !== '' ? 'Tidak ada sekolah/madrasah yang cocok dengan pencarian itu.'
+        : 'Belum ada sekolah/madrasah aktif untuk dicetak.' ?></i></p>
     <?php else: ?>
       <div class="sheet-scroll">
         <table class="sheet rekap padat">

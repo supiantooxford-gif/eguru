@@ -3424,21 +3424,67 @@ function masa_aktif_pil(?array $sekolah = null): string
 }
 
 /**
+ * SARING daftar baris "Daftar Sekolah/Madrasah" (Ringkasan Semua Sekolah) menurut kata kunci.
+ *
+ * Permintaan pemilik: *"Tambahkan fitur cari pada yang ditandai warna merah untuk mempermudah
+ * pencarian nama madrasah"* (kotak merah di samping tombol Cetak/Unduh Word pada dasbor Super Admin).
+ *
+ * Dipakai BERSAMA oleh halaman dasbor, lembar CETAK, dan unduhan Word sehingga **yang tampil =
+ * yang tercetak/terunduh**. Yang dicocokkan: nama lembaga, NPSN, NSM, nama kepala pada identitas
+ * lembaga, dan label jenis ("Madrasah"/"Sekolah Umum") — tidak peduli besar-kecil huruf, dan
+ * kata kunci boleh lebih dari satu kata (semua kata harus cocok, mis. "ma mootilango").
+ *
+ * @param array<int,array<string,mixed>> $baris hasil sekolah_lintas_ringkas()['baris']
+ * @return array<int,array<string,mixed>>
+ */
+function sekolah_lintas_saring(array $baris, string $cari): array
+{
+    $cari = trim($cari);
+    if ($cari === '') {
+        return $baris;
+    }
+    // Setiap kata harus cocok (AND) → "ma mootilango" menemukan MA. … Mootilango.
+    $kata = preg_split('/\s+/u', strtolower($cari), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    return array_values(array_filter($baris, static function (array $b) use ($kata): bool {
+        $s = $b['sekolah'];
+        $teks = strtolower(implode(' | ', [
+            (string) ($s['nama'] ?? ''),
+            (string) ($s['npsn'] ?? ''),
+            (string) ($s['nsm'] ?? ''),
+            (string) ($s['kepala_sekolah'] ?? ''),
+            (string) ($s['jenis'] ?? '') === 'madrasah' ? 'madrasah' : 'sekolah umum',
+        ]));
+        foreach ($kata as $k) {
+            if (strpos($teks, $k) === false) {
+                return false;
+            }
+        }
+        return true;
+    }));
+}
+
+/**
  * Bahan tabel "Daftar Sekolah/Madrasah" pada Ringkasan Semua Sekolah (Super Admin lintas sekolah).
  *
  * Dipakai TIGA tempat sekaligus — `index.php` (tabel + grafik "Sebaran Siswa"), lembar CETAK
  * (`cetak_sekolah_lintas.php`) dan unduhan Word (`sekolah_lintas_word.php`) — supaya angka,
  * keadaan masa aktif, dan URUTANNYA tidak pernah berbeda antar tempat.
  *
+ * @param string $cari kata kunci penyaring ('' = seluruh lembaga). Penyaringan dilakukan SETELAH
+ *                     pengurutan, dan `tot` dihitung dari baris yang benar-benar tampil sehingga
+ *                     baris JUMLAH selalu sama dengan tabelnya. Grafik "Sebaran Siswa" TIDAK ikut
+ *                     disaring (label_grafik/data_grafik tetap seluruh lembaga).
+ *
  * Kunci hasil:
  *   daftar       : seluruh sekolah terdaftar (sekolah_list(true))
  *   aktif        : sekolah yang sudah disetujui & aktif (urut abjad — dipakai grafik)
- *   baris        : [sekolah, stat, akt] — TERURUT masa aktif paling lama di atas
+ *   baris        : [sekolah, stat, akt] — TERURUT masa aktif paling lama di atas (sudah disaring)
  *   tot          : jumlah kelas/guru/siswa/mapel/jurnal/nilai dari baris yang tampil
  *   label_grafik : nama sekolah untuk grafik "Sebaran Siswa"
  *   data_grafik  : jumlah siswa sejajar label_grafik
+ *   cari         : kata kunci yang dipakai (untuk keterangan/tautan)
  */
-function sekolah_lintas_ringkas(): array
+function sekolah_lintas_ringkas(string $cari = ''): array
 {
     $daftar = sekolah_list(true);
     $aktif = array_values(array_filter(
@@ -3449,13 +3495,9 @@ function sekolah_lintas_ringkas(): array
     $baris = [];
     $labelGrafik = [];
     $dataGrafik = [];
-    $tot = ['kelas' => 0, 'guru' => 0, 'siswa' => 0, 'mapel' => 0, 'jurnal' => 0, 'nilai' => 0];
     foreach ($aktif as $s) {
         $st = sekolah_stat((int) $s['id']);
         $baris[] = ['sekolah' => $s, 'stat' => $st, 'akt' => aktivasi_status($s)];
-        foreach ($tot as $k => $n) {
-            $tot[$k] = $n + (int) ($st[$k] ?? 0);
-        }
         $labelGrafik[] = $s['nama'] !== '' ? (string) $s['nama'] : '(nama belum diisi)';
         $dataGrafik[] = $st['siswa'];
     }
@@ -3474,6 +3516,18 @@ function sekolah_lintas_ringkas(): array
         return strcasecmp((string) ($a['sekolah']['nama'] ?? ''), (string) ($b['sekolah']['nama'] ?? ''));
     });
 
+    // SARING (v1.90.0) — sesudah urutan & grafik supaya keduanya tidak terpengaruh.
+    $baris = sekolah_lintas_saring($baris, $cari);
+
+    // Jumlah kolom dihitung dari baris yang TAMPIL (bukan seluruh lembaga) agar baris JUMLAH pada
+    // tabel selalu cocok dengan baris di atasnya — termasuk saat sedang disaring.
+    $tot = ['kelas' => 0, 'guru' => 0, 'siswa' => 0, 'mapel' => 0, 'jurnal' => 0, 'nilai' => 0];
+    foreach ($baris as $b) {
+        foreach ($tot as $k => $n) {
+            $tot[$k] = $n + (int) ($b['stat'][$k] ?? 0);
+        }
+    }
+
     return [
         'daftar'       => $daftar,
         'aktif'        => $aktif,
@@ -3481,7 +3535,174 @@ function sekolah_lintas_ringkas(): array
         'tot'          => $tot,
         'label_grafik' => $labelGrafik,
         'data_grafik'  => $dataGrafik,
+        'cari'         => trim($cari),
     ];
+}
+
+// ---------------------------------------------- REKAP KEPALA & OPERATOR TIAP LEMBAGA (v1.89.0)
+/**
+ * REKAPAN NAMA KEPALA SEKOLAH/MADRASAH, ADMIN OPERATOR, DAN NOMOR HP tiap lembaga.
+ *
+ * Permintaan pemilik: *"Pada halaman super admin pada bagian layanan tambahkan menu yang menampilkan
+ * rekapan: No, nama sekolah/madrasah, nama kepala sekolah, nama operator, Nomer HP kepala sekolah.
+ * Tujuannya untuk mempermudah super admin mengecek kepala sekolah dan operator disetiap lembaga.
+ * tambahkan fitur cetak pdf"*.
+ *
+ * SATU SUMBER DATA untuk halaman `rekap_kepala_operator.php` DAN lembar cetaknya
+ * (`cetak_rekap_kepala_operator.php`) — jangan menulis query salinan di halaman, supaya isi layar &
+ * hasil cetak selalu sama.
+ *
+ * Aturan yang dipakai (jangan diubah tanpa bertanya):
+ *   • SEMUA lembaga ditampilkan (aktif maupun nonaktif), urut NAMA A→Z supaya mudah dicari; keadaan
+ *     aktif/nonaktif & verifikasinya dibawa pada `baris` untuk ditampilkan sebagai pil.
+ *   • Nama kepala diambil dari AKUN (`users.role = 'kepala'`); bila lembaga belum punya akun kepala,
+ *     dipakai kolom identitas `sekolah.kepala_sekolah` dengan penanda `kepala_dari_identitas = true`
+ *     (tampilannya dibedakan supaya Super Admin tahu itu bukan akun).
+ *   • Operator boleh lebih dari satu (akun kepala sekolah dapat menambahkannya lewat menu Akun
+ *     Operator) → namanya digabung dengan koma; jumlah akun aktifnya ikut dikembalikan.
+ *   • Nomor HP memakai `wa_lembaga_nomor_teks()` (kolom `telepon`, cadangan `kontak_telepon`) — itu
+ *     kolom yang diisi lembaga sebagai "Telepon / HP (WhatsApp)".
+ *
+ * @return array{baris:array<int,array<string,mixed>>,tot:array<string,int>}
+ */
+function rekap_kepala_operator(): array
+{
+    $daftar = sekolah_list(true);
+
+    // Seluruh akun kepala & operator diambil SEKALI (bukan satu query per lembaga).
+    // Kutip TUNGGAL untuk nilai teks (kutip ganda dibaca SQLite sebagai nama kolom).
+    $akun = all("SELECT sekolah_id, role, nama, username, aktif
+                   FROM users
+                  WHERE role IN ('kepala','operator') AND sekolah_id IS NOT NULL
+                  ORDER BY aktif DESC, nama");
+    $peta = [];
+    foreach ($akun as $a) {
+        $peta[(int) $a['sekolah_id']][(string) $a['role']][] = $a;
+    }
+
+    $baris = [];
+    $tot = [
+        'lembaga'         => 0,
+        'aktif'           => 0,
+        'nonaktif'        => 0,
+        'punya_kepala'    => 0,
+        'tanpa_kepala'    => 0,
+        'akun_operator'   => 0,
+        'punya_operator'  => 0,
+        'tanpa_operator'  => 0,
+        'tanpa_hp'        => 0,
+    ];
+
+    foreach ($daftar as $s) {
+        $sid = (int) $s['id'];
+        $kepala = $peta[$sid]['kepala'] ?? [];
+        $operator = $peta[$sid]['operator'] ?? [];
+
+        // Akun kepala AKTIF lebih dulu (urutan query sudah aktif DESC, nama).
+        $kepalaAkun = [];
+        $kepalaNonaktif = 0;
+        foreach ($kepala as $k) {
+            if ((int) $k['aktif'] === 1 && trim((string) $k['nama']) !== '') {
+                $kepalaAkun[] = ['nama' => trim((string) $k['nama']), 'username' => (string) $k['username']];
+            } elseif ((int) $k['aktif'] !== 1) {
+                $kepalaNonaktif++;
+            }
+        }
+        $kepalaTeks = implode(', ', array_column($kepalaAkun, 'nama'));
+        $dariIdentitas = false;
+        if ($kepalaTeks === '') {
+            $ident = trim((string) ($s['kepala_sekolah'] ?? ''));
+            if (identitas_nilai($ident) !== '') {
+                $kepalaTeks = $ident;
+                $dariIdentitas = true;
+            }
+        }
+
+        $operatorAkun = [];
+        $operatorNonaktif = 0;
+        foreach ($operator as $o) {
+            if ((int) $o['aktif'] === 1 && trim((string) $o['nama']) !== '') {
+                $operatorAkun[] = ['nama' => trim((string) $o['nama']), 'username' => (string) $o['username']];
+            } elseif ((int) $o['aktif'] !== 1) {
+                $operatorNonaktif++;
+            }
+        }
+
+        $hp = wa_lembaga_nomor_teks($s);
+        $aktif = (int) $s['aktif'] === 1 && (string) $s['verifikasi'] === 'disetujui';
+
+        $baris[] = [
+            'sekolah'               => $s,
+            'nama'                  => nama_sekolah_tampil($s),
+            'jenis'                 => (string) ($s['jenis'] ?? 'umum'),
+            'aktif'                 => $aktif,
+            'verifikasi'            => (string) ($s['verifikasi'] ?? ''),
+            'kepala_teks'           => $kepalaTeks,
+            'kepala_akun'           => $kepalaAkun,
+            'kepala_nonaktif'       => $kepalaNonaktif,
+            'kepala_dari_identitas' => $dariIdentitas,
+            'operator_teks'         => implode(', ', array_column($operatorAkun, 'nama')),
+            'operator_akun'         => $operatorAkun,
+            'operator_nonaktif'     => $operatorNonaktif,
+            'hp'                    => $hp,
+            'hp_wa'                 => wa_lembaga_nomor($s),
+        ];
+
+        $tot['lembaga']++;
+        if ($aktif) {
+            $tot['aktif']++;
+        } else {
+            $tot['nonaktif']++;
+        }
+        if ($kepalaAkun) {
+            $tot['punya_kepala']++;
+        } else {
+            $tot['tanpa_kepala']++;
+        }
+        $tot['akun_operator'] += count($operatorAkun);
+        if ($operatorAkun) {
+            $tot['punya_operator']++;
+        } else {
+            $tot['tanpa_operator']++;
+        }
+        if ($hp === '') {
+            $tot['tanpa_hp']++;
+        }
+    }
+
+    // Urut NAMA sekolah A→Z (bukan masa aktif): halaman ini untuk MENCOCOKKAN nama lembaga.
+    usort($baris, static fn(array $a, array $b): int => strcasecmp($a['nama'], $b['nama']));
+
+    return ['baris' => $baris, 'tot' => $tot];
+}
+
+/**
+ * Saring baris rekap kepala & operator menurut kata kunci (nama lembaga, kepala, operator, nomor HP).
+ *
+ * Dipakai BERSAMA oleh halaman rekap dan lembar cetaknya (saringan yang sedang dilihat ikut
+ * tercetak). Perbandingan tidak peduli besar-kecil huruf.
+ *
+ * @param array<int,array<string,mixed>> $baris hasil rekap_kepala_operator()['baris']
+ * @return array<int,array<string,mixed>>
+ */
+function rekap_kepala_operator_saring(array $baris, string $cari): array
+{
+    $cari = trim($cari);
+    if ($cari === '') {
+        return $baris;
+    }
+    $jarum = strtolower($cari);
+    return array_values(array_filter($baris, static function (array $b) use ($jarum): bool {
+        $teks = strtolower(implode(' | ', [
+            (string) $b['nama'],
+            (string) $b['kepala_teks'],
+            (string) $b['operator_teks'],
+            (string) $b['hp'],
+            implode(' ', array_column($b['kepala_akun'], 'username')),
+            implode(' ', array_column($b['operator_akun'], 'username')),
+        ]));
+        return strpos($teks, $jarum) !== false;
+    }));
 }
 
 /**
@@ -3540,6 +3761,60 @@ function pengawas_masa_teks(array $masa): string
 }
 
 /**
+ * MASA AKTIF SETIAP LEMBAGA BINAAN dalam bentuk SISA HARI — dipakai unduhan Word
+ * "Daftar Akun Pengawas" (permintaan pemilik, v1.94.0).
+ *
+ * Permintaan: *"Pada bagian daftar akun pengawas pada fitur download word, buat hasil download word
+ * pada bagian masa aktif tampilkan masa aktif jumlah hari pada setiap lembaganya"* — jadi kolom
+ * Masa Aktif TIDAK lagi hanya berisi ringkasan kategori ("3 aktif, 9 uji coba"), melainkan sisa masa
+ * aktif (jumlah hari) TIAP lembaga binaannya, bernomor sama dengan daftar madrasah di sebelahnya.
+ *
+ * Angka & keadaan diambil `aktivasi_status()` (satu sumber kebenaran — jangan menghitung sendiri):
+ *   • permanen / aktif tanpa tanggal batas → "Tanpa batas";
+ *   • masa aktif 365 hari yang berjalan    → "N hari";
+ *   • masa uji coba yang berjalan          → "N hari (uji coba)";
+ *   • masa aktif / uji coba sudah habis    → "Habis" / "Habis (uji coba)".
+ *
+ * Bentuk teksnya TEKS BIASA (tanpa tag HTML dan tanpa tanda "·") karena dipakai hasil cetak e-GURU.
+ *
+ * @param array<int,array<string,mixed>> $binaan baris tabel `sekolah` (hasil sekolah_binaan())
+ * @return array<int,array{nama:string,hari:int,uji:bool,habis:bool,teks:string}>
+ */
+function pengawas_binaan_hari(array $binaan): array
+{
+    $r = [];
+    foreach ($binaan as $s) {
+        $st = aktivasi_status($s);
+        if ($st['mode'] === 'tanpa_sekolah') {
+            continue;
+        }
+        $uji = $st['mode'] === 'uji_coba';
+        $hari = max(0, (int) $st['sisa_hari']);
+        if ($st['mode'] === 'permanen') {
+            $teks = 'Tanpa batas';
+            $hari = 0;
+        } elseif ($st['habis']) {
+            $teks = $uji ? 'Habis (uji coba)' : 'Habis';
+            $hari = 0;
+        } elseif ((int) $st['sampai_ts'] === 0) {
+            // Masa aktif/uji coba tanpa tanggal batas → tidak pernah terkunci (perilaku lama).
+            $teks = 'Tanpa batas';
+            $hari = 0;
+        } else {
+            $teks = $hari . ' hari' . ($uji ? ' (uji coba)' : '');
+        }
+        $r[] = [
+            'nama'  => (string) ($s['nama'] ?? ''),
+            'hari'  => $hari,
+            'uji'   => $uji,
+            'habis' => (bool) $st['habis'],
+            'teks'  => $teks,
+        ];
+    }
+    return $r;
+}
+
+/**
  * Bahan "Daftar Akun Pengawas" — SATU SUMBER DATA untuk halaman Akun Pengawas, lembar CETAK
  * (`cetak_pengawas_binaan.php`) dan unduhan Word (`pengawas_binaan_word.php`).
  *
@@ -3553,8 +3828,12 @@ function pengawas_masa_teks(array $masa): string
  * dibuka pengawas); jumlah binaan nonaktif dilaporkan terpisah.
  *
  * Kunci hasil:
- *   baris : [id, nama, username, aktif, ditinjau, binaan[], jumlah, nonaktif, masa[], masa_teks]
+ *   baris : [id, nama, username, aktif, ditinjau, binaan[], jumlah, nonaktif, masa[], masa_teks,
+ *            masa_hari[]]
  *   tot   : jumlah akun / akun aktif / penugasan binaan / hitungan masa aktif seluruh binaan
+ *
+ * `masa_hari` (v1.94.0) = sisa masa aktif (jumlah hari) TIAP lembaga binaan, satu baris per binaan
+ * dan urutannya sama dengan `binaan[]` — dipakai kolom Masa Aktif pada unduhan Word.
  */
 function pengawas_binaan_ringkas(): array
 {
@@ -3586,6 +3865,7 @@ function pengawas_binaan_ringkas(): array
             'nonaktif'  => count($semua) - count($binaan),
             'masa'      => $masa,
             'masa_teks' => pengawas_masa_teks($masa),
+            'masa_hari' => pengawas_binaan_hari($binaan),
         ];
     }
 
@@ -4589,6 +4869,12 @@ function pengawas_berkas_boleh(): array
         // (menyimpan catatan pengawas), jadi berkasnya juga terdaftar di `pengawas_berkas_post()` —
         // tanpa itu seluruh formulir catatan dijawab 403 oleh gerbang pengawas.
         'perangkat_pengawas.php',
+        // SUPERVISI GURU BK (v1.95.0/skema v63) — permintaan pemilik: *"pada halaman pengawas
+        // tambahkan menu Supervisi Guru BK … Hasil supervisi otomatis akan masuk ke Guru yang
+        // ditugaskan Bimbingan Konseling dan ada rekapannya di akun pengawas."* Halaman ini MEMANG
+        // menerima POST (menyimpan penilaian), jadi berkasnya juga terdaftar di
+        // `pengawas_berkas_post()`. Lembar cetaknya hanya membaca.
+        'supervisi_bk.php', 'cetak_supervisi_bk.php',
         // OBROLAN/CHAT (v1.51.0) — permintaan pemilik: fitur chat dipakai SEMUA PERAN, termasuk
         // pengawas. Berkas ini hanya menyentuh tabel obrolan (bukan data sekolah) sehingga tidak
         // melanggar aturan "pengawas hanya melihat & mencetak" data binaan.
@@ -4622,7 +4908,12 @@ function pengawas_berkas_post(): array
             // PERANGKAT GURU — halaman pengawas (v1.72.0/skema v52): menyimpan CATATAN PENGAWAS pada
             // sebuah perangkat. Catatan itu tersimpan di tabelnya sendiri (`perangkat_catatan`) dan
             // TIDAK mengubah status tinjauan kepala sekolah maupun data sekolah lainnya.
-            'perangkat_pengawas.php'];
+            'perangkat_pengawas.php',
+            // SUPERVISI GURU BK (v1.95.0/skema v63): pengawas MENILAI instrumen 22 butir milik guru
+            // Bimbingan Konseling binaannya. Yang ditulis hanya tabel `bk_supervisi` +
+            // `bk_supervisi_nilai` (hasil supervisi), bukan data sekolah/madrasah binaan — dan
+            // setiap aksi tetap dibatasi binaan sendiri di server (pengawas_punya()).
+            'supervisi_bk.php'];
 }
 
 /**
@@ -6451,6 +6742,9 @@ function tugas_menu_kode_khusus(): array
         [SARPRAS_KODE_MENU, KS_KODE_MENU, PERPUS_KODE_MENU, KURIKULUM_KODE_MENU, WALI_KODE_MENU],
         // v1.88.0: menu "Pembina Tahfidz" (setoran hafalan) — kodenya tidak boleh dipakai menu baru.
         array_merge([TAHFIDZ_KODE_MENU], TAHFIDZ_KODE_LAIN),
+        // v1.95.0: menu "Bimbingan Konseling" (kirim dokumen per butir instrumen + supervisi
+        // pengawas). Kodenya tidak boleh dipakai menu Tugas Tambahan baru.
+        array_merge([BK_KODE_MENU], BK_KODE_LAIN),
         OSIM_KODE_LIST,
         LAB_KODE_MENU,
         // Menu Tugas Tambahan yang isinya memakai modul daftar aplikasi (mis. "Bendahara Bos"):
@@ -6535,6 +6829,153 @@ function tugas_menu_geser(int $id, string $arah): bool
         throw $ex;
     }
     return true;
+}
+
+/**
+ * DATA MODUL yang masih tersimpan untuk sebuah menu Tugas Tambahan (v1.92.0).
+ *
+ * Permintaan pemilik: *"Pada bagian tindakan tambahkan fitur hapus untuk menghapus tugas tambahan
+ * yang tidak diperlukan"*. Sebelum sebuah menu dihapus, aplikasi memeriksa lebih dulu apakah isi
+ * menunya sudah berisi data. Menu yang masih berisi data **TIDAK dihapus** (cukup dinonaktifkan),
+ * karena:
+ *   - data modulnya (barang sarpras, program kesiswaan, dokumen kurikulum, …) TIDAK ikut terhapus
+ *     dan menjadi tidak dapat dibuka lagi: kode menu yang dipakai modul (`tugas_menu_kode_khusus()`)
+ *     tidak pernah dipakai ulang, sehingga menu baru tidak akan menyambung ke data itu;
+ *   - konfigurasi daftar aplikasi (mis. "Bendahara Bos"/"Bendahara Madrasah") juga tidak punya
+ *     jalan masuk lagi bila menunya dihapus.
+ * Menu "papan pengembangan" (isinya "Masih dalam Pengembangan") dan menu yang modulnya masih KOSONG
+ * tetap boleh dihapus — itulah sasaran fitur ini.
+ *
+ * @param array<string,mixed> $tugas baris `tugas_menu` (butuh `kode` & `nama`)
+ * @return array<int,array{label:string,jumlah:int}>
+ */
+function tugas_menu_data_pakai(array $tugas): array
+{
+    $kode = trim((string) ($tugas['kode'] ?? ''));
+    $hasil = [];
+    $hitung = static function (string $label, string $sql, array $par = []) use (&$hasil): void {
+        try {
+            $n = (int) val($sql, $par, 0);
+        } catch (Throwable $ex) {
+            return; // tabel modul belum ada → tidak dianggap berisi data
+        }
+        if ($n > 0) {
+            $hasil[] = ['label' => $label, 'jumlah' => $n];
+        }
+    };
+    if ($kode === '') {
+        return $hasil;
+    }
+
+    if ($kode === SARPRAS_KODE_MENU) {
+        $hitung('data barang Sarana & Prasarana', 'SELECT COUNT(*) FROM sarpras_barang');
+    } elseif ($kode === KS_KODE_MENU) {
+        $hitung('program kerja Kesiswaan', 'SELECT COUNT(*) FROM kesiswaan_program');
+    } elseif (in_array($kode, OSIM_KODE_LIST, true)) {
+        $hitung('susunan organisasi', 'SELECT COUNT(*) FROM osim_pengurus WHERE kode = ?', [$kode]);
+        $hitung('program kerja', 'SELECT COUNT(*) FROM osim_program WHERE kode = ?', [$kode]);
+    } elseif ($kode === PERPUS_KODE_MENU) {
+        $hitung('laporan perpustakaan', 'SELECT COUNT(*) FROM perpus_laporan');
+    } elseif (in_array($kode, LAB_KODE_MENU, true)) {
+        $hitung('inventaris barang', 'SELECT COUNT(*) FROM lab_barang WHERE kode = ?', [$kode]);
+        $hitung('laporan program', 'SELECT COUNT(*) FROM lab_program WHERE kode = ?', [$kode]);
+    } elseif ($kode === KURIKULUM_KODE_MENU) {
+        $hitung('dokumen untuk guru', 'SELECT COUNT(*) FROM dokumen');
+    } elseif ($kode === WALI_KODE_MENU) {
+        $hitung('data Wali Kelas (struktur, program, absensi, piket)',
+            'SELECT (SELECT COUNT(*) FROM wali_struktur) + (SELECT COUNT(*) FROM wali_program)'
+            . ' + (SELECT COUNT(*) FROM wali_absensi) + (SELECT COUNT(*) FROM wali_piket)');
+    }
+
+    // Menu "Pembina Tahfidz" dikenali modulnya dari KODE **maupun NAMA**
+    // (`tahfidz_tugas_kunci()`), jadi pemeriksaan data memakai fungsi yang sama — pada basis data
+    // pemilik menunya dibuat manual dan kodenya BUKAN `pembina_tahfidz` (mis. `kepala-madrasah`).
+    // Modul itu TIDAK dimuat `inc/init.php` (hanya `tugas.php`/`cetak_tahfidz.php`), jadi dimuat
+    // di sini bila belum ada.
+    if (!function_exists('tahfidz_tugas_kunci') && is_file(__DIR__ . '/tahfidz.php')) {
+        require_once __DIR__ . '/tahfidz.php';
+    }
+    if (function_exists('tahfidz_tugas_kunci') && tahfidz_tugas_kunci($tugas)) {
+        $hitung('setoran hafalan Tahfidz', 'SELECT COUNT(*) FROM tahfidz_setoran');
+    }
+
+    // Menu yang isinya memakai modul DAFTAR APLIKASI (mis. "Bendahara Bos"): konfigurasi aplikasinya
+    // ikut menu ini, jadi tidak boleh hilang tanpa jejak.
+    try {
+        $kunci = daftar_apps_tugas_kunci($tugas);
+        if ($kunci !== null) {
+            $hitung('aplikasi pada menu ini', 'SELECT COUNT(*) FROM ' . daftar_apps_tabel($kunci));
+        }
+    } catch (Throwable $ex) {
+        // modul daftar aplikasi belum dimuat / menu tak dikenal → abaikan
+    }
+
+    return $hasil;
+}
+
+/**
+ * HAPUS satu menu Tugas Tambahan (v1.92.0) — permintaan pemilik: *"Pada bagian tindakan tambahkan
+ * fitur hapus untuk menghapus tugas tambahan yang tidak diperlukan"*.
+ *
+ * Aturan (ditegakkan di SERVER, bukan hanya di tampilan):
+ *   - menu yang isinya masih menyimpan data **DITOLAK** (lihat `tugas_menu_data_pakai()`) — pesannya
+ *     mengarahkan untuk **menonaktifkan** saja supaya datanya tetap tersimpan;
+ *   - selain itu menu dihapus beserta **penugasannya** (`user_tugas` & `guru_tugas`) — datanya
+ *     dilepas secara eksplisit, tidak bergantung pada CASCADE;
+ *   - nomor urut menu yang tersisa dirapikan kembali (10, 20, 30, …) seperti `tugas_menu_geser()`.
+ *
+ * @return array{ok:bool,pesan:string,nama?:string,kode?:string,pengguna?:int,guru?:int}
+ */
+function tugas_menu_hapus(int $id): array
+{
+    $t = tugas_menu_by_id($id);
+    if (!$t) {
+        return ['ok' => false, 'pesan' => 'Menu Tugas Tambahan tidak ditemukan.'];
+    }
+    $nama = (string) $t['nama'];
+
+    $pakai = tugas_menu_data_pakai($t);
+    if ($pakai !== []) {
+        $rinci = [];
+        foreach ($pakai as $p) {
+            $rinci[] = $p['label'] . ' (' . number_format((int) $p['jumlah'], 0, ',', '.') . ')';
+        }
+        return ['ok' => false, 'pesan' => 'Menu "' . $nama . '" TIDAK dihapus karena isinya masih '
+            . 'menyimpan ' . implode(', ', $rinci) . '. Nonaktifkan saja menu ini supaya datanya tetap '
+            . 'tersimpan dan dapat dibuka lagi kapan saja.'];
+    }
+
+    $pengguna = (int) val('SELECT COUNT(*) FROM user_tugas WHERE tugas_id = ?', [$id], 0);
+    $guru = (int) val('SELECT COUNT(*) FROM guru_tugas WHERE tugas_id = ?', [$id], 0);
+
+    db()->exec('BEGIN IMMEDIATE');
+    try {
+        q('DELETE FROM user_tugas WHERE tugas_id = ?', [$id]);
+        q('DELETE FROM guru_tugas WHERE tugas_id = ?', [$id]);
+        q('DELETE FROM tugas_menu WHERE id = ?', [$id]);
+        $u = 0;
+        foreach (all('SELECT id FROM tugas_menu ORDER BY urutan, id') as $b) {
+            $u += 10;
+            q('UPDATE tugas_menu SET urutan = ? WHERE id = ?', [$u, (int) $b['id']]);
+        }
+        db()->exec('COMMIT');
+    } catch (Throwable $ex) {
+        db()->exec('ROLLBACK');
+        throw $ex;
+    }
+
+    return [
+        'ok'       => true,
+        'nama'     => $nama,
+        'kode'     => (string) $t['kode'],
+        'pengguna' => $pengguna,
+        'guru'     => $guru,
+        'pesan'    => 'Tugas Tambahan "' . $nama . '" (kode ' . (string) $t['kode'] . ') dihapus'
+            . ($pengguna > 0 || $guru > 0
+                ? ' — ' . $pengguna . ' penugasan pengguna dan ' . $guru . ' data guru yang memakainya '
+                    . 'ikut dilepas.'
+                : '.'),
+    ];
 }
 
 /** ID menu Tugas Tambahan yang ditugaskan kepada seorang pengguna. */
@@ -6766,6 +7207,27 @@ function tugas_menu_semua_aktif(): array
             }
         }
     }
+    // Menu "Bimbingan Konseling" juga tampil bagi guru yang ditetapkan sebagai Guru BK pada DATA
+    // GURU (`guru_tugas`) — sejalan dengan pengecualian pada boleh_tugas_menu(). Jangan dipisah:
+    // menu yang tampil harus selalu bisa dibuka, dan menu yang bisa dibuka harus selalu tampil.
+    foreach (guru_tugas_ids($userId) as $tidBk) {
+        $tBk = tugas_menu_by_id((int) $tidBk);
+        if (!$tBk || (int) $tBk['aktif'] !== 1 || !tugas_menu_bk($tBk)) {
+            continue;
+        }
+        $adaBk = false;
+        foreach ($daftar as $dBk) {
+            if ((int) $dBk['id'] === (int) $tBk['id']) {
+                $adaBk = true;
+                break;
+            }
+        }
+        if (!$adaBk) {
+            $daftar[] = $tBk;
+        }
+    }
+    usort($daftar, static fn(array $a, array $b): int =>
+        [(int) $a['urutan'], (int) $a['id']] <=> [(int) $b['urutan'], (int) $b['id']]);
     // Aturan yang sama dengan pengelola: menu daftar aplikasi yang aksesnya tertutup disembunyikan.
     return tugas_menu_saring_tampil($daftar);
 }
@@ -6774,6 +7236,26 @@ function tugas_menu_semua_aktif(): array
 function tugas_menu_saya(): array
 {
     return tugas_menu_semua_aktif();
+}
+
+/**
+ * true bila baris `tugas_menu` ini adalah menu **Bimbingan Konseling** (Guru BK).
+ *
+ * Salinan ringan dari `bk_tugas_kunci()` (inc/bk.php) — sengaja ditaruh di helpers supaya sidebar
+ * dan `boleh_tugas_menu()` tidak perlu memuat modul BK. Kode menunya pada basis data pemilik dibuat
+ * lewat "Kelola Tugas Tambahan" (`bimbingan-konseling`), jadi pengenalan memakai KODE **maupun NAMA**.
+ */
+function tugas_menu_bk(?array $tugas): bool
+{
+    if (!$tugas) {
+        return false;
+    }
+    $kode = strtolower(trim((string) ($tugas['kode'] ?? '')));
+    if ($kode !== '' && strpos($kode, 'bimbingan') !== false) {
+        return true;
+    }
+    $nama = tugas_nama_kunci((string) ($tugas['nama'] ?? ''));
+    return $nama !== '' && in_array($nama, ['bimbingan konseling', 'bimbingan dan konseling', 'guru bk', 'bk'], true);
 }
 
 /** true bila pengguna sudah DITUGASKAN pada sebuah menu (menentukan boleh-tidaknya membuka isi). */
@@ -6807,6 +7289,16 @@ function boleh_tugas_menu(?array $tugas, ?int $userId = null): bool
     }
     if (tugas_ditugaskan((int) $tugas['id'], $userId)) {
         return true;
+    }
+    // KHUSUS menu "Bimbingan Konseling" (v1.95.0): Guru BK sering ditetapkan lewat **Data Guru**
+    // (kolom Tugas Tambahan → `guru_tugas`), bukan lewat Pengaturan Tugas Tambahan. Tanpa
+    // pengecualian ini menunya tampil tetapi isinya 403 — persis jebakan yang pernah terjadi pada
+    // menu Wali Kelas. Penugasan lewat `user_tugas` tetap berlaku seperti biasa.
+    if (tugas_menu_bk($tugas)) {
+        $gidBk = guru_id_saya();
+        if ($gidBk > 0 && in_array((int) $tugas['id'], guru_tugas_ids($gidBk), true)) {
+            return true;
+        }
     }
     // KHUSUS menu "Wali Kelas": guru yang DITETAPKAN sebagai wali kelas cukup dengan penetapan itu
     // (permintaan pemilik: "Guru yang jadi wali kelas itu saja (kelasnya di seting oleh operator)")

@@ -230,17 +230,20 @@ function perpus_data(string $jenis, string $cari = ''): array
 {
     $lap = perpus_laporan($jenis);
     if (!$lap) {
-        return ['laporan' => null, 'header' => [], 'baris' => [], 'total' => 0, 'cocok' => 0];
+        return ['laporan' => null, 'header' => [], 'baris' => [], 'ids' => [], 'total' => 0, 'cocok' => 0];
     }
     $header = perpus_header($lap);
     $baris = [];
+    $ids = [];
     foreach (perpus_baris((int) $lap['id'], $cari) as $r) {
+        $ids[] = (int) $r['id'];
         $baris[] = perpus_isi($r);
     }
     return [
         'laporan' => $lap,
         'header'  => $header,
         'baris'   => $baris,
+        'ids'     => $ids,     // id baris (sejajar dengan `baris`) — dipakai tombol Ubah/Hapus manual
         'total'   => (int) $lap['jumlah_baris'],
         'cocok'   => count($baris),
     ];
@@ -322,6 +325,18 @@ function perpus_totals(array $header, array $baris, string $jenis): array
 function perpus_angka(int $nilai, bool $rp): string
 {
     return ($rp ? 'Rp ' : '') . r0($nilai);
+}
+
+/**
+ * Perbarui `jumlah_baris` sebuah himpunan data (dipakai setelah input manual menambah/menghapus baris).
+ */
+function perpus_jumlah_ulang(int $laporanId): void
+{
+    if ($laporanId <= 0) {
+        return;
+    }
+    q('UPDATE perpus_laporan SET jumlah_baris = (SELECT COUNT(*) FROM perpus_baris WHERE laporan_id = ?)
+       WHERE id = ?', [$laporanId, $laporanId]);
 }
 
 /** Hapus satu himpunan data (dipakai tombol "Kosongkan"). */
@@ -446,6 +461,257 @@ function perpus_ringkas_jenis(): array
     return $keluar;
 }
 
+// ------------------------------------------------------------------ IZIN IMPOR e-PERPUS
+//
+// Permintaan pemilik (v1.93.0): *"Impor dari e-Perpus itu hanya berlaku untuk MA. Sirojuth Tholibiin
+// Mootilango. Madrasah/sekolah lain tidak bisa melakukan impor dari e-Perus tapi mereka bisa mengisi
+// atau menginput manual"*.
+//
+// Daftar sekolahnya disimpan di tingkat APLIKASI (`app_pengaturan` kunci `perpus_impor_sekolah`),
+// disemai SEKALI dari `PERPUS_IMPOR_NAMA` (inc/config.php) lalu dapat diubah Super Admin. Sekolah di
+// luar daftar tetap bisa MENGISI laporan secara manual — lihat bagian INPUT MANUAL di bawah.
+
+/**
+ * ID sekolah/madrasah yang boleh MENGIMPOR laporan dari e-PERPUS.
+ *
+ * Penyemaian pertama memakai nama pada `PERPUS_IMPOR_NAMA` (dinormalkan `sekolah_nama_kunci()`),
+ * setelah itu nilai tersimpan dipakai apa adanya supaya suntingan Super Admin tidak pernah ditimpa.
+ *
+ * @return array<int,int>
+ */
+function perpus_impor_sekolah_ids(): array
+{
+    $mentah = app_setting('perpus_impor_sekolah', '');
+    if (app_setting('perpus_impor_seed', '') === '') {
+        $ids = [];
+        // Nama pada konstanta dinormalkan lebih dulu — `sekolah_nama_kunci()` membuang SEMUA tanda
+        // baca & spasi ("MA. Sirojuth …" → "masirojuththolibiinmootilango"), jadi pembandingannya
+        // harus memakai bentuk yang sama di kedua sisi.
+        $baku = array_map(static fn($n): string => sekolah_nama_kunci((string) $n), PERPUS_IMPOR_NAMA);
+        try {
+            foreach (all('SELECT id, nama FROM sekolah ORDER BY id') as $s) {
+                if (in_array(sekolah_nama_kunci((string) $s['nama']), $baku, true)) {
+                    $ids[] = (int) $s['id'];
+                }
+            }
+            app_setting_set('perpus_impor_sekolah', implode(',', $ids));
+            app_setting_set('perpus_impor_seed', date('Y-m-d H:i:s'));
+        } catch (Throwable $ex) {
+            // Tabel belum siap → jangan gagalkan halaman; daftar kosong = hanya input manual.
+        }
+        return $ids;
+    }
+    $ids = [];
+    foreach (explode(',', $mentah) as $v) {
+        $n = (int) trim($v);
+        if ($n > 0 && !in_array($n, $ids, true)) {
+            $ids[] = $n;
+        }
+    }
+    return $ids;
+}
+
+/**
+ * Simpan daftar sekolah yang boleh mengimpor (hanya Super Admin yang memanggil ini).
+ *
+ * @param array<int,mixed> $ids
+ */
+function perpus_impor_sekolah_simpan(array $ids): void
+{
+    $bersih = [];
+    foreach ($ids as $v) {
+        $n = (int) $v;
+        if ($n > 0 && !in_array($n, $bersih, true)) {
+            $bersih[] = $n;
+        }
+    }
+    if ($bersih) {
+        $tanda = implode(',', array_fill(0, count($bersih), '?'));
+        $sah = [];
+        foreach (all('SELECT id FROM sekolah WHERE id IN (' . $tanda . ')', $bersih) as $r) {
+            $sah[] = (int) $r['id'];
+        }
+        $bersih = $sah;
+    }
+    app_setting_set('perpus_impor_sekolah', implode(',', $bersih));
+    app_setting_set('perpus_impor_seed', date('Y-m-d H:i:s'));
+}
+
+/** true bila sekolah ini (bawaan: konteks) boleh MENGIMPOR laporan dari e-PERPUS. */
+function perpus_impor_boleh(?int $sekolahId = null): bool
+{
+    $sid = $sekolahId ?? sekolah_id();
+    if ($sid <= 0) {
+        return false;
+    }
+    return in_array($sid, perpus_impor_sekolah_ids(), true);
+}
+
+/** Nama sekolah/madrasah yang boleh mengimpor, dipisah koma (untuk keterangan di halaman). */
+function perpus_impor_sekolah_nama(): string
+{
+    $ids = perpus_impor_sekolah_ids();
+    if (!$ids) {
+        return '';
+    }
+    $nama = [];
+    $tanda = implode(',', array_fill(0, count($ids), '?'));
+    foreach (all('SELECT nama FROM sekolah WHERE id IN (' . $tanda . ') ORDER BY nama', $ids) as $r) {
+        $nama[] = (string) $r['nama'];
+    }
+    return implode(', ', $nama);
+}
+
+/** Tulisan sumber data sebuah himpunan laporan ("e-PERPUS" / "Input manual"). */
+function perpus_sumber_teks(?array $laporan): string
+{
+    $s = strtolower(trim((string) ($laporan['sumber'] ?? '')));
+    return $s === 'eperpus' || $s === 'e-perpus' ? 'e-PERPUS' : 'Input manual';
+}
+
+// ------------------------------------------------------------------ INPUT MANUAL
+//
+// Sekolah/madrasah yang TIDAK termasuk daftar impor mengisi kelima laporan perpustakaan sendiri.
+// Datanya memakai bentuk yang SAMA dengan hasil impor (judul kolom pada `header` + baris JSON),
+// sehingga pencarian, ringkasan jumlah, dan lembar cetak bekerja tanpa perbedaan. Judul kolomnya
+// memakai kolom BAKU laporan e-PERPUS (`perpus_kolom_eperpus()`) supaya bentuk laporannya tetap sama.
+
+/** Judul kolom baku untuk pengisian manual satu jenis laporan. */
+function perpus_manual_kolom(string $jenis): array
+{
+    $k = perpus_kolom_eperpus($jenis);
+    return $k ?: ['No', 'Uraian'];
+}
+
+/**
+ * Pastikan himpunan data untuk satu jenis ADA (dibuat dengan kolom baku bila belum ada).
+ *
+ * @return array<string,mixed> baris `perpus_laporan`
+ */
+function perpus_manual_siap(string $jenis): array
+{
+    $lap = perpus_laporan($jenis);
+    if ($lap) {
+        return $lap;
+    }
+    $header = perpus_manual_kolom($jenis);
+    $user = current_user();
+    q('INSERT INTO perpus_laporan (sekolah_id, jenis, berkas, sumber, header, jumlah_baris, diimpor, oleh)
+       VALUES (?,?,?,?,?,?,?,?)',
+        [sekolah_id(), $jenis, '', 'Manual',
+         (string) json_encode($header, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+         0, date('Y-m-d H:i:s'), (string) ($user['nama'] ?? '')]);
+    return perpus_laporan($jenis) ?? [];
+}
+
+/** Satu baris dataset berdasarkan id — dibatasi sekolah + jenis laporan (anti-IDOR). */
+function perpus_baris_by_id(string $jenis, int $barisId): ?array
+{
+    $lap = perpus_laporan($jenis);
+    if (!$lap || $barisId <= 0) {
+        return null;
+    }
+    return one('SELECT * FROM perpus_baris WHERE id = ? AND laporan_id = ?', [$barisId, (int) $lap['id']]);
+}
+
+/**
+ * Susun isi satu baris dari isian formulir manual.
+ *
+ * Formulir TIDAK menanyakan kolom nomor ("No") — nomornya selalu dicetak ulang berurutan — jadi
+ * daftar nilai dari formulir digeser satu posisi bila judul kolom pertamanya "No".
+ *
+ * @param array<int,string> $header judul kolom dataset
+ * @param array<int,mixed>  $nilai  nilai per kolom sesuai urutan formulir
+ * @return array<int,string> isi baris sepanjang `$header`
+ */
+function perpus_manual_sel(array $header, array $nilai): array
+{
+    $nilai = array_values($nilai);
+    $sel = [];
+    foreach ($header as $i => $h) {
+        $j = perpus_ada_no($header) ? $i - 1 : $i;
+        $sel[] = $j < 0 ? '' : perpus_bersih($nilai[$j] ?? '', PERPUS_SEL_MAKS);
+    }
+    return $sel;
+}
+
+/**
+ * Tambah (atau ubah) SATU baris laporan secara manual.
+ *
+ * @param array<int,mixed> $nilai nilai per kolom formulir (tanpa kolom "No")
+ * @return array{ok:bool,galat:string,id:int,diubah:bool}
+ */
+function perpus_manual_simpan(string $jenis, array $nilai, int $barisId = 0): array
+{
+    $hasil = ['ok' => false, 'galat' => '', 'id' => 0, 'diubah' => false];
+    if (!perpus_jenis_ada($jenis)) {
+        $hasil['galat'] = 'Jenis laporan tidak dikenal.';
+        return $hasil;
+    }
+    $lap = perpus_manual_siap($jenis);
+    $header = perpus_header($lap);
+    if (!$header) {
+        $hasil['galat'] = 'Judul kolom laporan ini tidak terbaca. Kosongkan data lalu isi ulang.';
+        return $hasil;
+    }
+    $sel = perpus_manual_sel($header, $nilai);
+    if (implode('', $sel) === '') {
+        $hasil['galat'] = 'Isi minimal satu kolom — baris kosong tidak disimpan.';
+        return $hasil;
+    }
+    $laporanId = (int) $lap['id'];
+    $json = (string) json_encode($sel, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $cari = perpus_cari_teks($sel);
+    $user = current_user();
+    $now = date('Y-m-d H:i:s');
+
+    $lama = $barisId > 0 ? perpus_baris_by_id($jenis, $barisId) : null;
+    db()->exec('BEGIN IMMEDIATE');
+    try {
+        if ($lama) {
+            q('UPDATE perpus_baris SET isi = ?, cari = ? WHERE id = ?', [$json, $cari, (int) $lama['id']]);
+            $hasil['id'] = (int) $lama['id'];
+            $hasil['diubah'] = true;
+        } else {
+            $urutan = (int) val('SELECT COALESCE(MAX(urutan), 0) FROM perpus_baris WHERE laporan_id = ?',
+                [$laporanId], 0) + 10;
+            q('INSERT INTO perpus_baris (laporan_id, urutan, isi, cari) VALUES (?,?,?,?)',
+                [$laporanId, $urutan, $json, $cari]);
+            $hasil['id'] = (int) db()->lastInsertId();
+        }
+        q('UPDATE perpus_laporan SET diimpor = ?, oleh = ? WHERE id = ?',
+            [$now, (string) ($user['nama'] ?? ''), $laporanId]);
+        perpus_jumlah_ulang($laporanId);
+        db()->exec('COMMIT');
+    } catch (Throwable $ex) {
+        db()->exec('ROLLBACK');
+        throw $ex;
+    }
+    $hasil['ok'] = true;
+    return $hasil;
+}
+
+/** Hapus SATU baris laporan hasil input manual (anti-IDOR: harus milik sekolah + jenis ini). */
+function perpus_manual_hapus(string $jenis, int $barisId): bool
+{
+    $lama = perpus_baris_by_id($jenis, $barisId);
+    if (!$lama) {
+        return false;
+    }
+    $lap = perpus_laporan($jenis);
+    $laporanId = (int) ($lap['id'] ?? 0);
+    db()->exec('BEGIN IMMEDIATE');
+    try {
+        q('DELETE FROM perpus_baris WHERE id = ?', [(int) $lama['id']]);
+        perpus_jumlah_ulang($laporanId);
+        db()->exec('COMMIT');
+    } catch (Throwable $ex) {
+        db()->exec('ROLLBACK');
+        throw $ex;
+    }
+    return true;
+}
+
 /** URL halaman menu ini beserta pilihan jenis & saringan aktif. */
 function perpus_url(string $jenis = '', string $cari = '', int $hal = 0): string
 {
@@ -489,9 +755,47 @@ function perpus_halaman(array $tugas): void
         $jenisAksi = (string) ($_POST['jenis'] ?? '');
         if ($aksi === 'kosongkan' && perpus_jenis_ada($jenisAksi)) {
             perpus_hapus($jenisAksi);
-            flash('Data ' . perpus_jenis_nama($jenisAksi) . ' dikosongkan. Impor ulang dari e-PERPUS bila diperlukan.', 'warn');
+            flash('Data ' . perpus_jenis_nama($jenisAksi) . ' dikosongkan. Isi kembali secara manual'
+                . (perpus_impor_boleh() ? ' atau impor ulang dari e-PERPUS' : '') . ' bila diperlukan.', 'warn');
             redirect(perpus_url($jenisAksi));
         }
+
+        // INPUT MANUAL (v1.93.0) — menambah / mengubah SATU baris laporan.
+        if ($aksi === 'manual_simpan' && perpus_jenis_ada($jenisAksi)) {
+            $hasil = perpus_manual_simpan($jenisAksi, (array) ($_POST['sel'] ?? []),
+                (int) ($_POST['baris'] ?? 0));
+            if (!$hasil['ok']) {
+                flash($hasil['galat'], 'err');
+            } else {
+                flash('Baris ' . perpus_jenis_nama($jenisAksi) . ' ' . ($hasil['diubah'] ? 'diperbarui' : 'ditambahkan')
+                    . '. Isi terus baris berikutnya, atau cetak laporannya bila sudah lengkap.', 'ok');
+            }
+            redirect(perpus_url($jenisAksi));
+        }
+
+        // INPUT MANUAL — menghapus SATU baris laporan.
+        if ($aksi === 'manual_hapus' && perpus_jenis_ada($jenisAksi)) {
+            if (perpus_manual_hapus($jenisAksi, (int) ($_POST['baris'] ?? 0))) {
+                flash('Satu baris ' . perpus_jenis_nama($jenisAksi) . ' dihapus.', 'warn');
+            } else {
+                flash('Baris yang ingin dihapus tidak ditemukan — mungkin sudah dihapus sebelumnya.', 'err');
+            }
+            redirect(perpus_url($jenisAksi));
+        }
+
+        // PENGATURAN SUPER ADMIN: sekolah/madrasah yang boleh mengimpor dari e-PERPUS.
+        if ($aksi === 'impor_sekolah_simpan') {
+            if (!is_super()) {
+                tolak403('Hanya Super Admin yang dapat mengatur sekolah/madrasah yang boleh mengimpor dari e-PERPUS.');
+            }
+            perpus_impor_sekolah_simpan((array) ($_POST['sekolah'] ?? []));
+            $daftar = perpus_impor_sekolah_nama();
+            flash('Penyetelan impor e-PERPUS disimpan. ' . ($daftar === ''
+                ? 'Tidak ada sekolah/madrasah yang boleh mengimpor — seluruhnya mengisi laporan secara manual.'
+                : 'Yang boleh mengimpor: ' . $daftar . '. Sekolah/madrasah lain mengisi laporan secara manual.'), 'ok');
+            redirect(perpus_url($jenisAksi));
+        }
+
         redirect(perpus_url());
     }
 
@@ -515,10 +819,28 @@ function perpus_halaman(array $tugas): void
         $hal = $halamanTotal;
     }
     $tampil = array_slice($semua, ($hal - 1) * $perHalaman, $perHalaman);
+    $tampilId = array_slice($D['ids'], ($hal - 1) * $perHalaman, $perHalaman);
     $totals = perpus_totals($header, $semua, $jenis);
     $adaNo = perpus_ada_no($header);
     $jumlahJenis = perpus_ringkas_jenis();
     $namaSekolah = nama_sekolah_tampil();
+
+    // Impor dari e-PERPUS hanya untuk sekolah/madrasah pada daftar (permintaan pemilik v1.93.0);
+    // sekolah lain mengisi laporan lewat INPUT MANUAL di halaman ini.
+    $bolehImpor = perpus_impor_boleh();
+    $imporNama = perpus_impor_sekolah_nama();
+    // Kolom yang diisikan pada formulir manual = judul kolom dataset (kolom "No" tidak ditanyakan).
+    $kolomManual = $laporan ? $header : perpus_manual_kolom($jenis);
+    $adaNoManual = perpus_ada_no($kolomManual);
+    if ($adaNoManual) {
+        $kolomManual = array_slice($kolomManual, 1);
+    }
+    $editId = (int) ($_GET['edit'] ?? 0);
+    $editRow = $editId > 0 ? perpus_baris_by_id($jenis, $editId) : null;
+    $editSel = $editRow ? perpus_isi($editRow) : [];
+    if ($adaNoManual && $editSel) {
+        $editSel = array_slice($editSel, 1);   // kolom "No" tidak ditampilkan pada formulir
+    }
 
     page_top($namaMenu, 'Laporan Perpustakaan &middot; ' . tetap_kata($namaSekolah));
     ?>
@@ -526,8 +848,16 @@ function perpus_halaman(array $tugas): void
   <div class="card-head">
     <div>
       <h2><?= ikon('book', 16) ?> <?= e($namaMenu) ?> &mdash; Laporan Perpustakaan</h2>
-      <p>Lima laporan perpustakaan <?= tetap_kata($namaSekolah) ?> yang <b>diimpor dari hasil unduhan
-        aplikasi e-PERPUS</b>, lengkap dengan fitur cetak untuk setiap laporan.</p>
+      <p>Lima laporan perpustakaan <?= tetap_kata($namaSekolah) ?>:
+        <?php if ($bolehImpor): ?>
+          <b>diimpor dari hasil unduhan aplikasi e-PERPUS</b> atau diisi manual, lengkap dengan fitur
+          cetak untuk setiap laporan.
+        <?php else: ?>
+          <b>diisi secara manual</b> pada halaman ini (impor dari e-PERPUS hanya berlaku untuk
+          <?= $imporNama !== '' ? tetap_kata($imporNama) : 'sekolah/madrasah yang ditetapkan Admin' ?>),
+          lengkap dengan fitur cetak untuk setiap laporan.
+        <?php endif; ?>
+      </p>
     </div>
     <div class="flex">
       <span class="chip"><?= (int) $total ?> baris pada laporan ini</span>
@@ -535,7 +865,10 @@ function perpus_halaman(array $tugas): void
         <a class="btn btn-ghost btn-sm" href="cetak_perpus.php?jenis=<?= e($jenis) ?><?= $cari !== '' ? '&cari=' . e(rawurlencode($cari)) : '' ?>" target="_blank"><?= ikon('print', 15) ?> Cetak <?= e(perpus_jenis_nama($jenis)) ?></a>
       <?php endif; ?>
       <?php if ($bolehUbah): ?>
-        <a class="btn btn-primary btn-sm" href="perpus_import.php?jenis=<?= e($jenis) ?>"><?= ikon('upload', 15) ?> Impor dari e-PERPUS</a>
+        <a class="btn btn-primary btn-sm" href="#cardManual"><?= ikon('plus', 15) ?> Isi Manual</a>
+        <?php if ($bolehImpor): ?>
+          <a class="btn btn-ghost btn-sm" href="perpus_import.php?jenis=<?= e($jenis) ?>"><?= ikon('upload', 15) ?> Impor dari e-PERPUS</a>
+        <?php endif; ?>
       <?php endif; ?>
     </div>
   </div>
@@ -558,16 +891,19 @@ function perpus_halaman(array $tugas): void
     <?php endforeach; ?>
   </div>
 
-  <?php if (!$laporan): ?>
+  <?php if (!$laporan || ($total === 0 && $cari === '')): ?>
     <div class="empty">
-      <?= ikon('upload', 38) ?>
+      <?= ikon($bolehImpor ? 'upload' : 'edit', 38) ?>
       <h3>Belum ada data <?= e(perpus_jenis_nama($jenis)) ?></h3>
-      <?php // Petunjuk pengimporan hanya untuk yang BISA mengimpor (guru yang ditugaskan /
-            // Super Admin); kepala & operator hanya melihat, jadi diberi keterangan singkat. ?>
+      <?php // Petunjuk pengisian hanya untuk yang BISA mengubah (guru yang ditugaskan / Super Admin);
+            // kepala & operator hanya melihat, jadi diberi keterangan singkat. ?>
       <p><?= $bolehUbah
-        ? 'Laporan ini belum diimpor dari aplikasi e-PERPUS. Cara mengisinya:'
+        ? ($bolehImpor
+            ? 'Laporan ini belum diisi. Pilih salah satu cara di bawah (impor dari e-PERPUS atau isi manual):'
+            : 'Laporan ini belum diisi. Impor dari e-PERPUS tidak tersedia untuk '
+              . tetap_kata($namaSekolah) . ', jadi isilah datanya secara manual:')
         : pesan_kosong_hanya_lihat('laporan ' . perpus_jenis_nama($jenis)) ?></p>
-      <?php if ($bolehUbah): ?>
+      <?php if ($bolehUbah && $bolehImpor): ?>
       <ol class="list-ok" style="text-align:left;max-width:640px;margin:14px auto 0">
         <li>Buka aplikasi <b>e-PERPUS</b> → menu <b>Laporan</b> → pilih
           <b><?= e(perpus_jenis_nama($jenis)) ?></b> (untuk Data Anggota bisa juga lewat
@@ -576,21 +912,36 @@ function perpus_halaman(array $tugas): void
         <li>Kembali ke halaman ini, klik <b>Impor dari e-PERPUS</b>, pilih berkasnya, periksa
           pratinjaunya, lalu klik <b>Impor Sekarang</b>.</li>
       </ol>
+      <?php elseif ($bolehUbah): ?>
+      <ol class="list-ok" style="text-align:left;max-width:640px;margin:14px auto 0">
+        <li>Gulir ke kartu <b>Input Manual — <?= e(perpus_jenis_nama($jenis)) ?></b> di bagian bawah
+          halaman ini.</li>
+        <li>Isi kolom <b><?= e(implode(', ', $kolomManual)) ?></b> untuk satu baris data, lalu klik
+          <b>Simpan Baris</b>.</li>
+        <li>Ulangi untuk baris berikutnya — tombol <b>Ubah</b>/<b>Hapus</b> tersedia pada tabel di
+          atas. Cetak laporannya bila sudah lengkap.</li>
+      </ol>
       <?php endif; ?>
       <?php if ($bolehUbah): ?>
         <div class="flex" style="justify-content:center">
-          <a class="btn btn-primary" href="perpus_import.php?jenis=<?= e($jenis) ?>"><?= ikon('upload', 16) ?> Impor dari e-PERPUS</a>
+          <a class="btn btn-primary" href="#cardManual"><?= ikon('plus', 16) ?> Isi Manual Sekarang</a>
+          <?php if ($bolehImpor): ?>
+            <a class="btn btn-ghost" href="perpus_import.php?jenis=<?= e($jenis) ?>"><?= ikon('upload', 16) ?> Impor dari e-PERPUS</a>
+          <?php endif; ?>
         </div>
       <?php endif; ?>
     </div>
   <?php else: ?>
     <div class="alert alert-ok" style="background:rgba(201,162,39,.07);border-color:rgba(201,162,39,.45)">
       <?= ikon('doc', 16) ?>
-      <span>Sumber data: <b><?= e((string) ($laporan['berkas'] ?: '(berkas tanpa nama)')) ?></b>
-        &middot; diimpor <?= waktu_id((string) $laporan['diimpor']) ?>
+      <span>Sumber data: <b><?= e(perpus_sumber_teks($laporan)) ?></b>
+        <?php if (trim((string) $laporan['berkas']) !== ''): ?>
+          &middot; berkas <b><?= e((string) $laporan['berkas']) ?></b>
+        <?php endif; ?>
+        &middot; diperbarui <?= waktu_id((string) $laporan['diimpor']) ?>
         <?= trim((string) $laporan['oleh']) !== '' ? 'oleh ' . e((string) $laporan['oleh']) : '' ?>
         &middot; <?= (int) $laporan['jumlah_baris'] ?> baris, <?= count($header) ?> kolom.
-        <?php if ($bolehUbah): ?>Impor ulang akan <b>menggantikan</b> data laporan ini.<?php endif; ?></span>
+        <?php if ($bolehUbah && $bolehImpor): ?>Impor ulang akan <b>menggantikan</b> data laporan ini.<?php endif; ?></span>
     </div>
 
     <div class="flex mb16" style="flex-wrap:wrap;gap:10px;align-items:flex-end">
@@ -634,12 +985,13 @@ function perpus_halaman(array $tugas): void
                 <th class="ctr">No</th>
                 <?php foreach ($header as $h): ?><th><?= e($h) ?></th><?php endforeach; ?>
               <?php endif; ?>
+              <?php if ($bolehUbah): ?><th class="ctr" style="width:132px">Tindakan</th><?php endif; ?>
             </tr>
           </thead>
           <tbody>
           <?php
           $no = ($hal - 1) * $perHalaman;
-          foreach ($tampil as $row):
+          foreach ($tampil as $barisKe => $row):
               $no++;
               $sel = $row;
               if ($adaNo) {
@@ -651,6 +1003,24 @@ function perpus_halaman(array $tugas): void
               <?php foreach ($sel as $v): ?>
                 <td class="potong" title="<?= e((string) $v) ?>"><?= e((string) $v) ?></td>
               <?php endforeach; ?>
+              <?php if ($bolehUbah): $barisId = (int) ($tampilId[$barisKe] ?? 0); ?>
+                <td class="ctr">
+                  <div class="row-actions">
+                    <?php if ($barisId > 0): ?>
+                      <a class="btn btn-ghost btn-sm" href="<?= e(perpus_url($jenis)) ?>&edit=<?= $barisId ?>#cardManual"><?= ikon('edit', 13) ?> Ubah</a>
+                      <form method="post" data-confirm="Hapus satu baris <?= e(perpus_jenis_nama($jenis)) ?> ini?">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="aksi" value="manual_hapus">
+                        <input type="hidden" name="jenis" value="<?= e($jenis) ?>">
+                        <input type="hidden" name="baris" value="<?= $barisId ?>">
+                        <button class="btn btn-danger btn-sm" type="submit"><?= ikon('trash', 13) ?> Hapus</button>
+                      </form>
+                    <?php else: ?>
+                      <span class="mut xs">—</span>
+                    <?php endif; ?>
+                  </div>
+                </td>
+              <?php endif; ?>
             </tr>
           <?php endforeach; ?>
           </tbody>
@@ -671,6 +1041,7 @@ function perpus_halaman(array $tugas): void
                 ?>
                   <th class="<?= $t ? 'ctr' : '' ?>"><?= $t ? e(perpus_angka((int) $t['nilai'], (bool) $t['rp'])) : '' ?></th>
                 <?php endfor; ?>
+                <?php if ($bolehUbah): ?><th></th><?php endif; ?>
               </tr>
             </tfoot>
           <?php endif; ?>
@@ -702,13 +1073,126 @@ function perpus_halaman(array $tugas): void
         <input type="hidden" name="aksi" value="kosongkan">
         <input type="hidden" name="jenis" value="<?= e($jenis) ?>">
         <span class="xs mut">Hapus seluruh data <?= e(perpus_jenis_nama($jenis)) ?> pada
-          <?= tetap_kata($namaSekolah) ?>? Lembar cetak ikut kosong sampai diimpor ulang.</span>
+          <?= tetap_kata($namaSekolah) ?>? Lembar cetak ikut kosong sampai datanya diisi lagi.</span>
         <button class="btn btn-ghost btn-sm" type="submit"
                 data-confirm="Kosongkan seluruh data <?= e(perpus_jenis_nama($jenis)) ?>?"><?= ikon('trash', 15) ?> Kosongkan Data</button>
       </form>
     <?php endif; ?>
   <?php endif; ?>
 </div>
+
+<?php if ($bolehUbah): ?>
+<?php // ---------------------------------------------------------------- INPUT MANUAL ?>
+<div class="card" id="cardManual">
+  <div class="card-head">
+    <div>
+      <h2><?= ikon($editRow ? 'edit' : 'plus', 16) ?> Input Manual &mdash; <?= e(perpus_jenis_nama($jenis)) ?></h2>
+      <p>Isi laporan <b>satu baris sekaligus</b> — kolomnya sama dengan kolom baku laporan e-PERPUS
+        supaya bentuk cetaknya tetap seragam.
+        <?php if ($bolehImpor): ?>
+          Data hasil impor dari e-PERPUS juga dapat ditambah/diubah di sini.
+        <?php else: ?>
+          <b>Impor dari e-PERPUS tidak berlaku</b> untuk <?= tetap_kata($namaSekolah) ?>, jadi seluruh
+          data laporan diisi lewat formulir ini.
+        <?php endif; ?>
+      </p>
+    </div>
+    <div class="flex">
+      <span class="chip"><?= (int) $total ?> baris tersimpan</span>
+      <?php if ($editRow): ?>
+        <a class="btn btn-ghost btn-sm" href="<?= e(perpus_url($jenis)) ?>#cardManual"><?= ikon('prev', 14) ?> Batal Ubah</a>
+      <?php endif; ?>
+    </div>
+  </div>
+
+  <form method="post" class="apps-form" id="formManual" style="margin-bottom:0">
+    <?= csrf_field() ?>
+    <input type="hidden" name="aksi" value="manual_simpan">
+    <input type="hidden" name="jenis" value="<?= e($jenis) ?>">
+    <input type="hidden" name="baris" value="<?= $editRow ? (int) $editRow['id'] : 0 ?>">
+    <div class="apps-form-judul">
+      <?= ikon($editRow ? 'edit' : 'plus', 16) ?>
+      <b><?= $editRow ? 'Ubah Baris' : 'Baris Baru' ?></b>
+      <span class="xs mut"><?= $editRow ? 'Perbarui isinya lalu klik Simpan Baris.' : 'Isi minimal satu kolom.' ?></span>
+    </div>
+    <div class="form-grid g3">
+      <?php foreach ($kolomManual as $i => $label): ?>
+        <div>
+          <label class="f" for="sel<?= (int) $i ?>"><?= e($label) ?></label>
+          <input type="text" id="sel<?= (int) $i ?>" name="sel[]" maxlength="<?= (int) PERPUS_SEL_MAKS ?>"
+                 value="<?= e((string) ($editSel[$i] ?? '')) ?>"
+                 <?= $i === 0 ? 'autofocus' : '' ?>>
+        </div>
+      <?php endforeach; ?>
+    </div>
+    <div class="flex mt16">
+      <button class="btn btn-primary" type="submit"><?= ikon('save', 16) ?> <?= $editRow ? 'Simpan Perubahan' : 'Simpan Baris' ?></button>
+      <span class="xs mut">Baris baru diletakkan paling bawah; kolom <b>No</b> selalu dinomori ulang
+        otomatis, jadi tidak perlu diisi.</span>
+    </div>
+  </form>
+</div>
+<?php endif; ?>
+
+<?php if (is_super()): ?>
+<?php // ---------------------------------------------------------------- pengaturan impor e-PERPUS (Super Admin) ?>
+<div class="card" id="cardImporSekolah">
+  <div class="card-head">
+    <div>
+      <h2><?= ikon('upload', 16) ?> Sekolah/Madrasah yang Boleh Mengimpor dari e-PERPUS</h2>
+      <p>Hanya sekolah/madrasah yang <b>dicentang</b> di bawah ini yang dapat mengimpor laporan
+        perpustakaan dari e-PERPUS. Sekolah/madrasah lain <b>tetap dapat mengisi laporan secara
+        manual</b> (menu ini tidak tertutup untuk mereka).</p>
+    </div>
+    <div class="flex"><span class="chip"><?= count(perpus_impor_sekolah_ids()) ?> sekolah boleh impor</span></div>
+  </div>
+
+  <?php
+  $semuaSekolah = [];
+  try {
+      $semuaSekolah = all('SELECT id, nama, jenis FROM sekolah ORDER BY nama');
+  } catch (Throwable $ex) {
+      $semuaSekolah = [];
+  }
+  $idImpor = perpus_impor_sekolah_ids();
+  ?>
+  <?php if (!$semuaSekolah): ?>
+    <div class="empty"><?= ikon('school', 30) ?><h3>Belum ada sekolah/madrasah</h3>
+      <p>Tambahkan sekolah/madrasah dulu lewat menu Kelola Sekolah/Madrasah.</p></div>
+  <?php else: ?>
+    <form method="post">
+      <?= csrf_field() ?>
+      <input type="hidden" name="aksi" value="impor_sekolah_simpan">
+      <input type="hidden" name="jenis" value="<?= e($jenis) ?>">
+      <div class="table-wrap">
+        <table class="tbl" id="tblImporSekolah">
+          <thead><tr><th class="ctr" style="width:44px">Impor</th><th>Nama Sekolah/Madrasah</th>
+            <th>Jenis</th><th class="ctr">Laporan Tersimpan</th></tr></thead>
+          <tbody>
+          <?php foreach ($semuaSekolah as $s): $sid = (int) $s['id']; ?>
+            <tr>
+              <td class="ctr"><input type="checkbox" name="sekolah[]" value="<?= $sid ?>"
+                    style="width:16px;height:16px;accent-color:var(--accent)"
+                    <?= in_array($sid, $idImpor, true) ? 'checked' : '' ?>></td>
+              <td><?= tetap_kata((string) $s['nama']) ?></td>
+              <td class="xs mut"><?= e(($s['jenis'] ?? '') === 'madrasah' ? 'Madrasah' : 'Sekolah Umum') ?></td>
+              <td class="ctr xs mut">
+                <?= (int) val('SELECT COUNT(*) FROM perpus_laporan WHERE sekolah_id = ?', [$sid], 0) ?> laporan
+              </td>
+            </tr>
+          <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+      <div class="flex mt16">
+        <button class="btn btn-primary" type="submit"><?= ikon('save', 16) ?> Simpan Penyetelan Impor</button>
+        <span class="xs mut">Tidak ada yang dicentang = <b>tidak ada satu pun</b> sekolah yang boleh impor;
+          semuanya mengisi laporan secara manual.</span>
+      </div>
+    </form>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
     <?php
     page_bottom();
 }
