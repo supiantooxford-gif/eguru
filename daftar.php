@@ -28,6 +28,105 @@ if (current_user()) {
 $err = [];
 $sukses = null;
 
+// ============================================================================
+// GERBANG PENDAFTARAN DITUTUP (v1.97.0)
+// ----------------------------------------------------------------------------
+// Permintaan pemilik: *"Pada akun super admin tambahkan fitur untuk menutup pendaftaran
+// sekolah/madrasah. Ketika pendaftaran ditutup berikan keterangan bahwa jumlah pendaftar telah
+// mencapai batas yang ditetapkan oleh sistem. Silahkan hubungi admin di WA 081356964665"*.
+//
+// Diperiksa SEBELUM formulir diproses (bukan hanya disembunyikan di tampilan), sehingga POST
+// langsung ke halaman ini pun TIDAK dapat membuat sekolah baru selama pendaftaran ditutup.
+// Keadaannya satu sumber: `daftar_status_info()` (inc/helpers.php) — ditutup karena diubah Super
+// Admin ATAU karena jumlah pendaftar sudah mencapai batas yang ditetapkan.
+// ============================================================================
+$pendaftaran = daftar_status_info();
+if ($pendaftaran['tutup']) {
+    ?>
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pendaftaran Ditutup &middot; <?= e(APP_NAME) ?></title>
+<link rel="stylesheet" href="assets/style.css?v=<?= e(APP_VERSION) ?>">
+<?php if (ada_logo_aplikasi()): ?>
+<link rel="icon" href="<?= e(logo_aplikasi()) ?>">
+<?php else: ?>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128218;</text></svg>">
+<?php endif; ?>
+</head>
+<body>
+<div class="bg-deco" aria-hidden="true"><span class="b1"></span><span class="b2"></span><span class="b3"></span></div>
+
+<div class="daftar-wrap">
+  <div class="daftar-inner">
+    <div class="daftar-head">
+      <?php if (ada_logo_aplikasi()): ?>
+        <div class="daftar-logo daftar-logo-img"><img src="<?= e(logo_aplikasi()) ?>" alt="Logo <?= e(APP_NAME) ?>"></div>
+      <?php else: ?>
+        <div class="daftar-logo"><?= ikon('mosque', 28) ?></div>
+      <?php endif; ?>
+      <div>
+        <h1>Pendaftaran Sekolah/Madrasah Ditutup</h1>
+        <p><?= e(APP_NAME) ?> &middot; <?= e(APP_SUB) ?></p>
+      </div>
+      <div class="daftar-head-kanan">
+        <a class="btn btn-ghost btn-sm" href="login.php"><?= ikon('lock', 15) ?> Halaman Masuk</a>
+      </div>
+    </div>
+
+    <div class="card" id="kartuPendaftaranTutup">
+      <div class="empty" style="padding:26px 18px 16px">
+        <?= ikon('lock', 42) ?>
+        <h3>Pendaftaran Sekolah/Madrasah Ditutup</h3>
+        <?php // Kalimat PERSIS permintaan pemilik (nomor WA mengikuti pengaturan Super Admin). ?>
+        <p class="pendaftaran-tutup-pesan"><b><?= e($pendaftaran['pesan']) ?></b></p>
+      </div>
+
+      <?php // ==========================================================================
+            // TOMBOL BERKEDIP MERAH (v1.97.1) — permintaan pemilik: *"Pada yang saya tandai
+            // warna merah Buat tombol berkedip-kedip warna merah dan tulisannya ganti dengan
+            // 'Pendaftaran Sekolah/Madrasah Ditutup'"*.
+            // Kotak peringatan (`.alert alert-warn`) yang lama DIGANTI tombol ini; gayanya ada di
+            // `assets/style.css` (`.tombol-tutup-kedip`) — bukan <style> di halaman.
+            // Tombol ini BUKAN tautan (tidak ada aksi) — hanya penanda keadaan.
+            // ========================================================================== ?>
+      <div class="tombol-tutup-kedip" id="tombolPendaftaranTutup" role="status">
+        <?= ikon('lock', 18) ?>
+        <span>Pendaftaran Sekolah/Madrasah Ditutup</span>
+      </div>
+
+      <?php // v1.98.1 (permintaan pemilik): baris "Jumlah sekolah/madrasah yang sudah terdaftar: …
+            // dari batas …" DIHAPUS dari halaman ini. ?>
+      <p class="sm mut" style="margin:0 0 14px">
+        <?php // Permintaan pemilik (v1.97.1): kata "admin" diganti "sistem" pada kalimat ini. ?>
+        Pendaftaran baru tidak dapat dilakukan sampai <b>sistem</b> membuka kembali pendaftaran.
+        Bila lembaga Anda perlu didaftarkan, silakan hubungi Admin aplikasi melalui WhatsApp.
+      </p>
+
+      <div class="flex" style="justify-content:center">
+        <a class="btn btn-primary" id="waPendaftaranTutup" href="<?= e($pendaftaran['tautan']) ?>"
+           target="_blank" rel="noopener noreferrer">
+          <?= ikon('whatsapp', 16) ?> Hubungi Admin di WA <?= e($pendaftaran['wa']) ?>
+        </a>
+        <a class="btn btn-ghost" href="login.php"><?= ikon('lock', 16) ?> Halaman Masuk</a>
+      </div>
+    </div>
+
+    <div class="daftar-foot">
+      <div><?= e(APP_NAME) ?> — <?= e(APP_SUB) ?> Versi <?= e(APP_VERSION) ?></div>
+      <div class="mt8" style="font-weight:600;color:var(--ink)">Dikembangkan oleh <?= e(APP_AUTHOR) ?> (<?= e(APP_AUTHOR_JABATAN) ?>)</div>
+    </div>
+  </div>
+</div>
+<script src="assets/app.js?v=<?= e(APP_VERSION) ?>"></script>
+</body>
+</html>
+    <?php
+    exit;
+}
+
 $nilai = [
     // v37: identitas lembaga memuat NSM + alamat per wilayah (menyesuaikan Identitas & Pengaturan).
     // Semua kunci di sini otomatis dibaca dari POST lewat foreach di bawah.
@@ -126,8 +225,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$err && one('SELECT id FROM users WHERE username = ?', [$nilai['username']])) {
         $err[] = 'Nama pengguna "' . $nilai['username'] . '" sudah dipakai akun lain. Pilih nama pengguna lain.';
     }
-    if (!$err && one('SELECT id FROM sekolah WHERE lower(nama) = lower(?)', [$nilai['nama']])) {
-        $err[] = 'Sekolah/madrasah dengan nama itu sudah terdaftar. Hubungi Admin bila ini kekeliruan.';
+    // ========================================================================
+    // TOLAK PENDAFTARAN BILA DATA SUDAH ADA / GANDA (v1.98.0)
+    // Permintaan pemilik: *"Buat aplikasi menolak pendaftaran baru ketika terdeteksi sudah ada Nama
+    // sekolah/madrasah dan juga ketika terdeteksi sudah ada nama kepala sekolah/madrasah di dalam
+    // sistem. Tujuannya agar tidak terjadi data ganda. Pendaftaran dapat dilakukan ketika data
+    // sekolah/madrasah dihapus dulu oleh super admin"*.
+    //
+    // SATU ATURAN: `sekolah_ganda_pesan()` (inc/helpers.php) — dipakai juga oleh `sekolah.php`.
+    // Pembandingnya TIDAK sebatas sama persis: beda huruf besar/kecil, spasi, dan tanda baca
+    // dianggap sama (lihat `nama_banding_kunci()`). Baris sekolah yang DINONAKTIFKAN tetap
+    // dihitung, jadi nama baru bebas dipakai lagi HANYA setelah data lamanya dihapus Super Admin.
+    // Diperiksa di SERVER (bukan hanya di tampilan) supaya tetap berlaku walau JavaScript mati.
+    // ========================================================================
+    if (!$err) {
+        foreach (sekolah_ganda_pesan($nilai['nama'], $nilai['kepala_sekolah']) as $pesanGanda) {
+            $err[] = $pesanGanda . ' Pendaftaran dapat dilakukan setelah Super Admin menghapus data '
+                . 'sekolah/madrasah tersebut. Bila ini kekeliruan, hubungi Admin di WA ' . daftar_wa() . '.';
+        }
     }
 
     // NSM hanya milik MADRASAH (permintaan pemilik): medan ini TIDAK ditampilkan pada jenis

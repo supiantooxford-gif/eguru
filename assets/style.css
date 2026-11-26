@@ -141,7 +141,9 @@ svg.ic{flex:0 0 auto}
    berbunyi **Bonus** (`DAFTAR_APPS_BARU_TEKS`) dan diletakkan **SEBARIS DI ATAS nama menu** lewat
    wadah `.nav-nama`.
    Kedipan memakai `opacity` (bukan warna) supaya kontras huruf tetap terjaga, dan dimatikan bagi
-   pengguna yang mengaktifkan "kurangi gerakan" pada perangkatnya. */
+   pengguna yang mengaktifkan "kurangi gerakan" pada perangkatnya.
+   v1.99.0: lencana tampil TERUS selama tanda bonus dipasang (batas 30 hari dihapus) — gaya tidak
+   berubah, jadi pengguna yang sudah mengenal lencana merah berkedip ini tidak perlu adaptasi. */
 @keyframes newKedip{
   0%,100%{opacity:1}
   50%{opacity:.32}
@@ -271,7 +273,12 @@ table.tbl tbody tr:hover td{background:var(--emas-muda)}
 .tbl .num{text-align:right;font-variant-numeric:tabular-nums}
 .tbl .ctr{text-align:center}
 .tbl-sub{display:block;color:var(--muted);font-size:.74rem;margin-top:2px}
-.row-actions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+.row-actions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;align-items:center}
+/* Tombol POST di dalam baris tabel (mis. "Batal" pada Riwayat Penilaian PKG) — formulirnya harus
+   menjadi butir flex biasa supaya tombolnya SEJAJAR dengan tombol tautan di sebelahnya (tanpa
+   margin bawaan formulir). Kelas `.row-form` sengaja khusus: menyasar `.row-actions form` akan ikut
+   mengubah formulir pada halaman lain (mis. perangkat.php / video_tutorial.php). */
+.row-form{margin:0;display:flex;align-items:center}
 /* Baris JUMLAH pada tabel ringkasan (permintaan pemilik): total kelas/guru/siswa/mapel/jurnal/nilai
    dari seluruh sekolah/madrasah yang terdaftar di atasnya — dibuat menonjol dengan latar emas muda. */
 table.tbl tfoot td{
@@ -438,6 +445,23 @@ details.editbox > summary:hover{text-decoration:underline}
 .mini-avatar{display:inline-flex;align-items:center;gap:9px}
 .mini-avatar .avatar{font-size:.78rem}
 .foto-cetak{width:28mm;height:38mm;border:1px solid #b9b6a8;object-fit:cover;display:block}
+
+/* ---------- TANDA TANGAN KEPALA & CAP/STEMPEL pada kartu Logo (v1.104.0) ----------
+   Dua kotak unggahan berdampingan di dalam kartu "Logo (Kop Dokumen Cetak)", ditambah baris
+   SAKELAR aktif/nonaktif (permintaan pemilik: "bisa diaktifkan dan non aktifkan oleh Operator").
+   Pratinjau memakai object-fit:contain supaya bentuk tanda tangan maupun cap tidak terpotong. */
+.ttdcap-baris{display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));gap:16px;margin-top:12px}
+.ttdcap-kotak{display:flex;flex-direction:column;gap:8px;padding:14px;border:1px solid var(--line);
+  border-radius:12px;background:#fff;min-width:0}
+.ttdcap-judul{font-size:.85rem;font-weight:700;color:var(--hijau-tua)}
+.ttdcap-kotak input[type=file]{max-width:100%}
+.ttdcap-pratinjau{min-height:92px;display:grid;place-items:center;padding:8px;border-radius:10px;
+  border:1px dashed rgba(11,74,51,.32);background:#fbfdfb}
+.ttdcap-pratinjau img{display:block;max-width:100%;max-height:86px;object-fit:contain}
+.ttdcap-saklar{display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap;
+  margin-top:16px;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--hijau-muda)}
+.ttdcap-saklar-teks{display:flex;flex-wrap:wrap;gap:8px;align-items:center;flex:1 1 260px;min-width:0}
+.ttdcap-saklar-teks .hint{flex:1 1 100%;margin-top:0}
 
 /* ---------- Pas foto siswa 3 x 4 (form Tambah/Ubah Data Siswa) ----------
    Kotak pratinjau 96 x 128 px = rasio 3:4 persis, gambar di-crop dari ATAS supaya
@@ -1110,6 +1134,30 @@ table.sheet thead tr.sub th{font-size:.72rem;color:var(--muted);font-weight:700}
    bukan oleh kelas. Urutan yang dipakai aplikasi ini: kepala di KIRI, guru di KANAN. */
 .sheet-foot.dua-ttd .sheet-sign{flex:1 1 0;min-width:0;text-align:center}
 
+/* ======== TANDA TANGAN KEPALA & CAP/STEMPEL LEMBAGA PADA LEMBAR CETAK (v1.104.0) ========
+   Permintaan pemilik: "tambahkan fitur untuk upload Tanda tangan kepala sekolah/madrasah dan
+   Cap/Stempel sekolah" — keduanya dicetak pada blok "Mengetahui, Kepala …" di SELURUH dokumen
+   cetak, dan keputusan pemilik: **cap MENIMPA tanda tangan** (seperti dokumen resmi, agak menutupi
+   nama). Hanya dipakai bila Operator menyalakan sakelarnya (`ttd_cap_aktif`) dan ada berkas yang
+   diunggah; blok lain tidak memakai kelas ini sama sekali.
+   .space-ttd-sekolah sedikit lebih tinggi dari bawaan (62px) supaya cap/stempel yang lebih besar
+   dari tanda tangan tetap masuk tanpa memotong gambarnya. */
+.sheet-sign .space.space-ttd-sekolah{height:80px}
+/* Dibuat ABSOLUT memenuhi ruang tanda tangan supaya tanda tangan digital (Notulen Rapat) dan
+   tombol tanda tangan tetap berada pada aliran normal di atasnya — tanpa ini gambar lembaga
+   mengambil satu baris flex dan mendesak tanda tangan digital ke samping. */
+.ttd-sekolah{position:absolute;left:0;right:0;top:0;bottom:0;z-index:0;pointer-events:none;
+  display:flex;align-items:center;justify-content:center}
+.ttd-sekolah .ttd-gambar-kepala{display:block;max-height:60px;max-width:82%;object-fit:contain}
+/* Cap/stempel DITUMPUK di atas tanda tangan (mix-blend-mode:multiply membuat latar putih hasil
+   pindaian cap menjadi transparan sehingga tanda tangan di bawahnya tetap terlihat). */
+.ttd-sekolah .cap-gambar{position:absolute;right:4%;top:50%;transform:translateY(-50%);
+  display:block;max-height:74px;max-width:48%;object-fit:contain;mix-blend-mode:multiply;opacity:.95}
+@media print{
+  .ttd-sekolah .ttd-gambar-kepala{max-height:60px}
+  .ttd-sekolah .cap-gambar{max-height:74px}
+}
+
 /* ================= TANDA TANGAN LANGSUNG DI LAYAR SENTUH (notulen rapat, v1.70.0) =================
    Permintaan pemilik: "Pada notulen rapat buat tanda tangan langsung lewat HP seperti aplikasi
    TUSmart". Tombol "Tanda Tangan" DICETAK SERVER dengan atribut `hidden` dan hanya dimunculkan
@@ -1224,6 +1272,158 @@ dialog.ttd-dialog::backdrop{background:rgba(9,32,23,.55)}
 .chip-list.warna > .chip:nth-child(6n+4).on{background:linear-gradient(150deg,#227792,#14556b);border-color:transparent;color:#fff}
 .chip-list.warna > .chip:nth-child(6n+5).on{background:linear-gradient(150deg,#5f4ea0,#43357a);border-color:transparent;color:#fff}
 .chip-list.warna > .chip:nth-child(6n+6).on{background:linear-gradient(150deg,#8a6329,#6a4a1e);border-color:transparent;color:#fff}
+
+/* ===== BARIS TAB + KETERANGAN pada menu daftar aplikasi BERTAB (v1.105.1) =====
+   Permintaan pemilik: *"dibuat lebih rapi karena saat ini saling berdempetan antara tulisan dan
+   tab"*. Sebelumnya keterangan di bawah pil tab memakai `margin-top` NEGATIF (-6px) sehingga
+   tulisannya menumpuk di tepi bawah pil. Sekarang jaraknya diatur di sini:
+     • `.apps-kat`     — baris pil tab (jarak antar-baris 8px bila terlipat, jarak ke bawah 0 karena
+                         keterangannya sudah punya jarak sendiri);
+     • `.apps-kat-ket` — keterangan di bawahnya, diberi jarak atas 10px + garis putus-putus halus
+                         sebagai pemisah supaya jelas bukan bagian dari pil.
+   JANGAN mengembalikan margin negatif pada elemen mana pun di blok ini. */
+.apps-kat{margin:2px 0 0;row-gap:8px}
+.apps-kat + .apps-kat-ket,
+p.apps-kat-ket{
+  margin:12px 0 18px;padding-top:10px;border-top:1px dashed var(--line);
+  font-size:.75rem;line-height:1.6;color:var(--muted);
+}
+p.apps-kat-ket b{color:var(--hijau-tua)}
+@media (max-width:560px){
+  .apps-kat{gap:7px}
+  p.apps-kat-ket{font-size:.72rem}
+}
+
+/* ===== TAB PIL "TIMBUL" + PERINGATAN BERKEDIP (v1.106.0 — menu "Media Interaktif") =====
+   Permintaan pemilik: *"Yang saya tandai warna merah buat tombol timbul agar lebih menarik. Dan yang
+   saya tandai warna biru buat keterangan peringatan 'Penggunaan media interaktif (aktif atau
+   tidaknya) tergantung dari kebijakan pihak gemini'. Buat tulisan warna merah dan berkedip sebagai
+   peringatan"* (kotak merah = baris pil tab, kotak biru = ruang kosong di KANAN baris pil).
+     • `.apps-kat-baris` — baris pil + peringatan; peringatan di sisi kanan, MELIPAT ke bawah pada
+                           layar sempit (jangan `position:absolute` — akan menimpa pilnya).
+     • `.apps-kat > .chip` — pil tab dibuat TIMBUL: bayangan padat 3px di bawah (sisi bawah tombol)
+                           + bayangan lembut di bawahnya. Warna latar tiap tab TETAP diatur
+                           `.chip-list.warna` di atas; di sini hanya bentuk/timbulnya.
+     • `.apps-kat-ingat` — kotak peringatan merah; TULISANNYA berkedip (`@keyframes ingatKedip`).
+   Kedipan memakai `opacity` pada TEKS saja supaya kerangka kotaknya tidak hilang-timbul, dan
+   dimatikan pada `prefers-reduced-motion`. JANGAN memakai `text-align:justify`. */
+.apps-kat-baris{
+  display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:12px 18px;
+}
+.apps-kat-baris > .apps-kat{margin:0;flex:0 1 auto}
+.apps-kat > .chip{
+  padding:7px 15px;border-radius:10px;font-weight:700;
+  box-shadow:0 3px 0 rgba(24,48,36,.22), 0 8px 14px -6px rgba(24,48,36,.28);
+  transition:transform .16s ease, box-shadow .16s ease, filter .16s ease;
+}
+.apps-kat > .chip.on{
+  transform:translateY(-2px);
+  box-shadow:0 4px 0 rgba(24,48,36,.34), 0 11px 18px -6px rgba(24,48,36,.34);
+}
+@media (hover: hover){
+  .apps-kat > .chip:hover{
+    transform:translateY(-3px);
+    box-shadow:0 5px 0 rgba(24,48,36,.24), 0 13px 20px -6px rgba(24,48,36,.32);
+  }
+  .apps-kat > .chip.on:hover{
+    box-shadow:0 6px 0 rgba(24,48,36,.36), 0 14px 22px -6px rgba(24,48,36,.38);
+  }
+}
+.apps-kat > .chip:active{
+  transform:translateY(1px);
+  box-shadow:0 1px 0 rgba(24,48,36,.24), 0 4px 8px -4px rgba(24,48,36,.22);
+}
+@keyframes ingatKedip{
+  0%,100%{opacity:1}
+  50%{opacity:.4}
+}
+.apps-kat-ingat{
+  display:flex;align-items:center;gap:8px;flex:1 1 300px;max-width:640px;margin-left:auto;
+  padding:9px 14px;border-radius:10px;background:#fdeaea;border:1px dashed #e79a9a;
+  font-size:.76rem;font-weight:700;line-height:1.5;color:#b3261e;
+}
+.apps-kat-ingat svg{flex:0 0 auto;color:#b3261e}
+.apps-kat-ingat-teks{animation:ingatKedip 1.2s ease-in-out infinite}
+@media (prefers-reduced-motion: reduce){
+  .apps-kat-ingat-teks{animation:none}
+}
+@media (max-width:720px){
+  .apps-kat-ingat{flex:1 1 100%;max-width:none;margin-left:0;font-size:.73rem}
+}
+
+/* ===== BARIS PIL FASE (v1.112.0 — menu "Media Interaktif") =====
+   Permintaan pemilik: *"Pada Tab SD/MI Tambahkan Fase A, B, C untuk memisah media itu difase apa.
+   Begitu juga untuk Tab SMA/MA tambahkan Fase E, F. Kalau SMP/MTs hanya Fase D"*.
+   Baris ini adalah TINGKAT KEDUA di bawah baris pil jenjang: pil fase sengaja dibuat LEBIH KECIL
+   dan lebih tenang (tanpa bayangan "timbul" milik pil jenjang) supaya jelas bukan tab utama.
+   Jarak atasnya 12px dari baris jenjang dan 0 ke keterangan (keterangannya sudah punya garis
+   pemisah sendiri). Warna pil memakai palet `.chip-list` bawaan; yang "sedang dibuka" ditandai
+   `.on` (latar hijau tua + huruf krem) — JANGAN memakai `position:absolute`. */
+.apps-fase{margin:12px 0 0;row-gap:8px}
+.apps-fase > .chip{
+  padding:5px 12px;border-radius:9px;font-size:.76rem;font-weight:700;
+  box-shadow:none;transform:none;
+}
+.apps-fase > .chip .mut{font-size:.7rem}
+.apps-fase > .chip.on,
+.apps-fase > .chip.on:hover,
+.apps-fase > .chip.on:active{
+  background:linear-gradient(150deg,var(--hijau),var(--hijau-tua));color:var(--emas-muda);
+  transform:none;box-shadow:0 2px 0 rgba(24,48,36,.28);
+}
+@media (hover: hover){
+  .apps-fase > .chip:hover{transform:none;box-shadow:0 2px 0 rgba(24,48,36,.16)}
+}
+@media (max-width:560px){
+  .apps-fase > .chip{padding:5px 10px;font-size:.72rem}
+}
+
+/* ===== PIL TAB "BUATKAN MEDIA" (v1.111.0 — menu "Media Interaktif", akun guru) =====
+   Permintaan pemilik: *"Pada yang saya tandai warna merah tambahkan tab 'Buatkan Media'."* Kotak
+   merah itu berada pada BARIS PIL TAB, tepat setelah pil "Game Edukasi" → pil ini menjadi tab KE-5.
+   Gayanya SENGAJA SAMA dengan pil jenjang lain (mengikuti palet `.chip-list.warna`, termasuk bentuk
+   "timbul" `.apps-kat > .chip`) supaya terbaca sebagai TAB, bukan tombol aksi lain; pembedanya cukup
+   ikon "+" di depan label. (Percobaan memberi warna emas/garis putus-putus kalah specificity dari
+   `.chip-list.warna > .chip:nth-child(6n+5)` sehingga hasilnya tidak seragam — jangan diulang.)
+   ⚠️ JANGAN memberi `data-kat` / `<span class="mut">` pada pil ini: uji media_interaktif membaca
+   keduanya untuk menghitung isi tiap tab jenjang. */
+.apps-kat > .chip.chip-buatkan{gap:7px;padding-left:12px}
+
+/* Tombol aksi yang SEDANG berlaku pada tabel Permintaan Media (Super Admin, v1.111.0): tombolnya
+   ditandai (tepi emas + huruf tebal) dan dinonaktifkan supaya jelas status mana yang terpasang. */
+.btn[disabled],.btn[aria-disabled="true"]{cursor:default;opacity:.72}
+.btn.on{box-shadow:inset 0 0 0 2px rgba(201,162,39,.85)}
+.btn[disabled]:hover,.btn.on[disabled]{transform:none;filter:none}
+
+/* ===== POPUP KUTIPAN PEMBUKA (v1.105.1 — menu "Media Interaktif") =====
+   Permintaan pemilik: *"saat guru mengklik menu Media Interaktif yang muncul duluan adalah popup
+   dengan tulisan: 'Pendidikan adalah kunci pembuka pintu masa depan. …' - Supianto (Pengembang)"*.
+   Muncul SEBELUM isi halaman (modal), ditutup lewat tombol Tutup / klik latar / Esc. Gaya memakai
+   dasar `dialog.popup` di atas supaya seragam dengan popup lain; di sini hanya isinya dirapikan:
+   tanda kutip besar di tengah, teks kutipan dengan huruf serif, lalu baris "— Supianto (Pengembang)".
+   TIDAK memakai `text-align:justify` (pemilik tidak menyukainya & uji CSS menghitungnya). */
+dialog.popup-kutipan{max-width:560px;border-top:3px solid var(--emas);overflow:hidden}
+.popup-kutipan-isi{
+  display:grid;gap:12px;justify-items:center;text-align:center;
+  padding:24px 26px 20px;background:
+    radial-gradient(120% 90% at 50% -10%,rgba(201,162,39,.13),transparent 62%);
+}
+.popup-kutipan-ic{
+  width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  color:var(--emas-muda);background:linear-gradient(150deg,var(--hijau-tua),var(--hijau));
+  border:1px solid rgba(201,162,39,.55);box-shadow:0 10px 22px -14px rgba(11,74,51,.6);
+}
+.popup-kutipan-teks{
+  margin:0;font-family:var(--serif);font-size:1.12rem;line-height:1.62;color:var(--hijau-tua);
+  max-width:44ch;
+}
+.popup-kutipan-oleh{
+  margin:2px 0 0;font-size:.82rem;font-weight:700;letter-spacing:.01em;color:var(--maroon);
+}
+@media (max-width:560px){
+  .popup-kutipan-isi{padding:20px 16px 16px}
+  .popup-kutipan-teks{font-size:1rem}
+}
 
 /* nav toggle mobile */
 .nav-toggle{display:none;position:fixed;top:14px;left:14px;z-index:60;width:42px;height:42px;border-radius:11px;
@@ -1447,6 +1647,17 @@ dialog.ttd-dialog::backdrop{background:rgba(9,32,23,.55)}
 .apps-form{border:1px dashed rgba(201,162,39,.6);border-radius:var(--radius-sm);padding:16px 18px;margin-bottom:20px;background:rgba(201,162,39,.05)}
 .apps-form-judul{display:flex;align-items:center;gap:8px;font-size:.9rem;color:var(--hijau-tua);margin-bottom:14px}
 .apps-form .apps-ket{grid-column:1 / -1}
+/* DUA ISIAN BERDAMPINGAN di dalam formulir daftar aplikasi (v1.111.1) — dipakai isian Kelas & Fase
+   pada tab "Buatkan Media". `auto-fit` membuat keduanya berdampingan di layar lebar dan menumpuk
+   sendiri di layar sempit (tanpa media query). JANGAN memakai `minmax(0,…)` sendirian: pilihan
+   "Fase B (Kelas 3-4)" akan terpotong. */
+.form-grid-dua{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+/* TABEL "PERMINTAAN MEDIA" (Super Admin) — v1.111.2: sepuluh kolom (No, Guru, Asal Sekolah, Judul
+   Media, Mata Pelajaran, Kelas, Fase, Dikirim, Status, Aksi). Tanpa `min-width`, tabel `width:100%`
+   MENYUSUTKAN kolom Aksi (terukur 310px → 215px pada layar 1440px) sehingga dua tombol aksi terlipat
+   dua baris — jadi tabel dibiarkan MENGGESER MENDATAR di dalam `.table-wrap` (sudah `overflow-x:auto`).
+   1340px = 778px kolom tetap + ±140px untuk tiap kolom teks. Kolom Aksi tetap 310px di dalamnya. */
+#tblPermintaanMedia{min-width:1340px}
 .apps-catatan{margin:0;padding-left:20px;display:grid;gap:9px;font-size:.85rem;color:var(--muted);line-height:1.55}
 .apps-catatan b{color:var(--hijau-tua)}
 /* --- PIL "GANGGUAN" BERKEDIP MERAH (v1.81.1) ------------------------------------------------
@@ -1466,6 +1677,32 @@ dialog.ttd-dialog::backdrop{background:rgba(9,32,23,.55)}
 }
 @media (prefers-reduced-motion: reduce){
   .pill-gangguan{animation:none}
+}
+/* --- TOMBOL BERKEDIP MERAH "PENDAFTARAN ... DITUTUP" (v1.97.1) ------------------------------
+   PERMINTAAN PEMILIK: *"Pada yang saya tandai warna merah Buat tombol berkedip-kedip warna merah
+   dan tulisannya ganti dengan 'Pendaftaran Sekolah/Madrasah Ditutup'"* — kotak peringatan pada
+   halaman `daftar.php` saat pendaftaran ditutup DIGANTI tombol ini.
+   Kedipan memakai `opacity` (bukan warna) supaya kontras huruf tetap terjaga (#dc2626 = 4,83:1 dan
+   #991b1b = 8,31:1 untuk huruf putih), dan dimatikan bagi pengguna yang mengaktifkan
+   "kurangi gerakan" pada perangkatnya. Tombol ini BUKAN tautan (tidak ada aksi bila diklik). */
+@keyframes tutupKedip{
+  0%,100%{opacity:1;box-shadow:0 10px 22px -12px rgba(153,27,27,.95),0 0 0 0 rgba(220,38,38,.5)}
+  50%{opacity:.55;box-shadow:0 6px 14px -12px rgba(153,27,27,.5),0 0 0 10px rgba(220,38,38,0)}
+}
+.tombol-tutup-kedip{
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  padding:14px 22px;margin:0 0 14px;border-radius:14px;
+  background:linear-gradient(145deg,#dc2626,#991b1b);color:#fff;
+  border:1px solid rgba(153,27,27,.55);cursor:default;
+  font-weight:800;font-size:1.02rem;line-height:1.35;letter-spacing:.02em;text-align:center;
+  animation:tutupKedip 1.2s ease-in-out infinite;
+}
+.tombol-tutup-kedip svg{flex:0 0 auto}
+@media (prefers-reduced-motion: reduce){
+  .tombol-tutup-kedip{animation:none}
+}
+@media (max-width:520px){
+  .tombol-tutup-kedip{font-size:.92rem;padding:12px 16px}
 }
 @media (max-width:1080px){
   .apps-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -2505,6 +2742,35 @@ ul.meeting-hadir-list>li{
   .meeting-kartu-kaki .btn{width:100%;justify-content:center}
 }
 
+/* ===== TANDA TANGAN RAPAT pada AKUN GURU (v1.101.0) =====
+   Permintaan pemilik: *"Pada saat operator memilih guru hadir pada kegiatan rapat. Buat guru bisa
+   menandatangani lewat akun guru masing-masing … Yang muncul hanya yang dicentang oleh operator."*
+   Gaya tanda tangan memakai `.ttd-*` yang sudah ada (Notulen Rapat) — jangan membuat gaya tanda
+   tangan kedua; yang ditambahkan di sini hanya tata letak kartu rapat & panel tanda tangannya. */
+.ttdrapat-kartu-grid{align-items:stretch}
+.ttdrapat-kartu{display:flex;flex-direction:column;gap:12px;justify-content:space-between}
+.ttdrapat-kartu-head{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.ttdrapat-kartu-head h3{margin:2px 0 4px;font-size:.98rem;line-height:1.35}
+.ttdrapat-kartu-kaki{
+  display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;
+  padding-top:10px;border-top:1px solid var(--line);
+}
+/* Panel tanda tangan pada halaman rincian rapat: tombolnya SELALU tampil (data-ttd-selalu) supaya
+   guru yang memakai komputer juga dapat menandatangani dengan tetikus. */
+.ttdrapat-panel{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+  min-height:130px;padding:16px;border-radius:var(--radius-sm);
+  border:1px dashed rgba(11,74,51,.35);background:rgba(255,255,255,.75);
+}
+.ttdrapat-panel .ttd-img{max-height:86px}
+.ttdrapat-panel .ttd-tombol{padding:9px 20px;font-size:.8rem}
+table.ttdrapat-info td:first-child{width:32%;font-weight:600;color:var(--hijau-tua)}
+@media (max-width:560px){
+  .ttdrapat-kartu-kaki{flex-direction:column;align-items:stretch}
+  .ttdrapat-kartu-kaki .btn{width:100%;justify-content:center}
+  table.ttdrapat-info td:first-child{width:44%}
+}
+
 /* ============================================================================
    GAMBAR HALAMAN DEPAN (LANDING) — DILINDUNGI (v1.91.0)
    Permintaan pemilik: gambar slider, foto testimoni, dan foto pengembang pada halaman depan
@@ -2598,3 +2864,174 @@ table.tbl tr.baris-terpilih{background:rgba(201,162,39,.12)}
 .bk-hasil-detail[open] > summary{margin-bottom:8px}
 .bk-tbl-detail th,.bk-tbl-detail td{padding:5px 7px;font-size:.76rem}
 .bk-tbl-detail td.xs{font-size:.72rem;line-height:1.35}
+
+/* ==================================================================================
+   VIDEO TUTORIAL (v1.96.0 / skema v64) — menu "Video Tutorial" di bawah Dashboard.
+   Kartu video = thumbnail YouTube yang bisa diklik + tombol putar. Klik thumbnail
+   membuka PEMUTAR DI DALAM APLIKASI (`<dialog>` + iframe youtube-nocookie, lihat
+   initVideoTutorial() pada assets/app.js); tanpa JavaScript thumbnail tetap tautan
+   biasa ke YouTube, jadi tidak pernah "mati".
+   ================================================================================== */
+.video-grid{gap:20px;align-items:start}
+.video-kartu{
+  display:flex;flex-direction:column;gap:0;padding:0;margin:0;overflow:hidden;
+  border-radius:16px;background:var(--card);border:1px solid rgba(11,74,51,.12);
+  box-shadow:0 2px 3px rgba(11,74,51,.10),0 16px 28px -18px rgba(11,74,51,.42);
+  transition:transform .22s cubic-bezier(.2,.7,.3,1),box-shadow .25s ease,border-color .25s ease;
+}
+.video-thumb{
+  position:relative;display:block;aspect-ratio:16/9;background:#0b2a1e;overflow:hidden;
+  text-decoration:none;
+}
+.video-thumb img{
+  display:block;width:100%;height:100%;object-fit:cover;
+  transition:transform .35s cubic-bezier(.2,.7,.3,1),filter .25s ease;
+}
+/* Thumbnail YouTube yang tidak berhasil dimuat diganti latar tema (tidak ada ikon gambar rusak). */
+.video-thumb img[data-gagal]{opacity:0}
+.video-play{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  display:flex;align-items:center;justify-content:center;width:58px;height:58px;
+  border-radius:50%;color:#fff;background:rgba(11,74,51,.78);
+  border:2px solid rgba(255,255,255,.85);
+  box-shadow:0 10px 22px -10px rgba(0,0,0,.85);
+  transition:transform .22s ease,background .22s ease;
+  pointer-events:none;
+}
+.video-play .ic{margin-left:2px}
+.video-isi{display:flex;flex-direction:column;gap:10px;padding:16px 18px 18px}
+.video-isi h3{margin:0;font-size:.98rem;line-height:1.35;color:var(--hijau-tua)}
+.video-isi p{margin:0;font-size:.82rem;line-height:1.5;color:var(--muted)}
+.video-isi .flex{margin-top:auto}
+.video-kartu[data-video=""] .video-thumb-tautan{background:linear-gradient(150deg,var(--hijau),var(--hijau-tua))}
+@media (hover:hover){
+  .video-kartu:hover{
+    transform:translateY(-4px);border-color:var(--emas);
+    box-shadow:0 3px 5px rgba(11,74,51,.14),0 26px 40px -22px rgba(11,74,51,.62);
+  }
+  .video-kartu:hover .video-thumb img{transform:scale(1.04)}
+  .video-kartu:hover .video-play{background:var(--maroon,#7a1f1f);transform:translate(-50%,-50%) scale(1.07)}
+}
+@media (prefers-reduced-motion:reduce){
+  .video-kartu,.video-thumb img,.video-play{transition:none}
+  .video-kartu:hover{transform:none}
+  .video-kartu:hover .video-thumb img{transform:none}
+}
+/* Thumbnail kecil pada tabel Super Admin. */
+.video-mini{display:block;width:104px;height:58px;object-fit:cover;border-radius:8px;background:#0b2a1e}
+/* Dialog pemutar video. */
+dialog.video-dialog{max-width:900px;width:min(94vw,900px);padding:0;border:0;background:transparent}
+dialog.video-dialog .card{box-shadow:0 24px 60px -20px rgba(0,0,0,.6)}
+.video-frame{position:relative;aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden}
+.video-frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+@media print{
+  dialog.video-dialog,.video-dialog{display:none !important}
+}
+
+/* ---------------------------------------------------------------------------
+   GURU KELAS — MENGAJAR DI KELAS LAIN (v1.100.0, guru_edit.php)
+   Permintaan pemilik: guru kelas tetap guru kelas pada kelas perwaliannya, tetapi
+   dapat ditugaskan mengajar mata pelajaran TERTENTU di kelas lain. Tiap kelas
+   dibuka-tutup dengan <details> (bekerja TANPA JavaScript), isinya centang mapel.
+--------------------------------------------------------------------------- */
+.kelas-lain-wrap{display:flex;flex-direction:column;gap:10px}
+details.kelas-lain{
+  border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden;
+  transition:border-color .15s, box-shadow .15s;
+}
+details.kelas-lain[open]{border-color:var(--emas);box-shadow:0 6px 18px -12px rgba(11,74,51,.45)}
+details.kelas-lain > summary{
+  display:flex;align-items:center;gap:9px;flex-wrap:wrap;cursor:pointer;user-select:none;
+  padding:10px 13px;list-style:none;background:linear-gradient(180deg,#fff,var(--hijau-muda));
+}
+details.kelas-lain > summary::-webkit-details-marker{display:none}
+details.kelas-lain > summary::after{
+  content:'\25BE';font-size:.72rem;color:var(--muted);margin-left:auto;flex:0 0 auto;
+  transition:transform .15s;
+}
+details.kelas-lain[open] > summary::after{transform:rotate(180deg)}
+details.kelas-lain > summary:hover{background:var(--emas-muda)}
+details.kelas-lain > summary:focus-visible{outline:2px solid var(--hijau);outline-offset:-2px}
+details.kelas-lain > .kelas-lain-isi{padding:12px 13px;border-top:1px dashed var(--line)}
+
+/* ===========================================================================
+   REKAP PENGGUNAAN MEDIA INTERAKTIF (v1.108.0) — kartu "Aktivitas Aplikasi"
+   dasbor Super Admin lintas sekolah. Permintaan pemilik: *"tambahkan data total
+   media pembelajaran dan game edukasi dibuka atau digunakan oleh seluruh
+   pengguna. Data per jenjang untuk media. tujuannya untuk mengetahui media atau
+   game mana yang paling sering dibuka/digunakan"*.
+   Kotak angkanya memakai .stat-mini yang sudah ada; di sini hanya kepala blok,
+   subjudul, dan daftar "Paling sering dibuka".
+   --------------------------------------------------------------------------- */
+.media-rekap{display:flex;flex-direction:column;gap:12px}
+.media-rekap-kepala{display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.media-rekap-kepala > div{flex:1 1 240px;min-width:0}
+.media-rekap-kepala h3{
+  display:flex;align-items:center;gap:7px;margin:0;font-size:.95rem;color:var(--hijau-tua);
+}
+.media-rekap-kepala .hint{margin-top:3px;line-height:1.5}
+.media-rekap-kepala > .chip{margin-left:auto;flex:0 0 auto;align-self:flex-start}
+.media-rekap-sub{
+  margin:2px 0 0;font-size:.71rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--muted);
+}
+ol.media-rekap-teratas{display:flex;flex-direction:column;gap:6px;margin:0;padding:0;list-style:none}
+ol.media-rekap-teratas > li{
+  display:flex;align-items:center;gap:10px;
+  border:1px solid var(--line);border-left:3px solid var(--emas);border-radius:9px;
+  padding:7px 11px;background:rgba(255,255,255,.8);
+}
+ol.media-rekap-teratas > li .no{
+  flex:0 0 auto;width:19px;height:19px;border-radius:50%;display:grid;place-items:center;
+  font-size:.68rem;font-weight:800;color:#fff;background:linear-gradient(150deg,var(--hijau),var(--hijau-tua));
+}
+ol.media-rekap-teratas > li .nama{
+  flex:1 1 auto;min-width:0;font-size:.84rem;font-weight:600;color:var(--hijau-tua);
+  overflow-wrap:anywhere;
+}
+ol.media-rekap-teratas > li .jenjang{
+  flex:0 0 auto;font-size:.69rem;font-weight:700;color:var(--hijau-tua);
+  border:1px solid var(--line);border-radius:20px;padding:2px 9px;background:var(--hijau-muda);
+}
+ol.media-rekap-teratas > li > b{
+  flex:0 0 auto;font-size:.86rem;color:var(--hijau-tua);font-variant-numeric:tabular-nums;
+}
+ol.media-rekap-teratas > li > b .kali{font-size:.7rem;color:var(--muted);margin-left:2px}
+
+/* ==========================================================================
+   KIRIM MATERI/TUGAS KE SISWA (v1.113.0 / skema v73)
+   Formulir pemilihan siswa (akun guru) + daftar kartu materi/tugas (akun siswa).
+   Dipakai inc/materi_siswa.php; jangan menyalin gayanya ke halaman lain.
+   ========================================================================== */
+.materi-pilih{border:1px solid var(--line);border-radius:var(--radius-sm);padding:12px 14px;
+  background:rgba(255,255,255,.72)}
+.materi-pilih-kelas{border-top:1px dashed var(--line);padding:10px 0 2px}
+.materi-pilih-kelas:first-of-type{border-top:none;padding-top:2px}
+.materi-pilih-kepala{display:flex;align-items:baseline;gap:10px;margin-bottom:6px;color:var(--hijau-tua)}
+.materi-pilih-isi{display:grid;gap:6px 16px;grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+.materi-cek{display:flex;gap:8px;align-items:flex-start;font-size:.84rem;padding:4px 0;cursor:pointer}
+.materi-cek input{margin-top:3px;accent-color:var(--hijau)}
+.materi-cek small{display:block;color:var(--muted);font-size:.72rem}
+.materi-rinci > summary{cursor:pointer;color:var(--hijau);font-size:.74rem;margin-top:4px}
+.materi-rinci-isi{margin-top:6px;font-size:.74rem;color:var(--muted);max-height:160px;overflow:auto}
+.materi-rinci-isi .mut{margin-left:4px}
+.tbl-materi td{vertical-align:top}
+
+/* daftar materi/tugas pada akun siswa */
+.materi-daftar{display:grid;gap:18px}
+.materi-kartu{border:1px solid var(--line);border-left:4px solid var(--emas);
+  border-radius:var(--radius-sm);padding:14px 16px;background:rgba(255,255,255,.82)}
+.materi-kartu-kepala{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.materi-judul{font-weight:800;font-size:1rem;color:var(--hijau-tua)}
+.materi-meta{display:flex;gap:6px 18px;flex-wrap:wrap;margin-top:5px;font-size:.78rem;color:var(--muted)}
+.materi-meta span{display:inline-flex;align-items:center;gap:5px}
+.materi-meta b{color:var(--ink)}
+.materi-ket{margin-top:10px;font-size:.84rem;color:var(--ink);border-left:3px solid var(--hijau-muda);
+  padding-left:10px;white-space:pre-line}
+.materi-berkas{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
+  margin-top:12px;border:1px dashed var(--line);border-radius:var(--radius-sm);padding:10px 12px;
+  background:var(--hijau-muda)}
+.materi-berkas-info{display:flex;gap:10px;align-items:center;min-width:0}
+.materi-berkas-info b{display:block;word-break:break-word}
+.materi-waktu{margin-top:10px;font-size:.76rem;color:var(--muted);display:flex;gap:6px;align-items:flex-start}
+.btn-mati{opacity:.6;cursor:not-allowed;pointer-events:none}

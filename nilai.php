@@ -135,6 +135,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!boleh_mapel($mapelId)) {
         tolak403('Mata pelajaran itu tidak Anda ampu.');
     }
+    // v65: guru kelas yang juga mengajar di kelas lain hanya boleh mengisi PASANGAN kelas + mapel
+    // yang ditugaskan kepadanya (mis. Matematika di IVB, Bahasa Inggris di VA).
+    if (!boleh_kelas_mapel($kelasId, $mapelId)) {
+        tolak403('Mata pelajaran itu tidak Anda ampu pada kelas tersebut.');
+    }
     if (!kelas_by_id($kelasId) || !mapel_by_id($mapelId)) {
         flash('Kelas atau mata pelajaran tidak valid.', 'err');
         redirect('nilai.php');

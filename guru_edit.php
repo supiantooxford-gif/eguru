@@ -109,6 +109,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 q('INSERT OR IGNORE INTO guru_kelas (guru_id, kelas_id) VALUES (?,?)', [$id, $kid]);
             }
         }
+        // v65: KELAS LAIN YANG DIAJAR — GURU KELAS boleh ditugaskan mengajar mata pelajaran TERTENTU
+        // di kelas lain (permintaan pemilik). Isiannya hanya dibaca bila guru ditandai guru kelas;
+        // bila penandanya dilepas, seluruh penugasan kelas lain ikut dibersihkan (tidak relevan lagi).
+        // Kelas perwaliannya sendiri TIDAK disimpan di sini (kelas itu memakai seluruh mapel yang
+        // dipegang), dan mata pelajaran yang dipilih otomatis masuk daftar mapel yang dipegang guru.
+        $kelasLainPilih = [];
+        if ($guruKelas === 1 && is_array($_POST['kelas_mapel'] ?? null)) {
+            foreach ($_POST['kelas_mapel'] as $kidKirim => $mapelKirim) {
+                $kidKirim = (int) $kidKirim;
+                if ($kidKirim <= 0 || in_array($kidKirim, $kelasPilih, true) || !kelas_by_id($kidKirim)) {
+                    continue;
+                }
+                foreach ((array) $mapelKirim as $midKirim) {
+                    $midKirim = (int) $midKirim;
+                    if ($midKirim > 0 && mapel_by_id($midKirim)) {
+                        $kelasLainPilih[$kidKirim][$midKirim] = $midKirim;
+                    }
+                }
+            }
+        }
+        q('DELETE FROM guru_kelas_mapel WHERE guru_id = ?', [$id]);
+        foreach ($kelasLainPilih as $kidLain => $mapelLain) {
+            foreach ($mapelLain as $midLain) {
+                q('INSERT OR IGNORE INTO guru_kelas_mapel (guru_id, kelas_id, mapel_id) VALUES (?,?,?)',
+                    [$id, $kidLain, $midLain]);
+                if (!in_array($midLain, $mapelPilih, true)) {
+                    q('INSERT OR IGNORE INTO guru_mapel (guru_id, mapel_id) VALUES (?,?)', [$id, $midLain]);
+                }
+            }
+        }
         // GURU KELAS otomatis menjadi WALI KELAS kelas yang diampunya (permintaan pemilik). Hanya
         // dijalankan bila guru ditandai guru kelas dan tepat satu kelas dipilih — kelas lain tidak
         // pernah tersentuh.
@@ -172,6 +202,8 @@ $akun = $g ? one('SELECT username FROM users WHERE guru_id = ? AND sekolah_id = 
 // v49: keadaan GURU KELAS (hanya berarti pada jenjang SD/MI) + wali kelas yang sedang tercatat.
 $guruKelasKini = $g ? (int) ($g['guru_kelas'] ?? 0) === 1 : false;
 $pakaiGuruKelas = is_guru_kelas_jenjang();
+// v65: penugasan "kelas lain × mata pelajaran" (khusus guru kelas) — kelas_id => [mapel_id, ...].
+$kelasLainSekarang = $g ? guru_kelas_mapel_peta((int) $g['id']) : [];
 
 page_top($g ? 'Ubah Data Guru' : 'Tambah Data Guru');
 ?>
@@ -316,6 +348,56 @@ page_top($g ? 'Ubah Data Guru' : 'Tambah Data Guru');
           </div>
         <?php endif; ?>
       </div>
+
+      <?php if ($pakaiGuruKelas): ?>
+      <?php // v65: MENGAJAR DI KELAS LAIN (permintaan pemilik) — guru kelas tetap memegang satu kelas
+            // perwalian, tetapi boleh mengajar mata pelajaran TERTENTU di kelas lain. Tiap kelas
+            // dibuka-tutup dengan <details> (bekerja tanpa JavaScript) lalu mata pelajarannya
+            // dicentang. Kartu ini hanya berlaku bagi guru kelas → disembunyikan bila penandanya
+            // belum dicentang (server juga mengabaikan isiannya).
+            $kelasLainOpsi = array_values(array_filter($semuaKelas,
+                static fn(array $k): bool => !in_array((int) $k['id'], $kelasSekarang, true)));
+            $mapelLainOpsi = mapel_list(true); ?>
+      <div class="card" id="cardKelasLain" <?= $guruKelasKini ? '' : 'hidden' ?>>
+        <div class="card-head">
+          <div><h2>Mengajar di Kelas Lain</h2><p>Khusus <b>Guru Kelas</b> — dia tetap guru kelas
+            pada kelas perwaliannya, tetapi boleh mengajar mata pelajaran tertentu di kelas lain.
+            Buka kelasnya, lalu centang mata pelajaran yang diajarnya di sana.</p></div>
+        </div>
+        <?php if (!$kelasLainOpsi): ?>
+          <p class="mut sm">Belum ada kelas lain. Tambahkan kelas lewat menu Kelas.</p>
+        <?php elseif (!$mapelLainOpsi): ?>
+          <p class="mut sm">Belum ada mata pelajaran. Tambahkan lewat menu Mata Pelajaran.</p>
+        <?php else: ?>
+          <div class="kelas-lain-wrap">
+            <?php foreach ($kelasLainOpsi as $k):
+                $kid = (int) $k['id'];
+                $terpilih = $kelasLainSekarang[$kid] ?? []; ?>
+              <details class="kelas-lain" <?= $terpilih ? 'open' : '' ?>>
+                <summary>
+                  <b><?= e((string) $k['nama']) ?></b>
+                  <span class="mut xs">(<?= (int) $k['jml_siswa'] ?> siswa)</span>
+                  <span class="pill <?= $terpilih ? 'pill-ok' : 'pill-gray' ?>"><?= count($terpilih) ?> mapel</span>
+                </summary>
+                <div class="kelas-lain-isi">
+                  <div class="grid g2" style="gap:8px">
+                    <?php foreach ($mapelLainOpsi as $m): ?>
+                      <label class="f" style="display:flex;gap:9px;align-items:center;font-weight:500;margin:0">
+                        <input type="checkbox" name="kelas_mapel[<?= $kid ?>][]" value="<?= (int) $m['id'] ?>" <?= in_array((int) $m['id'], $terpilih, true) ? 'checked' : '' ?> style="width:16px;height:16px;accent-color:var(--accent)">
+                        <?= e((string) $m['nama']) ?>
+                      </label>
+                    <?php endforeach; ?>
+                  </div>
+                </div>
+              </details>
+            <?php endforeach; ?>
+          </div>
+          <div class="hint" style="margin-top:10px">Mata pelajaran yang dicentang di sini otomatis
+            ditambahkan pada daftar <b>Mata Pelajaran yang Dipegang</b> guru ini, sehingga ia dapat
+            mengisi Penilaian, Daftar Hadir, dan Jurnal pada kelas tersebut.</div>
+        <?php endif; ?>
+      </div>
+      <?php endif; ?>
 
       <div class="card">
         <div class="card-head">

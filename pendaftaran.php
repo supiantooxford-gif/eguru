@@ -14,6 +14,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_guard();
     $aksi = (string) ($_POST['aksi'] ?? '');
     $id = (int) ($_POST['id'] ?? 0);
+
+    // ========================================================================
+    // BUKA / TUTUP PENDAFTARAN SEKOLAH/MADRASAH (v1.97.0)
+    // ------------------------------------------------------------------------
+    // Permintaan pemilik: *"pada akun super admin tambahkan fitur untuk menutup pendaftaran
+    // sekolah/madrasah. Ketika pendaftaran ditutup berikan keterangan bahwa jumlah pendaftar telah
+    // mencapai batas yang ditetapkan oleh sistem. Silahkan hubungi admin di WA 081356964665"*.
+    //
+    // Ditangani SEBELUM pemeriksaan "pendaftaran tidak ditemukan" karena aksi ini tidak memakai
+    // satu lembaga pun. Keadaannya tingkat APLIKASI (`app_pengaturan`) lewat
+    // `daftar_status_simpan()` (inc/helpers.php) — halaman `daftar.php` membaca sumber yang sama.
+    // ========================================================================
+    if ($aksi === 'daftar_simpan') {
+        $tutup = (string) ($_POST['daftar_status'] ?? 'buka') === 'tutup';
+        $batasRaw = trim((string) ($_POST['daftar_batas'] ?? '0'));
+        $waRaw = trim((string) ($_POST['daftar_wa'] ?? ''));
+
+        $batas = (int) preg_replace('/\D/', '', $batasRaw);
+        if ($batasRaw !== '' && preg_replace('/\D/', '', $batasRaw) === '') {
+            flash('Batas jumlah pendaftar harus berupa angka (isi 0 bila tidak dibatasi).', 'err');
+            redirect('pendaftaran.php#kartuPendaftaran');
+        }
+        if ($waRaw === '' || !aktivasi_wa_sah($waRaw)) {
+            flash('Nomor WA admin belum benar — tulis angka saja (boleh diawali 0 atau 62), '
+                . '9 sampai 15 digit, mis. ' . DAFTAR_WA_BAWAAN . '.', 'err');
+            redirect('pendaftaran.php#kartuPendaftaran');
+        }
+
+        daftar_status_simpan($tutup, $batas, $waRaw);
+        $infoBaru = daftar_status_info();
+        flash($infoBaru['tutup']
+            ? 'Pendaftaran sekolah/madrasah DITUTUP. Pengunjung halaman pendaftaran akan melihat '
+              . 'keterangan: "' . $infoBaru['pesan'] . '"'
+            : 'Pendaftaran sekolah/madrasah DIBUKA kembali'
+              . ($infoBaru['batas'] > 0
+                  ? ' dengan batas ' . $infoBaru['batas'] . ' pendaftar (terdaftar sekarang '
+                    . $infoBaru['terdaftar'] . ').'
+                  : ' tanpa batas jumlah pendaftar.'),
+            $infoBaru['tutup'] ? 'warn' : 'ok');
+        redirect('pendaftaran.php#kartuPendaftaran');
+    }
+
     $s = $id > 0 ? sekolah_by_id($id) : null;
 
     if (!$s) {
@@ -124,6 +166,7 @@ $jumlah = [
 ];
 
 page_top('Pendaftaran Sekolah/Madrasah', 'Super Admin &middot; ' . $jumlah['menunggu'] . ' pendaftaran menunggu keputusan');
+$daftarInfo = daftar_status_info();
 ?>
 <div class="grid g3">
   <div class="card stat card-tight">
@@ -138,6 +181,92 @@ page_top('Pendaftaran Sekolah/Madrasah', 'Super Admin &middot; ' . $jumlah['menu
     <div class="stat-ic p"><?= ikon('alert', 18) ?></div>
     <div><div class="stat-num" style="font-size:1.3rem"><?= $jumlah['ditolak'] ?></div><div class="stat-lbl">Ditolak</div></div>
   </div>
+</div>
+
+<?php // ============================================================================================
+      // KARTU BUKA/TUTUP PENDAFTARAN (v1.97.0) — permintaan pemilik: *"pada akun super admin
+      // tambahkan fitur untuk menutup pendaftaran sekolah/madrasah. Ketika pendaftaran ditutup
+      // berikan keterangan bahwa jumlah pendaftar telah mencapai batas yang ditetapkan oleh sistem.
+      // Silahkan hubungi admin di WA 081356964665"*.
+      //
+      // Keadaan & pesannya SATU SUMBER (`daftar_status_info()`, inc/helpers.php) sehingga yang
+      // terlihat pada pratinjau di kartu ini sama persis dengan yang dilihat pengunjung `daftar.php`.
+      // ============================================================================================ ?>
+<div class="card" id="kartuPendaftaran">
+  <div class="card-head">
+    <div>
+      <h2><?= ikon('switch', 16) ?> Buka/Tutup Pendaftaran Sekolah/Madrasah</h2>
+      <p>Selama pendaftaran <b>ditutup</b>, halaman <a href="daftar.php" target="_blank" rel="noopener">pendaftaran</a>
+        tidak menerima pendaftar baru dan formulirnya diganti keterangan kepada Admin.</p>
+    </div>
+    <div class="flex">
+      <span class="pill <?= $daftarInfo['tutup'] ? 'pill-warn' : 'pill-ok' ?>" id="pilPendaftaranDibuka">
+        <?= $daftarInfo['tutup'] ? 'Ditutup' : 'Dibuka' ?></span>
+    </div>
+  </div>
+
+  <div class="alert <?= $daftarInfo['tutup'] ? 'alert-warn' : 'alert-ok' ?>" id="pratinjauPendaftaranTutup">
+    <?= ikon($daftarInfo['tutup'] ? 'alert' : 'info', 16) ?>
+    <span>
+      <?php if ($daftarInfo['tutup']): ?>
+        Pendaftaran sedang <b>ditutup</b> (<?= e($daftarInfo['keterangan']) ?>). Pengunjung melihat:
+        <b>&ldquo;<?= e($daftarInfo['pesan']) ?>&rdquo;</b>
+        beserta tombol WhatsApp ke nomor itu.
+      <?php else: ?>
+        Pendaftaran sedang <b>dibuka</b> (<?= e($daftarInfo['keterangan']) ?>). Bila ditutup,
+        pengunjung akan melihat keterangan
+        <b>&ldquo;<?= e($daftarInfo['pesan']) ?>&rdquo;</b> beserta tombol WhatsApp ke nomor itu.
+      <?php endif; ?>
+    </span>
+  </div>
+
+  <div class="stat-mini mb16">
+    <div><b><?= (int) $daftarInfo['terdaftar'] ?></b><span>Sekolah/madrasah terdaftar</span></div>
+    <div><b><?= $daftarInfo['batas'] > 0 ? (int) $daftarInfo['batas'] : '∞' ?></b><span>Batas pendaftar</span></div>
+    <div><b><?= $daftarInfo['batas'] > 0 ? (int) $daftarInfo['sisa'] : '∞' ?></b><span>Sisa kuota pendaftar</span></div>
+    <div><b><?= e($daftarInfo['wa']) ?></b><span>WA admin saat ditutup</span></div>
+  </div>
+
+  <form method="post" class="form-grid" id="formPendaftaran">
+    <?= csrf_field() ?>
+    <input type="hidden" name="aksi" value="daftar_simpan">
+    <div class="grid g3" style="gap:16px">
+      <div>
+        <label class="f" for="daftarStatus">Keadaan pendaftaran</label>
+        <select id="daftarStatus" name="daftar_status">
+          <?php // Nilai yang ditampilkan = pilihan TERSIMPAN (tutup_manual), bukan keadaan efektif:
+                // bila pendaftaran tertutup karena BATAS tercapai, tombolnya tetap "Dibuka" dan
+                // keterangannya di bawah menjelaskan sebabnya. ?>
+          <option value="buka" <?= $daftarInfo['tutup_manual'] ? '' : 'selected' ?>>Dibuka — menerima pendaftar baru</option>
+          <option value="tutup" <?= $daftarInfo['tutup_manual'] ? 'selected' : '' ?>>Ditutup — tidak menerima pendaftar baru</option>
+        </select>
+        <?php if ($daftarInfo['sebab'] === 'batas'): ?>
+          <div class="hint xs"><b>Batas tercapai</b> — pendaftaran tertutup otomatis sampai batasnya
+            dinaikkan atau diisi 0.</div>
+        <?php endif; ?>
+      </div>
+      <div>
+        <label class="f" for="daftarBatas">Batas jumlah pendaftar</label>
+        <input type="number" id="daftarBatas" name="daftar_batas" min="0" step="1"
+               value="<?= (int) $daftarInfo['batas'] ?>" inputmode="numeric">
+        <div class="hint xs">Isi <b>0</b> bila tidak dibatasi. Bila batas tercapai, pendaftaran
+          otomatis ditutup dengan keterangan yang sama.</div>
+      </div>
+      <div>
+        <label class="f" for="daftarWa">Nomor WA admin</label>
+        <input type="text" id="daftarWa" name="daftar_wa" value="<?= e($daftarInfo['wa']) ?>"
+               inputmode="numeric" autocomplete="off">
+        <div class="hint xs">Ditampilkan pada keterangan penutupan, mis. <?= e(DAFTAR_WA_BAWAAN) ?>.</div>
+      </div>
+    </div>
+    <div class="flex">
+      <button class="btn btn-primary" type="submit"><?= ikon('save', 15) ?> Simpan Pengaturan Pendaftaran</button>
+      <?php if ($daftarInfo['tutup']): ?>
+        <span class="hint xs" style="margin:0">Pendaftaran ditutup sejak
+          <?= $daftarInfo['sebab'] === 'batas' ? 'batas pendaftar tercapai' : 'diubah Admin' ?><?= daftar_status_diubah() !== '' ? ' (' . e(tanggal_id(daftar_status_diubah(), true)) . ')' : '' ?>.</span>
+      <?php endif; ?>
+    </div>
+  </form>
 </div>
 
 <div class="card">

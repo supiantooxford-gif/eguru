@@ -599,10 +599,15 @@
     if (!chk) return;
     var catatan = document.getElementById('guruKelasCatatan');
     var pil = document.getElementById('pilGuruKelas');
+    // v65: kartu "Mengajar di Kelas Lain" hanya berlaku bagi guru kelas.
+    var cardLain = document.getElementById('cardKelasLain');
     var kotak = document.querySelectorAll('input[name="kelas[]"]');
 
     function atur() {
       var aktif = chk.checked;
+      if (cardLain) {
+        cardLain.hidden = !aktif;
+      }
       if (pil) {
         pil.textContent = aktif ? 'Guru Kelas' : 'Guru Mata Pelajaran';
         pil.classList.toggle('pill-ok', aktif);
@@ -803,6 +808,34 @@
     });
     // Klik di area gelap (di luar kartu popup) menutup popup.
     pop.addEventListener('click', function (ev) {
+      var kotak = pop.getBoundingClientRect();
+      var luar = ev.clientX < kotak.left || ev.clientX > kotak.right
+        || ev.clientY < kotak.top || ev.clientY > kotak.bottom;
+      if (luar) tutup();
+    });
+  }
+
+  /* ---------- POPUP KUTIPAN PEMBUKA (menu "Media Interaktif", v1.105.1) ----------
+     Permintaan pemilik: *"saat guru mengklik menu Media Interaktif yang muncul duluan adalah popup
+     dengan tulisan: '…' - Supianto (Pengembang)"*. Markup-nya dicetak server (inc/daftar_apps.php →
+     kunci konfigurasi `popup_awal`) TANPA atribut `open`; di sini popup dinaikkan menjadi modal
+     sehingga tampil lebih dulu dan menutupi isi halaman sampai ditutup. Tanpa JavaScript popup tidak
+     muncul sama sekali — halaman tetap bisa dipakai (tidak ada yang menghalangi). */
+  function initPopupAwal() {
+    var pop = document.getElementById('popupAwal');
+    if (!pop) return;
+    if (typeof pop.showModal === 'function') {
+      try { pop.showModal(); } catch (e) { pop.setAttribute('open', ''); }
+    } else {
+      pop.setAttribute('open', '');
+    }
+    function tutup() {
+      if (typeof pop.close === 'function' && pop.open) pop.close();
+      else pop.removeAttribute('open');
+    }
+    pop.addEventListener('click', function (ev) {
+      if (ev.target.closest('[data-popup-awal="tutup"]')) { tutup(); return; }
+      // Klik di area gelap (di luar kartu popup) menutup popup.
       var kotak = pop.getBoundingClientRect();
       var luar = ev.clientX < kotak.left || ev.clientX > kotak.right
         || ev.clientY < kotak.top || ev.clientY > kotak.bottom;
@@ -1491,7 +1524,13 @@
     var sentuh = (navigator.maxTouchPoints && navigator.maxTouchPoints > 0) || ('ontouchstart' in window);
     var tombolSemua = document.querySelectorAll('[data-ttd-tombol]');
     var catatan = document.getElementById('ttdCatatan');
-    tombolSemua.forEach(function (b) { b.hidden = !sentuh; });
+    /* Tombol bertanda `data-ttd-selalu` tetap tampil walau perangkat TANPA layar sentuh: dipakai
+       halaman yang seluruh gunanya menandatangani (mis. "Tanda Tangan Rapat" pada akun guru,
+       v1.101.0) — kanvas tanda tangan sudah menangani tetikus maupun jari. */
+    function tombolPerluTampil(b) {
+      return sentuh || b.hasAttribute('data-ttd-selalu');
+    }
+    tombolSemua.forEach(function (b) { b.hidden = !tombolPerluTampil(b); });
     if (catatan) catatan.hidden = !sentuh;
 
     var ctx = kanvas.getContext('2d');
@@ -1665,6 +1704,9 @@
       fd.append('id', String(data.id || 0));
       fd.append('pihak', pihakAktif);
       fd.append('format', 'json');
+      /* `sumber` menandai asal rapat bila halaman mengirimkannya (mis. rapat TUSmart pada menu
+         "Tanda Tangan Rapat"); endpoint menganggap kosong = notulen e-GURU. */
+      if (data.sumber) fd.append('sumber', data.sumber);
       if (csrf) fd.append('csrf', csrf.value);
       if (aksi === 'simpan') fd.append('gambar', eksporPng());
       return fetch(data.endpoint, {
@@ -1704,7 +1746,7 @@
       }
       var tombol = sel.querySelector('[data-ttd-tombol]');
       if (tombol) {
-        tombol.hidden = !sentuh;
+        tombol.hidden = !tombolPerluTampil(tombol);
         tombol.textContent = url ? 'Ulangi' : 'Tanda Tangan';
       }
       var jumlah = document.querySelectorAll('img.ttd-img').length;
@@ -1886,6 +1928,119 @@
     });
   }
 
+  /* ==========================================================================
+     VIDEO TUTORIAL (v1.96.0 / skema v64) — PEMUTAR DI DALAM APLIKASI.
+     --------------------------------------------------------------------------
+     Setiap thumbnail kartu video adalah <a href="https://www.youtube.com/watch?v=…"
+     target="_blank">. Klik pada thumbnail DICEGAT lalu videonya dimuat pada <dialog>
+     (#dialogVideo) memakai iframe youtube-nocookie. Tanpa JavaScript (atau bila
+     <dialog> tidak didukung) tautan tetap berjalan seperti biasa ke YouTube.
+     Saat dialog ditutup, iframe DIKOSONGKAN supaya suara video ikut berhenti.
+     ========================================================================== */
+  function initVideoTutorial() {
+    var dialog = document.getElementById('dialogVideo');
+    var frame = document.getElementById('videoFrame');
+    var judulEl = document.getElementById('judulDialogVideo');
+    var tautanYt = document.getElementById('tautanVideoYt');
+    var tombolTutup = document.getElementById('tutupVideo');
+    if (!dialog || !frame || typeof dialog.showModal !== 'function') return;
+
+    function tutup() {
+      frame.innerHTML = '';
+      if (typeof dialog.close === 'function') dialog.close();
+      else dialog.removeAttribute('open');
+    }
+
+    function buka(id, judul) {
+      frame.innerHTML = '<iframe src="https://www.youtube-nocookie.com/embed/' + encodeURIComponent(id)
+        + '?autoplay=1&rel=0&modestbranding=1&playsinline=1" title="' + (judul || 'Video Tutorial')
+        + '" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"'
+        + ' allowfullscreen loading="lazy"></iframe>';
+      if (tautanYt) tautanYt.href = 'https://www.youtube.com/watch?v=' + encodeURIComponent(id);
+      if (judulEl) judulEl.textContent = judul || 'Video Tutorial';
+      dialog.showModal();
+    }
+
+    var tautan = document.querySelectorAll('.video-thumb[data-video-id]');
+    for (var i = 0; i < tautan.length; i++) {
+      tautan[i].addEventListener('click', function (e) {
+        // Ctrl/Cmd/Shift-klik atau klik tengah tetap membuka YouTube di tab baru.
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+        var id = this.getAttribute('data-video-id') || '';
+        if (!id) return;
+        e.preventDefault();
+        buka(id, this.getAttribute('data-video-judul') || '');
+      });
+    }
+
+    if (tombolTutup) tombolTutup.addEventListener('click', tutup);
+    // Klik di luar kartu dialog menutupnya (perilaku yang sama dengan popup lain).
+    dialog.addEventListener('click', function (e) {
+      if (e.target === dialog) tutup();
+    });
+    dialog.addEventListener('close', function () { frame.innerHTML = ''; });
+
+    // Thumbnail YouTube yang gagal dimuat (mis. video dihapus/diblokir jaringan) tidak
+    // menampilkan ikon gambar rusak — latarnya memakai warna tema (lihat .video-thumb img[data-gagal]).
+    var gambarVideo = document.querySelectorAll('.video-thumb img');
+    for (var j = 0; j < gambarVideo.length; j++) {
+      gambarVideo[j].addEventListener('error', function () {
+        this.setAttribute('data-gagal', '1');
+      });
+    }
+  }
+
+  // KELAS → FASE pada formulir "Buatkan Media" (v1.111.1). Fase mengikuti kelas (Kurikulum Merdeka:
+  // 1-2=A · 3-4=B · 5-6=C · 7-9=D · 10=E · 11-12=F) supaya guru tidak perlu menghafal padanannya.
+  // Padanan yang sama juga ada di server (`media_permintaan_fase_dari_kelas()`) sebagai cadangan bila
+  // JavaScript mati atau kiriman tanpa fase — di sana aturannya SATU tempat untuk data yang disimpan.
+  function initKelasFase() {
+    var kelas = document.getElementById('mp_kelas');
+    var fase = document.getElementById('mp_fase');
+    if (!kelas || !fase) return;
+    var peta = {
+      '1': 'A', '2': 'A', '3': 'B', '4': 'B', '5': 'C', '6': 'C',
+      '7': 'D', '8': 'D', '9': 'D', '10': 'E', '11': 'F', '12': 'F'
+    };
+    var pilihanTerakhir = fase.value;
+    function ikuti() {
+      var f = peta[kelas.value] || '';
+      if (f) fase.value = f;
+    }
+    kelas.addEventListener('change', ikuti);
+    // Hanya menyelaraskan saat halaman dibuka bila guru belum memilih fase sendiri.
+    if (pilihanTerakhir === '') ikuti();
+  }
+
+  // FASE MENGIKUTI JENJANG pada formulir Media Interaktif (v1.112.0). Pilihan fase dikelompokkan
+  // per jenjang (`<optgroup data-jenjang>`); kelompok yang bukan jenjang terpilih disembunyikan dan
+  // fase yang tidak cocok direset. Server TETAP memeriksa sendiri, jadi ini hanya kenyamanan.
+  function initFaseJenjang() {
+    var jenjang = document.getElementById('jenjang');
+    var fase = document.getElementById('fase');
+    if (!jenjang || !fase) return;
+    var kelompok = fase.querySelectorAll('optgroup[data-jenjang]');
+    function ikuti() {
+      var kat = jenjang.value;
+      for (var i = 0; i < kelompok.length; i++) {
+        var cocok = kelompok[i].getAttribute('data-jenjang') === kat;
+        kelompok[i].disabled = !cocok;
+        kelompok[i].hidden = !cocok;
+        for (var j = 0; j < kelompok[i].children.length; j++) {
+          kelompok[i].children[j].hidden = !cocok;
+        }
+      }
+      // Fase yang sudah tidak berlaku untuk jenjang ini dikosongkan (bukan dibiarkan salah simpan).
+      var pilih = fase.options[fase.selectedIndex];
+      if (pilih && pilih.parentNode && pilih.parentNode.tagName === 'OPTGROUP'
+          && pilih.parentNode.getAttribute('data-jenjang') !== kat) {
+        fase.value = '';
+      }
+    }
+    jenjang.addEventListener('change', ikuti);
+    ikuti();
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     initWajibSandi();
     initKartuApps3D();
@@ -1913,10 +2068,14 @@
     initSalinKode();
     initHitungMundur();
     initSambutan();
+    initPopupAwal();
     initPeringatanAktivasi();
     initPrint();
     initChat();
     initKodeUnduh();
     initTahfidz();
+    initVideoTutorial();
+    initKelasFase();
+    initFaseJenjang();
   });
 })();

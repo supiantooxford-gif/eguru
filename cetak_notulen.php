@@ -14,6 +14,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/inc/init.php';
 require_once __DIR__ . '/inc/kop.php';
 require_once __DIR__ . '/inc/notulen_ttd.php';   // tanda tangan langsung di layar sentuh (v1.70.0)
+require_once __DIR__ . '/inc/notulen_tusmart.php'; // notulen TUSmart (v1.103.0)
 
 // Tampung keluaran agar istilah Sekolah/Madrasah bisa disesuaikan sebelum dikirim.
 ob_start();
@@ -21,10 +22,26 @@ $GLOBALS['__vs_buf_level'] = ob_get_level();
 
 $u = require_notulen(); // kepala boleh mencetak (hanya lihat); operator juga boleh membuat notulen
 
+// SUMBER notulen: `eguru` (bawaan) atau `tusmart` — notulen yang dibuat Kepala Tata Usaha di
+// aplikasi TUSmart, dibaca langsung dari basis datanya (v1.103.0). Notulen TUSmart HANYA untuk akun
+// kepala sekolah/madrasah lembaga yang cocok (NPSN) dan hanya dapat DILIHAT/DICETAK (+ ditandatangani
+// pada blok "Mengetahui, Kepala …"), tidak dapat diubah dari sini.
+$sumber = ((string) ($_GET['sumber'] ?? '')) === 'tusmart' ? 'tusmart' : 'eguru';
+$dariTusmart = $sumber === 'tusmart';
+$qsSumber = $dariTusmart ? '&amp;sumber=tusmart' : '';
+
 $id = (int) ($_GET['id'] ?? 0);
-$n = notulen_by_id($id);
+if ($dariTusmart) {
+    if (!notulen_tusmart_boleh()) {
+        tolak403('Notulen rapat yang dibuat di aplikasi TUSmart hanya dapat dibuka oleh Kepala '
+            . istilah_sekolah('Sekolah') . ' pada lembaga yang dikelola di TUSmart.');
+    }
+    $n = notulen_tusmart_satu($id);
+} else {
+    $n = notulen_by_id($id);
+}
 if (!$n) {
-    flash('Notulen tidak ditemukan.', 'err');
+    flash($dariTusmart ? 'Notulen rapat TUSmart tidak ditemukan.' : 'Notulen tidak ditemukan.', 'err');
     redirect('notulen.php');
 }
 
@@ -36,7 +53,7 @@ $judulBagian = [
     'isi'    => 'Isi Notulen Rapat',
     'foto'   => 'Foto Dokumentasi Kegiatan Rapat',
 ][$bagian];
-$peserta = notulen_peserta($id);
+$peserta = $dariTusmart ? notulen_tusmart_peserta($id) : notulen_peserta($id);
 $jmlHadir = count($peserta);
 $autoPrint = isset($_GET['auto']);
 
@@ -44,24 +61,34 @@ $autoPrint = isset($_GET['auto']);
 // Pihak yang boleh menandatangani: Kepala Sekolah/Madrasah, Pimpinan Rapat, Notulis, dan SETIAP nama
 // pada Daftar Hadir. Tombol "Tanda Tangan" hanya dimunculkan skrip pada perangkat berlayar sentuh
 // (HTML-nya ber-atribut hidden), sehingga komputer biasa tetap mencetak kolom tanda tangan kosong.
-$ttdPihak = notulen_ttd_pihak($n, $peserta);
-$ttdPeta = notulen_ttd_peta($id);
+// NOTULEN TUSMART (v1.103.0): dari e-GURU hanya blok **kepala** yang dapat ditandatangani — pihak
+// lain menandatangani di aplikasi TUSmart atau lewat menu e-GURU "Tanda Tangan Rapat"
+// (perintah yang sama juga ditegakkan di server, `upload_notulen_ttd.php?sumber=tusmart`).
+if ($dariTusmart) {
+    $ttdPeta = notulen_tusmart_ttd_peta($id);
+    $ttdPihak = notulen_tusmart_pihak($n, $peserta);
+    $pihakBolehTtd = [NOTULEN_TUSMART_PIHAK_KEPALA => $ttdPihak[NOTULEN_TUSMART_PIHAK_KEPALA]];
+} else {
+    $ttdPeta = notulen_ttd_peta($id);
+    $ttdPihak = notulen_ttd_pihak($n, $peserta);
+    $pihakBolehTtd = $ttdPihak;
+}
 // Hanya hitung tanda tangan milik pihak yang MASIH ada (peserta bisa berubah saat notulen diubah).
 $ttdJumlah = count(array_intersect_key($ttdPeta, $ttdPihak));
 // Kunci pihak yang dipakai pada blok tanda tangan lembar cetak ('' = blok tidak dapat ditandatangani,
 // mis. Pimpinan/Notulis yang namanya belum diisi pada notulen).
-$pihakKepala = 'kepala';
-$pihakPimpinan = isset($ttdPihak['pimpinan']) ? 'pimpinan' : '';
-$pihakNotulis = isset($ttdPihak['notulis']) ? 'notulis' : '';
+$pihakKepala = NOTULEN_TUSMART_PIHAK_KEPALA;
+$pihakPimpinan = (!$dariTusmart && isset($ttdPihak['pimpinan'])) ? 'pimpinan' : '';
+$pihakNotulis = (!$dariTusmart && isset($ttdPihak['notulis'])) ? 'notulis' : '';
 
 // Foto bukti kegiatan untuk lembar "Foto Dokumentasi" (maksimal NOTULEN_FOTO_MAKS).
 // Tanpa foto, halaman foto dialihkan dengan pesan ramah (bukan lembar kosong).
-$fotoDok = notulen_foto($id);
+$fotoDok = $dariTusmart ? notulen_tusmart_foto($id) : notulen_foto($id);
 $fotoUk = foto_cetak_ukuran();
 $istilahFoto = istilah_sekolah('Foto kegiatan');
 if ($bagian === 'foto' && !$fotoDok) {
     flash('Belum ada foto bukti kegiatan pada notulen ini, jadi lembar foto dokumentasi belum dapat dicetak.', 'warn');
-    redirect('notulen_form.php?id=' . $id . '#cardFotoNotulen');
+    redirect($dariTusmart ? 'notulen.php' : 'notulen_form.php?id=' . $id . '#cardFotoNotulen');
 }
 
 $tanggal = (string) $n['tanggal'];
@@ -182,6 +209,22 @@ $bagianBertajuk = static function (string $judul, string $isi): void {
   .sheet-foto-dok .sheet-sign .space{height:34px}
   .sheet-foto-dok .sheet-sign{font-size:.8rem}
   @page{size:A4 <?= $bagian === 'foto' ? 'landscape' : 'portrait' ?>;margin:<?= $bagian === 'foto' ? '10mm' : '13mm' ?>}
+
+  /* --- NOTULEN TUSMART (v1.103.0): daftar hadirnya bisa memuat BANYAK guru sekaligus (data pemilik:
+     12 guru) dan sebagian besar sudah menandatangani, sehingga lembar Daftar Hadir menjadi dua
+     halaman. Tata letak lembar TUSmart dirapatkan supaya SELURUH lembar tetap SATU halaman A4
+     (aturan yang sama dengan lembar lain: 1 halaman). Terukur pada data asli — tinggi lembar
+     Daftar Hadir 1206px → 950px, area cetak A4 (margin 13mm) ≈ 1024px.
+     CATATAN: aturan ini HANYA untuk lembar TUSmart (`.sheet-tusmart`) supaya cetak notulen e-GURU
+     tidak berubah. Ruang tanda tangan blok Kepala TETAP besar (`.sheet-sign .space .ttd-img`
+     lebih kuat selektornya) — yang dirapatkan hanya baris tabel & kepala lembar. */
+  .sheet-tusmart table.sheet.hadir th,.sheet-tusmart table.sheet.hadir td{padding:2px 6px}
+  .sheet-tusmart .ttd-img{max-height:24px}
+  .sheet-tusmart .sheet-head{padding-bottom:4px;margin-bottom:6px}
+  .sheet-tusmart .sheet-meta{gap:1px 14px;margin-bottom:6px}
+  .sheet-tusmart .not-nomor{margin-bottom:8px}
+  .sheet-tusmart .not-ket{margin-top:6px;font-size:.7rem}
+  .sheet-tusmart .sheet-foot{margin-top:10px}
 </style>
 </head>
 <body>
@@ -189,15 +232,16 @@ $bagianBertajuk = static function (string $judul, string $isi): void {
 
 <div class="toolbar no-print">
   <a class="btn btn-ghost" href="notulen.php">Kembali</a>
-  <a class="btn <?= $bagian === 'berita' ? 'btn-primary' : 'btn-ghost' ?>" href="cetak_notulen.php?id=<?= (int) $n['id'] ?>&amp;bagian=berita"><?= ikon('doc', 16) ?> Berita Acara</a>
-  <a class="btn <?= $bagian === 'hadir' ? 'btn-primary' : 'btn-ghost' ?>" href="cetak_notulen.php?id=<?= (int) $n['id'] ?>&amp;bagian=hadir"><?= ikon('clipboard', 16) ?> Daftar Hadir</a>
-  <a class="btn <?= $bagian === 'isi' ? 'btn-primary' : 'btn-ghost' ?>" href="cetak_notulen.php?id=<?= (int) $n['id'] ?>&amp;bagian=isi"><?= ikon('report', 16) ?> Isi Notulen</a>
-  <a class="btn <?= $bagian === 'foto' ? 'btn-primary' : 'btn-ghost' ?>" href="cetak_notulen.php?id=<?= (int) $n['id'] ?>&amp;bagian=foto"><?= ikon('upload', 16) ?> Foto Dokumentasi</a>
-  <a class="btn btn-primary" href="cetak_notulen.php?<?= e(http_build_query(['id' => (int) $n['id'], 'bagian' => $bagian, 'auto' => 1])) ?>"><?= ikon('print', 16) ?> Cetak / Simpan PDF</a>
+  <a class="btn <?= $bagian === 'berita' ? 'btn-primary' : 'btn-ghost' ?>" href="cetak_notulen.php?id=<?= (int) $n['id'] ?>&amp;bagian=berita<?= $qsSumber ?>"><?= ikon('doc', 16) ?> Berita Acara</a>
+  <a class="btn <?= $bagian === 'hadir' ? 'btn-primary' : 'btn-ghost' ?>" href="cetak_notulen.php?id=<?= (int) $n['id'] ?>&amp;bagian=hadir<?= $qsSumber ?>"><?= ikon('clipboard', 16) ?> Daftar Hadir</a>
+  <a class="btn <?= $bagian === 'isi' ? 'btn-primary' : 'btn-ghost' ?>" href="cetak_notulen.php?id=<?= (int) $n['id'] ?>&amp;bagian=isi<?= $qsSumber ?>"><?= ikon('report', 16) ?> Isi Notulen</a>
+  <a class="btn <?= $bagian === 'foto' ? 'btn-primary' : 'btn-ghost' ?>" href="cetak_notulen.php?id=<?= (int) $n['id'] ?>&amp;bagian=foto<?= $qsSumber ?>"><?= ikon('upload', 16) ?> Foto Dokumentasi</a>
+  <a class="btn btn-primary" href="cetak_notulen.php?<?= e(http_build_query(array_filter(['id' => (int) $n['id'],
+      'bagian' => $bagian, 'auto' => 1, 'sumber' => $dariTusmart ? 'tusmart' : null]))) ?>"><?= ikon('print', 16) ?> Cetak / Simpan PDF</a>
 </div>
 
 <div class="sheet-wrap">
-  <div class="print-sheet<?= $bagian === 'foto' ? ' sheet-foto-dok' : '' ?>">
+  <div class="print-sheet<?= $bagian === 'foto' ? ' sheet-foto-dok' : '' ?><?= $dariTusmart ? ' sheet-tusmart' : '' ?>">
     <?php if ($bagian === 'berita'): ?>
 
       <?php // Permintaan pemilik: tulisan "Berita Acara Rapat" pada KOP dihapus (judul dokumen tetap
@@ -313,8 +357,18 @@ $bagianBertajuk = static function (string $judul, string $isi): void {
       </table>
 
       <div class="not-ket">
-        Notulen ini dibuat melalui aplikasi <?= e(APP_NAME) ?> v<?= e(APP_VERSION) ?> pada
-        <?= e(tanggal_id(date('Y-m-d'))) ?> oleh <?= e((string) ($u['nama'] ?? '-')) ?>.
+        <?php if ($dariTusmart): ?>
+          <?php // Notulen TUSmart: sumbernya aplikasi Tata Usaha, bukan e-GURU — sebutkan apa adanya
+                // supaya lembar tidak mengaku dibuat oleh pengguna e-GURU yang sedang mencetak. ?>
+          Notulen ini dibuat melalui aplikasi TUSmart oleh
+          <?= e(trim((string) ($n['dibuat_oleh'] ?? '')) !== '' ? (string) $n['dibuat_oleh'] : '-') ?><?php
+            if (trim((string) ($n['dibuat'] ?? '')) !== ''): ?> pada
+            <?= e(waktu_id_polos((string) $n['dibuat'])) ?><?php endif; ?>,
+          dan ditampilkan pada aplikasi <?= e(APP_NAME) ?> v<?= e(APP_VERSION) ?>.
+        <?php else: ?>
+          Notulen ini dibuat melalui aplikasi <?= e(APP_NAME) ?> v<?= e(APP_VERSION) ?> pada
+          <?= e(tanggal_id(date('Y-m-d'))) ?> oleh <?= e((string) ($u['nama'] ?? '-')) ?>.
+        <?php endif; ?>
       </div>
 
       <!-- Tanda tangan mengikuti aturan aplikasi (pejabat di KIRI, pelaksana di KANAN):
@@ -424,7 +478,11 @@ $bagianBertajuk = static function (string $judul, string $isi): void {
               <td><?= trim((string) $h['jabatan']) !== '' ? e((string) $h['jabatan']) : '-' ?></td>
               <td class="ctr ttd-sel" data-ttd-sel="<?= e($pihakBaris) ?>">
                 <?= notulen_ttd_gambar($ttdPeta, $pihakBaris) ?>
-                <?= notulen_ttd_tombol($pihakBaris, isset($ttdPeta[$pihakBaris])) ?>
+                <?php // Notulen TUSmart: tombol tanda tangan hanya untuk KEPALA (pihak lain menandatangani
+                      // dari akunnya masing-masing), jadi kolom peserta tidak diberi tombol. ?>
+                <?php if (!$dariTusmart): ?>
+                  <?= notulen_ttd_tombol($pihakBaris, isset($ttdPeta[$pihakBaris])) ?>
+                <?php endif; ?>
               </td>
             </tr>
           <?php endforeach; ?>
@@ -442,6 +500,12 @@ $bagianBertajuk = static function (string $judul, string $isi): void {
           <?= e(istilah_sekolah('sekolah')) ?> pada tanggal tersebut. Kolom tanda tangan dapat diisi
           tangan saat rapat berlangsung, atau dibubuhkan langsung pada layar sentuh (HP/tablet)
           dengan menekan tombol <b>Tanda Tangan</b>.
+          <?php if ($dariTusmart): ?>
+            Tanda tangan guru peserta rapat dibubuhkan dari akun e-GURU masing-masing (menu
+            <b>Tanda Tangan Rapat</b>) atau pada aplikasi TUSmart; blok <b>Mengetahui,
+            <?= e(istilah_sekolah('Kepala Sekolah')) ?></b> dapat ditandatangani langsung dari
+            halaman ini.
+          <?php endif; ?>
         </div>
       <?php endif; ?>
 
@@ -462,10 +526,12 @@ $bagianBertajuk = static function (string $judul, string $isi): void {
 <p class="ttd-catatan no-print" id="ttdCatatan" hidden>
   Tanda tangan dapat dibubuhkan <b>langsung pada layar sentuh</b>: tekan tombol
   <b>Tanda Tangan</b> pada kolom/ruang tanda tangan di atas. Sudah ditandatangani:
-  <b data-ttd-jumlah><?= (int) $ttdJumlah ?></b> dari <?= count($ttdPihak) ?> pihak.
+  <b data-ttd-jumlah><?= (int) $ttdJumlah ?></b> dari <?= count($pihakBolehTtd) ?> pihak.
 </p>
-<?php if ($ttdPihak): ?>
-<script type="application/json" id="ttdData"><?= notulen_ttd_skrip_json($id, $ttdPihak, $ttdPeta) ?></script>
+<?php // Notulen TUSmart: hanya blok KEPALA yang ditawarkan pada dialog (server juga menolak pihak lain). ?>
+<?php if ($pihakBolehTtd): ?>
+<script type="application/json" id="ttdData"><?= notulen_ttd_skrip_json($id, $pihakBolehTtd, $ttdPeta,
+    $dariTusmart ? 'tusmart' : '') ?></script>
 <?= notulen_ttd_dialog($id) ?>
 <?php endif; ?>
 

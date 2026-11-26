@@ -272,7 +272,9 @@ const UNGGAH_MAKS_BYTE = 2 * 1024 * 1024;          // 2 MB per berkas
 // "Pada menu ujian online tambahkan tulisan new berkedip seperti pada aplikasi smart teacher"
 // → Super Admin mencentang pada formulir aplikasinya (kolom `ujian_online.baru_pada`), lalu lencana
 // (merah, berkedip) tampil DI ATAS nama menu pada sidebar selama `DAFTAR_APPS_BARU_HARI` (30) hari
-// dan hilang sendiri. **Pilihan pemilik: tanda hanya di menu sidebar** (tidak pada kartu aplikasi).
+// dan hilang sendiri. **v1.99.0: batas 30 hari itu DIHAPUS** (lihat catatan pada konstanta
+// `DAFTAR_APPS_BARU_TEKS` di bawah) — lencana tampil selama tanda bonusnya dipasang.
+// **Pilihan pemilik: tanda hanya di menu sidebar** (tidak pada kartu aplikasi).
 // **v1.72.2** (permintaan pemilik): *"Tulisan new berkedip ganti dengan tulisan 'Bonus'. Pada menu
 // Smart Teacher juga tambahkan fitur 'Bonus' berkedip"* → teks lencana menjadi **Bonus**
 // (`DAFTAR_APPS_BARU_TEKS`) dan fitur ini juga dipakai menu **Smart Teacher** (kolom
@@ -497,7 +499,8 @@ const UNGGAH_MAKS_BYTE = 2 * 1024 * 1024;          // 2 MB per berkas
 //   paling atas (PHP_INT_MAX), lalu `aktif` & `uji_coba` menurut sisa DETIK terbesar, dan sekolah yang
 //   masa aktif/uji cobanya SUDAH HABIS di paling bawah (-1) — sisa yang sama diurutkan menurut nama.
 //   Urutan grafik "Sebaran Siswa per Sekolah/Madrasah" TIDAK diubah (tetap abjad) dan baris JUMLAH
-//   tetap dihitung dari seluruh baris.
+//   tetap dihitung dari seluruh baris. (Grafik itu sendiri DIGANTI pada v1.97.0 menjadi grafik
+//   "Pendaftaran Sekolah/Madrasah per Bulan" — lihat riwayat versi di atas `APP_VERSION`.)
 // 1.72.0 = PERMINTAAN PEMILIK: *"Pada akun pengawas tambahkan menu Perangkat Guru (Perangkat guru
 //   ditampilkan per lembaga yang di dalamnya ada daftar guru + mata pelajaran dan daftar perangkatnya).
 //   Pengawas bisa melihat, memberikan catatan setiap perangkat dan mendownload"* — dengan pilihan:
@@ -910,7 +913,367 @@ const UNGGAH_MAKS_BYTE = 2 * 1024 * 1024;          // 2 MB per berkas
 //       di akun pengawas."* → modul `inc/bk.php`, halaman `supervisi_bk.php`,
 //       `cetak_supervisi_bk.php`, tabel `bk_dokumen`/`bk_supervisi`/`bk_supervisi_nilai`.
 //       Uji: `bash tests_eguru_bk.sh`.
-define('APP_VERSION', '1.95.0');
+// v1.96.0 (skema v64) — MENU "VIDEO TUTORIAL" (permintaan pemilik): *"Dibawah menu dashboard akun
+//       guru, operator, kepala sekolah tambahkan menu Video Tutorial. Isi dari menu ini adalah
+//       kumpulan video yang diupload oleh super admin. Video berupa thumbail youtube yang bisa dibuka
+//       oleh guru, operator dan kepala sekolah. Admin mengisi menu tersebut dengan memberikan judul
+//       video dan link youtube"* → modul `inc/video_tutorial.php`, halaman `video_tutorial.php`,
+//       tabel `video_tutorial`. Uji: `bash tests_eguru_video_tutorial.sh`.
+// v1.97.0 — (a) GRAFIK "SEBARAN SISWA PER SEKOLAH/MADRASAH" pada Ringkasan Semua Sekolah DIGANTI
+//       menjadi **grafik "Pendaftaran Sekolah/Madrasah per Bulan"** (permintaan pemilik: *"Pada yang
+//       saya tandai warna merah ganti dengan grafik sekolah yang mendaftar setiap bulannya"*) — sumber
+//       `sekolah_daftar_bulanan()` (inc/helpers.php, dari `sekolah.didaftar`/`dibuat`, rentang maksimal
+//       12 bulan terakhir); (b) Super Admin dapat **MENUTUP PENDAFTARAN** sekolah/madrasah
+//       (`pendaftaran.php`, kartu "Buka/Tutup Pendaftaran") dengan **batas jumlah pendaftar** dan
+//       nomor WA admin; selama ditutup, `daftar.php` menampilkan keterangan *"Jumlah pendaftar telah
+//       mencapai batas yang ditetapkan oleh sistem. Silahkan hubungi admin di WA 081356964665"* dan
+//       formulir/TINDAKAN POST-nya ditolak di server. Tanpa perubahan skema (semua keadaan disimpan di
+//       `app_pengaturan`: `daftar_tutup`, `daftar_batas`, `daftar_wa`).
+//       Uji: `bash tests_eguru_daftar_tutup.sh`.
+// v1.97.1 — halaman `daftar.php` saat pendaftaran DITUTUP: kotak peringatan (alert) DIGANTI
+//       **tombol berkedip-kedip MERAH** bertuliskan **"Pendaftaran Sekolah/Madrasah Ditutup"**
+//       (permintaan pemilik: *"Pada yang saya tandai warna merah Buat tombol berkedip-kedip warna
+//       merah dan tulisannya ganti dengan 'Pendaftaran Sekolah/Madrasah Ditutup'"*), dan kalimat
+//       "sampai **Admin** membuka kembali pendaftaran" menjadi "sampai **sistem** membuka kembali
+//       pendaftaran". Gaya `.tombol-tutup-kedip` ada di `assets/style.css` (kedipan `opacity`,
+//       dimatikan pada `prefers-reduced-motion`). Tanpa perubahan skema.
+// v1.98.0 — TOLAK PENDAFTARAN DATA GANDA (permintaan pemilik): *"Buat aplikasi menolak pendaftaran
+//       baru ketika terdeteksi sudah ada Nama sekolah/madrasah dan juga ketika terdeteksi sudah ada
+//       nama kepala sekolah/madrasah di dalam sistem. Tujuannya agar tidak terjadi data ganda.
+//       Pendaftaran dapat dilakukan ketika data sekolah/madrasah dihapus dulu oleh super admin"*.
+//       Aturannya SATU di `sekolah_ganda_pesan()`/`nama_banding_kunci()` (inc/helpers.php) dan
+//       dipakai `daftar.php` (pendaftaran publik) + `sekolah.php` (Tambah & Simpan profil Super
+//       Admin). Pembanding nama mengabaikan huruf besar/kecil, spasi, dan tanda baca; baris sekolah
+//       yang DINONAKTIFKAN tetap dihitung sehingga nama baru bebas lagi HANYA setelah data lamanya
+//       dihapus (`sekolah_hapus_permanen()`). Nama kepala kosong tidak pernah dianggap bentrok.
+//       Tanpa perubahan skema. Uji: `bash tests_eguru_daftar_ganda.sh`.
+// v1.98.1 — halaman `daftar.php` saat pendaftaran DITUTUP: baris **"Jumlah sekolah/madrasah yang
+//       sudah terdaftar: N dari batas M."** DIHAPUS (permintaan pemilik: *"tulisan yang saya tandai
+//       warna merah dihapus"*). Tombol berkedip merah + kalimat penutupan tetap. Tanpa perubahan skema.
+// v1.99.0 — LENCANA "Bonus" BERKEDIP pada menu **Ujian Online** kini TAMPIL TERUS (permintaan
+//       pemilik: *"Pada menu Ujian Online tambahkan tulisan Bonus Berkedip seperti Smart Teacher"*).
+//       Sebabnya: lencana menu Ujian Online LENYAP SENDIRI pada 2026-11-04 karena batas
+//       `DAFTAR_APPS_BARU_HARI` (30 hari sejak ditandai 2026-10-05), padahal Super Admin tidak pernah
+//       melepasnya. Batas itu **DIHAPUS**: `daftar_apps_baru()` hanya memeriksa penanda `baru_pada`
+//       (tidak lagi soal umur), `daftar_apps_baru_sisa()` diganti `daftar_apps_baru_tanggal()` untuk
+//       keterangan "berlabel bonus sejak <tanggal>" pada formulir, dan konstanta
+//       `DAFTAR_APPS_BARU_HARI` dihapus. Mekanisme lain TIDAK berubah (masih hanya menu sidebar,
+//       warna merah berkedip, teks konstanta `DAFTAR_APPS_BARU_TEKS`, tanda tetap mengikuti
+//       aktif/tidaknya aplikasi & setelan aktivasi lembaga). Tanpa perubahan skema (tetap v64).
+// v1.100.0 (skema v65) — GURU KELAS BOLEH MENGAJAR DI KELAS LAIN. Permintaan pemilik: *"Ketika guru
+//       ditandai sebagai guru kelas dan dia juga mengajar kelas lain, buat guru tersebut bisa diseting
+//       untuk mengajar kelas lain. Jadi dia guru kelas di kelas yang telah ditentukan tetapi bisa
+//       mengajar mata pelajaran tertentu di kelas yang lain"*. Kelas perwalian tetap di `guru_kelas`
+//       (satu kelas); tabel BARU `guru_kelas_mapel` menyimpan pasangan (kelas lain × mata pelajaran).
+//       Form Data Guru mendapat kartu **"Mengajar di Kelas Lain"** (khusus guru kelas): tiap kelas
+//       dibuka (`<details>`, bekerja tanpa JS) lalu mapelnya dicentang; mapel yang dicentang otomatis
+//       masuk daftar "Mata Pelajaran yang Dipegang". Cakupan administrasi memakai `boleh_kelas_mapel()`
+//       sehingga Penilaian, Daftar Hadir, dan Jurnal menerima pasangan kelas+mapel itu — dan guru
+//       kelas TIDAK bisa mengisi mapel lain pada kelas lain yang bukan tugasnya. `kelas_diampu()`/
+//       `mapel_diampu()`/`boleh_kelas()`/`boleh_mapel()` ikut menggabungkan penugasan ini, sehingga
+//       kelas/mapel tersebut muncul di pilihan menu guru. Selama guru belum punya baris di tabel baru
+//       itu, aturan lama (kelas & mapel diperiksa terpisah) TETAP berlaku — data live tidak berubah.
+//       Uji: `bash tests_eguru_kelas_lain.sh`.
+// v1.101.0 (tanpa perubahan skema, tetap v65) — TANDA TANGAN RAPAT PADA AKUN GURU. Permintaan
+//       pemilik: *"Pada saat operator memilih guru hadir pada kegiatan rapat. Buat guru bisa
+//       menandatangani lewat akun guru masing-masing. Pada akun guru muncul tanda tangani rapat. Yang
+//       muncul hanya yang dicentang oleh operator."* Sumber daftarnya adalah centang pada formulir
+//       Notulen Rapat (`notulen_hadir`), dan tanda tangan memakai mekanisme Notulen Rapat v1.70.0
+//       (kanvas → PNG → `upload_notulen_ttd.php` → media proxy; tabel `notulen_ttd`, kunci pihak
+//       `hadir:g<id guru>`), jadi tanda tangan guru LANGSUNG tampil di kolom tanda tangan lembar
+//       cetak Daftar Hadir milik operator. Halaman baru **`ttd_rapat.php`** (modul `inc/ttd_rapat.php`)
+//       + menu **"Tanda Tangan Rapat"** pada akun yang tertaut ke data guru, dengan lencana jumlah
+//       rapat yang belum ditandatangani. Hak tanda tangan akun guru DIBATASI pada barisnya sendiri dan
+//       ditegakkan di SERVER (`upload_notulen_ttd.php`), bukan hanya dengan menyembunyikan tombol.
+//       Tombol pada halaman ini bertanda `data-ttd-selalu` sehingga tetap tampil di komputer (tanpa
+//       layar sentuh) — kanvas tanda tangan sudah menangani tetikus. Uji: `bash tests_eguru_ttd_rapat.sh`.
+// v1.102.0 (tanpa perubahan skema, tetap v65) — RAPAT TUSMART DITANDATANGANI DARI AKUN e-GURU.
+//       Permintaan pemilik: *"Khusus MA. Sirojuth Tholibiin Mootilango. Ketika Kepala TU/Operator
+//       membuat notulen rapat di aplikasi TU Smart otomatis guru-guru MA. Sirojuth Tholibiin
+//       Mootilango bisa menandatangani lewat akun e-Guru mereka masing-masing."* Menu **Tanda Tangan
+//       Rapat** kini MENGGABUNGKAN dua sumber: notulen e-GURU (seperti v1.101.0) **dan** notulen
+//       aplikasi **TUSmart** (`inc/ttd_rapat_tusmart.php` membuka `tusmart/data/tusmart.sqlite`
+//       langsung; tidak ada penyalinan data sehingga tidak ada dua kebenaran). Rapat TUSmart hanya
+//       tampil bila **NPSN lembaga TUSmart = NPSN sekolah yang sedang dibuka** (jadi hanya MA. STM,
+//       tidak bocor ke sekolah lain) dan hanya untuk guru yang **tercatat pada daftar hadir** rapat
+//       itu. Guru dipetakan ke data guru TUSmart lewat **NIP**, atau **nama tanpa gelar**
+//       (`ttd_rapat_nama_normal()`; TUSmart tidak menyimpan NIP guru) — bila kandidat lebih dari satu,
+//       guru dianggap tidak cocok. Tanda tangan tetap kanvas → PNG → media proxy, lalu URL CDN-nya
+//       ditulis ke tabel `notulen_ttd` TUSmart dengan kunci `hadir:g<id guru TUSmart>` sehingga
+//       LANGSUNG tampil pada lembar cetak Daftar Hadir & penghitung "X ttd" di TUSmart. Hak tanda
+//       tangan tetap barisnya sendiri, ditegakkan di server (`upload_notulen_ttd.php?sumber=tusmart`).
+//       Uji: `bash tests_eguru_tusmart_ttd.sh`.
+//
+// v1.103.0 (tanpa perubahan skema, tetap v65) — NOTULEN TUSMART MASUK DAFTAR NOTULEN (akun kepala).
+//       Permintaan pemilik: *"Notulen rapat yang dibuat di aplikasi TU Smart masuk di Daftar Notulen
+//       (di akun kepala madrasah khusus MA. Sirojuth Tholibiin Mootilango) agar kepala madrasah
+//       MA. Sirojuth Tholibiin Mootilango bisa mengetahui."* Keputusan pemilik: notulen TUSmart
+//       **bisa dibuka & dicetak** (Berita Acara, Daftar Hadir, Isi Notulen, Foto Dokumentasi) **dan
+//       kepala madrasah juga bisa membubuhkan tanda tangan**; yang melihatnya **HANYA akun kepala**
+//       (operator/Ka. Tata Usaha/guru tidak). Modul baru `inc/notulen_tusmart.php` membaca langsung
+//       `tusmart/data/tusmart.sqlite` (tanpa penyalinan data) dengan gerbang lembaga **NPSN** yang
+//       sama seperti v1.102.0. Baris TUSmart tampil pada `notulen.php` bertanda **TUSmart** dan
+//       hanya-lihat; `cetak_notulen.php?sumber=tusmart` mencetak keempat lembar dari data TUSmart
+//       dengan kop & istilah e-GURU. Tanda tangan kepala memakai kanvas → PNG → media proxy, lalu
+//       URL CDN-nya ditulis ke `notulen_ttd` TUSmart dengan pihak **`kepala`** (kunci yang sama
+//       dengan TUSmart, jadi langsung tercetak pada lembar TUSmart). Pihak lain TIDAK dapat
+//       ditandatangani dari jalur ini (ditegakkan di server, `upload_notulen_ttd.php?sumber=tusmart`).
+//       Uji: `bash tests_eguru_tusmart_notulen.sh` + `bash check_eguru_tusmart_notulen_ui.sh`.
+//
+// v1.104.0 (skema v66) — TANDA TANGAN KEPALA & CAP/STEMPEL LEMBAGA PADA DOKUMEN CETAK.
+//       Permintaan pemilik: *"Pada bagian yang saya tandai warna merah tambahkan fitur untuk upload
+//       Tanda tangan kepala sekolah/madrasah dan Cap/Stempel sekolah. Fitur ini bisa diaktifkan dan
+//       non aktifkan oleh Operator sekolah/madrasah"*. Keputusan pemilik (jangan diubah tanpa
+//       bertanya): keduanya dicetak pada blok **"Mengetahui, Kepala …"** di **SEMUA** dokumen cetak,
+//       **cap MENIMPA tanda tangan** (seperti dokumen resmi, agak menutupi nama), dan **sakelar
+//       Operator** menentukan **MUNCUL/TIDAKNYA** keduanya pada hasil cetak (bukan sekadar
+//       boleh/tidaknya mengunggah). Tiga kolom baru pada tabel `sekolah` (`ttd_kepala`,
+//       `cap_sekolah` = URL CDN media proxy; `ttd_cap_aktif` = 1/0, **bawaan 0** sehingga lembar
+//       cetak sekolah lama tidak berubah). Halaman `pengaturan.php` (kartu **Logo (Kop Dokumen
+//       Cetak)**) memuat dua kotak unggah + baris sakelar "Aktifkan/Nonaktifkan"; endpoint baru
+//       `upload_ttd_cap.php` (satu sumber: unggah/ganti, hapus, sakelar). Pencetakan SATU tempat:
+//       `ttd_blok()` (`inc/kop.php`) menyisipkan `ttd_cap_cetak_html()` HANYA pada blok yang
+//       jabatannya diawali "Mengetahui," — blok guru/wali/pengawas tidak berubah. Sakelar hanya
+//       menyembunyikan cetakan; berkas yang sudah diunggah TIDAK dihapus. Uji:
+//       `bash tests_eguru_ttd_cap.sh` + `bash check_eguru_ttd_cap_ui.sh`.
+//
+// v1.105.0 (skema v67) — MENU "MEDIA INTERAKTIF" PADA AKUN GURU.
+//       Permintaan pemilik: *"pada akun guru tambahkan Menu 'Media Interaktif' tepat dibawah Smart
+//       Teacher dan beri penanda Bonus berkedip. Isi dari menu ini adalah Kumpulan Media Interaktif
+//       (SD/MI - SMA/MA yang dibuatkan menu sendiri-sendiri untuk memisahkan antar jenjang) dan Game
+//       Edukasi."* Pilihan pemilik (jangan diubah tanpa bertanya): **(1)** isinya SATU halaman
+//       dengan **tab per jenjang** (SD/MI · SMP/MTs · SMA/MA) + tab **Game Edukasi**; **(2)** menu
+//       hanya untuk **akun guru** (kepala & operator tidak melihatnya); **(3)** lencana **Bonus
+//       berkedip SELALU tampil** (bukan mengikuti tanda bonus per aplikasi seperti Smart Teacher).
+//       Satu tabel baru `media_interaktif` (GLOBAL, tanpa `sekolah_id`, diisi Super Admin seperti
+//       menu daftar aplikasi lain) + kolom `jenjang` sebagai pemisah tabnya. Seluruh perilaku tetap
+//       di MODUL BERSAMA `inc/daftar_apps.php` (kunci menu `media_interaktif`); halaman `media_
+//       interaktif.php` hanya berkas tipis. Uji: `bash tests_eguru_media_interaktif.sh` +
+//       `bash check_eguru_media_interaktif_ui.sh`.
+//
+// v1.105.1 (tanpa perubahan skema, tetap v67) — RAPIKAN JARAK TAB + POPUP KUTIPAN PEMBUKA.
+//       Permintaan pemilik (dua hal sekaligus):
+//       **(1)** *"Yang saya tandai warna merah dibuat lebih rapi karena saat ini saling berdempetan
+//       antara tulisan dan tab"* → keterangan di bawah pil tab dulu memakai `margin-top` NEGATIF
+//       (-6px) sehingga tulisannya menumpuk di tepi bawah pil. Sekarang jaraknya diatur kelas
+//       `.apps-kat` + `.apps-kat-ket` (garis putus-putus halus sebagai pemisah), tanpa margin negatif.
+//       **(2)** *"saat guru mengklik menu Media Interaktif yang muncul duluan adalah popup dengan
+//       tulisan: 'Pendidikan adalah kunci pembuka pintu masa depan. Mari manfaatkan teknologi untuk
+//       keberkahan ilmu dan kemajuan umat.' - Supianto (Pengembang)"* → kunci konfigurasi baru
+//       **`popup_awal`** pada menu daftar aplikasi: daftar_apps_halaman() mencetak `<dialog>` dan
+//       `initPopupAwal()` (assets/app.js) membukanya sebagai modal lebih dulu. Tanpa JavaScript popup
+//       tidak muncul — halaman tetap bisa dipakai (tidak ada yang menghalangi).
+//
+// v1.105.2 (tanpa perubahan skema, tetap v67) — POPUP PEMBUKA: SEKALI PER SESI + TIDAK UNTUK SUPER ADMIN.
+//       Permintaan pemilik: *"Popup hanya muncul satu kali saja setiap guru mengklik Menu Interaktif.
+//       Tidak perlu ditampilkan di super admin ketika akan mengisi"*.
+//       Sebelumnya popup `popup_awal` dicetak pada SETIAP pembukaan halaman menu itu, sehingga guru
+//       harus menutupnya berulang kali. Sekarang aturannya SATU tempat di
+//       `popup_awal_perlu_tampil()`/`popup_awal_selesai()` (`inc/daftar_apps.php`):
+//       **Super Admin tidak pernah** melihatnya (dialah pengisi daftar media), dan akun guru
+//       melihatnya **sekali per sesi login** (penanda `$_SESSION['popup_awal_lihat'][<menu>]`,
+//       ikut terhapus saat keluar karena `logout.php` mengosongkan sesi — pola yang sama dengan
+//       penanda popup "Selamat datang"). Tidak ada batas waktu/hari.
+//
+// v1.106.0 (tanpa perubahan skema, tetap v67) — TAB PIL "TIMBUL" + PERINGATAN MERAH BERKEDIP.
+//       Permintaan pemilik: *"Yang saya tandai warna merah buat tombol timbul agar lebih menarik. Dan
+//       yang saya tandai warna biru buat keterangan peringatan 'Penggunaan media interaktif (aktif
+//       atau tidaknya) tergantung dari kebijakan pihak gemini'. Buat tulisan warna merah dan berkedip
+//       sebagai peringatan"* (kotak merah pada tangkapan layar = baris pil tab menu Media Interaktif;
+//       kotak biru = ruang KOSONG di kanan baris pil). Sekarang:
+//       (1) pil tab (`#kat-media_interaktif a.chip`) dibuat **TIMBUL** — bayangan padat di bawah +
+//           bayangan lembut, terangkat saat disorot & tertekan saat diklik (`.apps-kat > .chip`,
+//           `assets/style.css`). Warna tiap tab TIDAK berubah (tetap `.chip-list.warna`);
+//       (2) **kotak peringatan merah di kanan baris pil** (`.apps-kat-ingat`) yang tulisannya
+//           **BERKEDIP** (`@keyframes ingatKedip`, dimatikan pada `prefers-reduced-motion`).
+//           Kalimatnya DIPAKAI PERSIS seperti yang diketik pemilik dan disimpan pada konfigurasi menu
+//           (kunci baru `'ingat_kategori'`, `inc/daftar_apps.php`) supaya modul bersama itu tetap umum.
+//           Baris pil + peringatan dibungkus `.apps-kat-baris` (melipat ke bawah pada layar sempit).
+//
+// v1.107.0 (tanpa perubahan skema, tetap v67) — TEKS TOMBOL PADA KARTU MEDIA INTERAKTIF.
+//       Permintaan pemilik: *"Kata 'Buka Aplikasi' pada menu Media Interaktif jenjang MI/SD - SMA/MA
+//       ganti dengan 'Buka Media'. Sedangkan kata 'Buka Aplikasi' pada Game Edukasi ganti dengan
+//       'Mainkan Game'"*. Teks tombol sekarang disetel dari KONFIGURASI MENU, bukan ditulis di kartu:
+//       kunci `'buka_label'` (per menu) + `'buka_label_kategori'` (per TAB, kunci = nilai `jenjang`),
+//       dibaca SATU tempat oleh `daftar_apps_buka_label()` (`inc/daftar_apps.php`). Menu daftar
+//       aplikasi lain tidak menyetelnya sehingga tombolnya TETAP "Buka Aplikasi". Kalimat pengantar
+//       di atas daftar, keterangan pada formulir Super Admin, dan panduan Petunjuk Penggunaan ikut
+//       memakai teks itu supaya tidak ada lagi tulisan "Buka Aplikasi" pada menu Media Interaktif.
+//       Uji: `bash tests_eguru_media_interaktif.sh` + `bash check_eguru_media_interaktif_ui.sh`.
+//
+// v1.108.0 (tanpa perubahan skema, tetap v67) — REKAP PENGGUNAAN MEDIA PADA DASBOR SUPER ADMIN.
+//       Permintaan pemilik: *"tambahkan data total media pembelajaran dan game edukasi dibuka atau
+//       digunakan oleh seluruh pengguna. Data per jenjang untuk media. tujuannya untuk mengetahui
+//       media atau game mana yang paling sering dibuka/digunakan"* (kotak merah di dalam kartu
+//       "Aktivitas Aplikasi" pada Ringkasan Semua Sekolah/Madrasah). Sekarang bagian kosong kartu
+//       itu memuat: **total klik** (chip), **angka per jenjang** (SD/MI, SMP/MTs, SMA/MA, Game
+//       Edukasi — memakai `.stat-mini`), dan daftar **"Paling sering dibuka"** (5 teratas) berisi
+//       nama media/game + jenjangnya + jumlah klik. Sumber datanya tabel `app_klik` yang sudah ada
+//       (menu `media_interaktif`, seluruh pengguna & sekolah, tanpa batas waktu); satu sumber aturan
+//       **`app_klik_media_rekap()`** (`inc/daftar_apps.php`) — jangan menghitung sendiri di halaman.
+//       Gaya baru hanya untuk blok ini: `.media-rekap*` (`assets/style.css`).
+//       Uji: `bash tests_eguru_media_interaktif.sh` + `bash check_eguru_media_interaktif_ui.sh`.
+//
+// v1.109.0 (skema v68) — MENU **PKG** (akun KEPALA SEKOLAH/MADRASAH) & **HASIL PKG** (akun GURU,
+//       serta akun PENGAWAS untuk binaannya). Permintaan pemilik: *"Pada akun kepala sekolah/madrasah
+//       tambahkan menu PKG (yang saya tandai warna merah). Dan pada akun Guru tambahkan menu Hasil PKG
+//       (yang saya tandai warna biru). Menu PKG (Penilaian Kinerja Guru) pada akun kepala sekolah
+//       digunakan untuk menilai setiap guru pada lembaganya sendiri (Instrumen penilaian seperti yang
+//       saya upload) dan hasil penilaiannya masuk ke menu Hasil PKG pada akun guru. Selain itu pengawas
+//       juga bisa melihat hasil PKG setiap guru binaannya."*
+//       (a) Instrumen **13 butir / 4 dimensi** persis berkas "Instrumen PKG tahun 2026" (dimensi A
+//           Perencanaan & Pelaksanaan Pembelajaran Berdiferensiasi 4 butir, B Manajemen Kelas &
+//           Budaya Positif 3, C Asesmen, Umpan Balik & Pelaporan 3, D Pengembangan Profesi &
+//           Perilaku Kerja (BerAKHLAK) 3), skala **1-4**, skor maksimal **52**; daftarnya di KODE
+//           (`pkg_instrumen()`), bukan di basis data.
+//       (b) Predikat memakai ambang instrumen pemilik (86-100 Sangat Baik, 70-85 Baik, 55-69 Cukup,
+//           di bawah 55 Kurang) — BUKAN ambang A/B/C/D menu Penilaian Siswa.
+//       (c) DUA tabel baru: `pkg_penilaian` (satu penilaian per guru per tahun ajaran x semester;
+//           menilai ulang pada periode yang sama MEMPERBARUI baris itu) dan `pkg_nilai` (skor +
+//           catatan/bukti fisik tiap butir). Keduanya KOSONG setelah migrasi.
+//       (d) Letak menu DITETAPKAN pemilik lewat kotak pada tangkapan layar: **PKG** tepat di bawah
+//           "Perangkat Masuk" (di atas Ujian Online), **Hasil PKG** tepat di bawah "Aplikasi Sagu"
+//           (di atas Hasil Supervisi). Pengawas melihat menunya pada blok "Lintas Sekolah/Madrasah".
+//       (e) Lembar cetak `cetak_pkg.php` (A4 potrait) memuat identitas guru & penilai, rubrik 13 butir,
+//           rekapitulasi per dimensi, persentase & predikat, catatan RTL, lalu tanda tangan
+//           **Guru yang Dinilai** (kiri) dan **Kepala Sekolah/Madrasah / Penilai** (kanan).
+//       Uji: `bash tests_eguru_pkg.sh` + `bash check_eguru_pkg_ui.sh`.
+//
+// v1.109.1 (skema tetap v68) — TATA LETAK LEMBAR CETAK PKG (`cetak_pkg.php`) DIRAPIKAN. Permintaan
+//       pemilik (tangkapan layar hasil cetak): bagian bertanda HITAM "agar dirapikan" dan bagian
+//       bertanda BIRU "dibuat di dalam kolom agar terlihat rapi".
+//       (a) **Legenda skala 1-4** kini KOTAK TABEL berbingkai (judul + 4 baris, kolom nomor sempit
+//           rata tengah, kolom arti) dengan jarak 12px ke tabel rubrik — dulu hanya daftar tanpa
+//           bingkai sehingga nomor & arti tidak sejajar dan baris terakhir menumpuk tabel rubrik.
+//       (b) **Catatan & RTL** (Kelebihan / Area yang Perlu Ditingkatkan / Rencana Penguatan) kini
+//           TABEL berbingkai DUA KOLOM (label 34% di kiri | isi di kanan) berjudul
+//           "Catatan & Rencana Tindak Lanjut (RTL)" — dulu teks menggantung tanpa kolom dan labelnya
+//           terlipat dua baris. `table-layout:fixed` menjaga label tetap SATU baris.
+//       (c) **"Ditetapkan di / Pada Tanggal"** kini kotak tabel kecil di KANAN (label sejajar, tidak
+//           menempel ke tepi area cetak) — dulu dua baris teks rata kanan tanpa bingkai.
+//       (d) `@media print`: legenda, tabel RTL, kotak "Ditetapkan di", dan blok tanda tangan memakai
+//           `break-inside:avoid` supaya tidak terpotong di tengah halaman (hasil: 2 halaman A4).
+//       Uji: `bash eguru_pkg_cetak_ukur.sh` (25 pengukuran kotak elemen + jumlah halaman PDF).
+//
+// v1.110.0 (skema tetap v68) — **BATAL NILAI** pada menu PKG + kolom tabel PKG dirapikan.
+//       Permintaan pemilik: tombol pada kotak MERAH di kolom "Tindakan" tabel **Riwayat Penilaian
+//       Tersimpan** — *"ketika diklik maka penilaian oleh kepala sekolah akan batal"*; dan bagian
+//       bertanda HITAM *"agar dirapikan"*.
+//       (a) **Batal Nilai** (POST `aksi=batal`, tombol merah kecil berikon tempat sampah, dengan
+//           konfirmasi yang menyebut nama guru + periode) menghapus baris `pkg_penilaian` beserta 13
+//           butir `pkg_nilai` → guru kembali **belum dinilai** pada periode itu dan hasilnya hilang
+//           dari menu Hasil PKG akun guru. Satu jalur kode dengan "Hapus Penilaian" pada halaman
+//           detail (`aksi=hapus`), hanya pesannya berbeda. CSRF tetap wajib.
+//       (b) Kolom "Tindakan" kedua tabel dilebarkan (riwayat 190 → 270px, daftar guru 210 → 274px)
+//           supaya ketiga tombol sejajar SATU baris (sebelumnya kelompok tombol Ubah/Lihat/Cetak
+//           terlipat dua baris); tombol cetak pada daftar guru kini berlabel **Cetak** (dulu ikon
+//           saja) sehingga seragam dengan tabel riwayat.
+//       (c) Legenda skala pada lembar cetak: `table-layout:fixed` + baris pertama ber-`colspan`
+//           membuat kolomnya terbelah 50:50 (nomor skala melayang di tengah). Kini lebar kolom nomor
+//           ditetapkan lewat `<colgroup><col class="c-n">` (58px) sehingga nomor menempel di kiri.
+//       Uji: `bash tests_eguru_pkg.sh` + `bash check_eguru_pkg_ui.sh` + `bash eguru_pkg_cetak_ukur.sh`.
+//
+// v1.110.1 (skema tetap v68) — KOLOM TABEL "CATATAN & RTL" PADA LEMBAR CETAK DIRAPIKAN.
+//       Permintaan pemilik (tangkapan layar hasil cetak, kotak hitam pada tabel Catatan & Rencana
+//       Tindak Lanjut): *"Rapikan yang saya tandai warna hitam"*.
+//       Sebabnya sama dengan legenda skala: `table-layout:fixed` mengambil lebar kolom dari baris
+//       PERTAMA, dan baris pertama tabel itu adalah sel judul ber-`colspan="2"` → kolom terbelah
+//       **50:50** (terukur 450px/450px pada lembar 900px) walau `tbody th{width:34%}` sudah ditulis.
+//       Akibatnya **separuh kolom label kosong** dan teks isi baru mulai di tengah lembar.
+//       Perbaikan: lebar kolom label ditetapkan lewat `<colgroup><col class="c-l">` (34%) sehingga
+//       terukur **34% / 66%**; aturan layar sempit juga menulis ke `col.c-l` (44%), bukan `tbody th`.
+//
+// v1.111.0 (skema **v69**) — TAB "BUATKAN MEDIA" + MENU "PERMINTAAN MEDIA" (Super Admin).
+//       Permintaan pemilik: *"Pada yang saya tandai warna merah tambahkan tab 'Buatkan Media'. Isinya
+//       data media yang akan diminta: Nama Guru, Asal Sekolah, Judul Media. Permintaan ini akan
+//       terkirim ke super admin. Jadi di halaman super admin tambahkan Menu Permintaan Media dengan
+//       isi daftar Guru + Judul media yang diminta dan tambahkan fitur aksi (Sedang ditinjau, media
+//       telah dibuat). Status sedang ditinjau atau media telah dibuat akan muncul juga di akun guru
+//       yang meminta"*.
+//       (a) **Tab "Buatkan Media"** = pil KE-5 pada baris pil menu Media Interaktif (posisi kotak
+//           merah pada tangkapan layar, tepat setelah "Game Edukasi"), HANYA untuk akun guru. Isinya
+//           formulir **Nama Guru / Asal Sekolah / Judul Media** (dua yang pertama terisi otomatis dari
+//           akun & lembaganya) + daftar permintaan milik guru itu beserta STATUS-nya.
+//       (b) **Menu "Permintaan Media"** pada sub menu **Layanan** milik Super Admin: daftar seluruh
+//           permintaan (nama guru, asal sekolah, judul media, waktu kirim, status) dengan penyaring
+//           status & pencarian, serta dua aksi: **Sedang ditinjau** dan **Media telah dibuat**.
+//           Lencana sub menu = jumlah yang masih "Sedang ditinjau".
+//       (c) Status yang ditetapkan Super Admin **langsung tampil pada akun guru yang meminta** (tab
+//           Buatkan Media) — satu sumber aturan: `inc/media_permintaan.php` + konstanta
+//           `MEDIA_PERMINTAAN_STATUS` (inc/config.php).
+//       Skema v69: SATU tabel baru `media_permintaan` (kosong setelah migrasi).
+//       Uji: `bash tests_eguru_permintaan_media.sh` + `bash check_eguru_permintaan_media_ui.sh`.
+//
+// v1.111.1 (skema **v70**) — ISIAN KELAS & FASE pada formulir "Buatkan Media".
+//       Permintaan pemilik: *"Dibawah Judul Media tambahkan Kelas dan Fase agar media pembelajaran
+//       lebih fokus ke kelas dan fasenya"*.
+//       (a) DUA isian BARU tepat di bawah Judul Media: **Kelas** (1–12, pilihan) dan **Fase**
+//           (A–F, pilihan). Fase terisi OTOMATIS mengikuti kelas (Kurikulum Merdeka: 1-2=A, 3-4=B,
+//           5-6=C, 7-9=D, 10=E, 11-12=F) lewat `initKelasFase()` di `assets/app.js`; server tetap
+//           memeriksa sendiri dan menurunkan fase dari kelas bila kiriman tanpa fase.
+//       (b) Kolom baru `media_permintaan.kelas` & `media_permintaan.fase` (skema v70, db_add_column —
+//           tabel tidak dibangun ulang). Permintaan LAMA dibiarkan kosong dan ditampilkan "-"
+//           (tidak ada kelas/fase yang ditebak).
+//       (c) Kelas & fase tampil sebagai baris kecil di bawah judul media, baik pada tabel "Permintaan
+//           Media Saya" (guru) maupun tabel menu "Permintaan Media" (Super Admin) — kolom tabel TIDAK
+//           ditambah supaya kolom Aksi 310px tetap muat satu baris.
+//       Uji: `bash tests_eguru_permintaan_media.sh` + `bash check_eguru_permintaan_media_ui.sh`.
+//
+// v1.111.2 (skema **v71**) — MATA PELAJARAN sebelum Kelas + tabel Super Admin mengikuti formulir.
+//       Permintaan pemilik: *"Tambahkan Mata pelajaran sebelum kelas (yang ditandai warna merah).
+//       Kemudian pada super admin tabelnya disesuaikan dengan Formulir Permintaan Media"* (kotak merah
+//       pada tangkapan layar = isian **Kelas**).
+//       (a) Isian BARU **Mata Pelajaran** (`#mp_mapel`) diletakkan **DI ATAS** isian Kelas & Fase —
+//           jadi urutan formulir: Nama Guru · Asal Sekolah/Madrasah · Judul Media · **Mata Pelajaran**
+//           · Kelas · Fase. Isian teks bebas (nama mapel tiap lembaga berbeda) dengan saran dari daftar
+//           mapel lembaga itu (`<datalist>`, `mapel_list()`), wajib diisi, minimal 2 huruf (agar "BK"
+//           tetap sah).
+//       (b) Kolom baru `media_permintaan.mata_pelajaran` (skema v71, db_add_column — tabel tidak
+//           dibangun ulang). Permintaan LAMA dibiarkan kosong → tampil "-".
+//       (c) Tabel menu **Permintaan Media** (Super Admin) DIPISAH MENJADI KOLOM mengikuti formulir:
+//           No · Guru · Asal Sekolah · Judul Media · **Mata Pelajaran** · **Kelas** · **Fase** ·
+//           Dikirim · Status · Aksi. Baris kecil kelas/fase di bawah judul media DIPINDAH ke kolomnya
+//           sendiri (tidak dicetak ganda). Kolom tabel dibiarkan bisa digeser mendatar
+//           (`.table-wrap` sudah `overflow-x:auto`) dan kolom Aksi TETAP 310px.
+//       (d) Tabel "Permintaan Media Saya" (guru) menampilkan baris kecil
+//           "Mata Pelajaran · Kelas N · Fase X" di bawah judul media.
+//       Uji: `bash tests_eguru_permintaan_media.sh` + `bash check_eguru_permintaan_media_ui.sh` +
+//       `bash check_eguru_migrasi_v71.sh`.
+//
+// v1.112.0 (skema **v72**) — SUB TAB FASE di dalam tab jenjang menu "Media Interaktif".
+//       Permintaan pemilik: *"Pada Tab SD/MI Tambahkan Fase A, B, C untuk memisah media itu difase
+//       apa. Begitu juga untuk Tab SMA/MA tambahkan Fase E, F. Kalau SMP/MTs hanya Fase D"*.
+//       (a) Baris pil KEDUA di bawah baris pil jenjang: **Fase A/B/C** pada tab SD/MI, **Fase D**
+//           pada SMP/MTs, **Fase E/F** pada SMA/MA. Tab **Game Edukasi** tidak berfase (isinya game,
+//           bukan media per fase). Susunannya satu tempat: `MEDIA_INTERAKTIF_FASE` (inc/config.php).
+//       (b) Kolom baru `media_interaktif.fase` (skema v72, db_add_column — tabel tidak dibangun
+//           ulang). Media LAMA dibiarkan kosong dan **tetap tampil pada setiap fase** jenjangnya
+//           (tidak ada media yang hilang karena belum diberi fase).
+//       (c) Formulir Super Admin mendapat pilihan **Fase (sub tab)** — dikelompokkan per jenjang,
+//           boleh dikosongkan (= tampil di semua fase jenjang itu), dan ditolak server bila fasenya
+//           tidak cocok dengan jenjang yang dipilih.
+//       Uji: `bash tests_eguru_media_fase.sh` + `bash check_eguru_media_fase_ui.sh` +
+//       `bash check_eguru_migrasi_v72.sh`.
+//
+// v1.113.0 (skema **v73**) — MENU "KIRIM MATERI/TUGAS KE SISWA" pada akun guru.
+//       Permintaan pemilik: *"Pada akun guru tambahkan menu 'Kirim Materi/Tugas Ke Siswa'. Isi dari
+//       menu ini guru bisa mengirim sekaligus ke siswa yang dia ajar atau memilih siswa tertentu.
+//       Modulnya: Judul Materi/Tugas, Mata Pelajaran, Unggah (bisa pdf, word, gambar dan Maksimal
+//       2MB) dan ada setingan batas waktu tugas/materi bisa dibuka oleh siswa. Hasilnya akan
+//       terkirim ke akun siswa dengan menampilkan nama guru pengirim, mata pelajaran, file/dokumen
+//       (bisa di download dan dicetak)"*.
+//       (a) Menu baru pada sidebar akun guru TEPAT di bawah "Kirim Perangkat" (kotak merah pada
+//           tangkapan layar pemilik) → halaman `materi_kirim.php`.
+//       (b) Penerima: SELURUH siswa yang diajar guru itu (kelas yang diampu) ATAU siswa tertentu
+//           yang dicentang. Siswa di luar kelas yang diampu DITOLAK server (anti-IDOR).
+//       (c) Dua tabel baru (skema v73): `materi_kirim` (judul, mapel, berkas di media proxy,
+//           mulai dibuka, batas waktu) + `materi_penerima` (satu baris per siswa penerima).
+//       (d) Akun siswa mendapat menu **"Materi & Tugas"** (`materi_saya.php`) yang menampilkan nama
+//           guru pengirim, mata pelajaran, berkas (Unduh) dan lembar cetaknya (`cetak_materi.php`).
+//           Materi/tugas yang belum waktunya dibuka atau sudah melewati batas waktu TIDAK dapat
+//           dibuka/diunduh/dicetak siswa (ditegakkan server, bukan hanya disembunyikan di tampilan).
+//       Uji: `bash tests_eguru_materi_siswa.sh`.
+define('APP_VERSION', '1.113.0');
 // Unggahan berkas (logo sekolah) lewat media proxy platform. Token dibaca server-side
 // dari berkas .vibecoder-media-token dan TIDAK pernah dikirim ke browser.
 // AKTIVASI sekolah/madrasah: cadangan kunci rahasia generator KODE AKTIVASI.
@@ -1192,6 +1555,37 @@ const PERANGKAT_STATUS = [
 // Keadaan yang WAJIB disertai keterangan/alasan (itulah "alasannya" bagi guru).
 const PERANGKAT_STATUS_ALASAN_WAJIB = ['revisi', 'ditolak'];
 
+// ===================== FITUR "KIRIM MATERI/TUGAS KE SISWA" (skema v73, v1.113.0) =====================
+// Permintaan pemilik: *"Pada akun guru tambahkan menu 'Kirim Materi/Tugas Ke Siswa'. Isi dari menu ini
+// guru bisa mengirim sekaligus ke siswa yang dia ajar atau memilih siswa tertentu. Modulnya: Judul
+// Materi/Tugas, Mata Pelajaran, Unggah (bisa pdf, word, gambar dan Maksimal 2MB) dan ada setingan
+// batas waktu tugas/materi bisa dibuka oleh siswa. Hasilnya akan terkirim ke akun siswa dengan
+// menampilkan nama guru pengirim, mata pelajaran, file/dokumen (bisa di download dan dicetak)"*.
+//
+// Letak menu DITETAPKAN pemilik lewat kotak merah pada tangkapan layar sidebar: TEPAT di bawah
+// "Kirim Perangkat" dan di atas "Ujian Online" — jangan dipindah ke blok lain.
+//
+// Berkas yang diterima: **pdf, word (.docx), dan gambar** — persis permintaan pemilik. Daftar ini
+// SENGAJA lebih sempit daripada `dok_ekstensi_semua()` (yang juga memuat video, xlsx, zip, dsb.)
+// supaya materi/tugas hanya berisi berkas yang memang diminta. `.doc` (Word lama) TIDAK ada karena
+// media proxy platform tidak menerima ekstensi itu — guru diarahkan menyimpan ulang sebagai .docx.
+const MATERI_EKSTENSI = ['pdf', 'docx', 'jpg', 'jpeg', 'png', 'gif', 'webp'];
+// Batas ukuran berkas = UNGGAH_MAKS_BYTE (2 MB) — permintaan pemilik "Maksimal 2MB".
+const MATERI_MAKS_BYTE = UNGGAH_MAKS_BYTE;
+const MATERI_JUDUL_MAKS = 160;
+const MATERI_KETERANGAN_MAKS = 600;
+// Batas jumlah siswa per satu pengiriman (jaring pengaman; satu kelas biasanya jauh di bawah ini).
+const MATERI_PENERIMA_MAKS = 1000;
+// Keadaan waktu sebuah materi/tugas bagi siswa — SATU sumber aturan (materi_keadaan()):
+//   buka  = sedang dapat dibuka (tidak ada batas, atau sekarang di antara mulai & batas)
+//   belum = belum sampai waktu "Dibuka mulai"
+//   tutup = sudah melewati "Batas waktu"
+const MATERI_KEADAAN = [
+    'buka'  => 'Dapat Dibuka',
+    'belum' => 'Belum Dibuka',
+    'tutup' => 'Sudah Ditutup',
+];
+
 // ===================== ISI "TENTANG APLIKASI" PADA HALAMAN MASUK =====================
 // Permintaan pemilik: *"Pada halaman depan di bagian tentang aplikasi tambahkan tempat foto, nama
 // dan keterangan dengan posisi atau letak dibuat sama dengan aplikasi supervisi"* — dengan pilihan:
@@ -1378,12 +1772,101 @@ const GRUP_EGURU_KET_MAKS   = 300;
 // 'Bonus' berkedip"* → teksnya kini **Bonus** (merah, berkedip) dan fiturnya dipakai menu
 // **Ujian Online** + **Smart Teacher**.
 // Super Admin menandainya lewat centang "Tandai sebagai bonus" pada formulir aplikasinya, lalu
-// tulisan **Bonus** tampil DI ATAS nama menu pada sidebar — hilang sendiri setelah jumlah hari di
-// bawah ini.
-const DAFTAR_APPS_BARU_HARI = 30;
+// tulisan **Bonus** tampil DI ATAS nama menu pada sidebar SELAMA tanda itu dipasang.
+// ⚠️ v1.99.0: batas `DAFTAR_APPS_BARU_HARI` (30 hari, lencana hilang sendiri) **DIHAPUS** atas
+// permintaan pemilik (*"Pada menu Ujian Online tambahkan tulisan Bonus Berkedip seperti Smart
+// Teacher"*) — lencana di menu Ujian Online sudah lenyap sendiri karena batas itu. Sekarang satu-
+// satunya cara melepas lencana = menghilangkan centangnya pada formulir aplikasi.
 // Teks lencana (dipakai `daftar_apps_badge_new()` dan kotak setelan pada formulir aplikasi).
 // JANGAN menulis "Bonus" langsung di halaman/modul — ubah di sini bila pemilik berganti teks lagi.
 const DAFTAR_APPS_BARU_TEKS = 'Bonus';
+
+// TAB JENJANG PADA MENU "MEDIA INTERAKTIF" (v1.105.0, skema v67) — permintaan pemilik: *"Isi dari
+// menu ini adalah Kumpulan Media Interaktif (SD/MI - SMA/MA yang dibuatkan menu sendiri-sendiri untuk
+// memisahkan antar jenjang) dan Game Edukasi."*
+// Satu daftar untuk SEMUA menu bertab (lihat `daftar_apps_kategori()` di inc/daftar_apps.php):
+// kunci = nilai kolom `jenjang` pada tabel menu itu, label = tulisan pada pil tab.
+// ⚠️ Menambah/menghapus tab = ubah di SINI saja; baris lama yang jenjangnya tidak lagi terdaftar
+// otomatis tampil pada tab PERTAMA (tidak pernah hilang dari daftar).
+const MEDIA_INTERAKTIF_JENJANG = [
+    'sd-mi'   => 'SD/MI',
+    'smp-mts' => 'SMP/MTs',
+    'sma-ma'  => 'SMA/MA',
+    'game'    => 'Game Edukasi',
+];
+
+// SUB TAB FASE di dalam tab jenjang pada menu "MEDIA INTERAKTIF" (v1.112.0, skema v72) —
+// permintaan pemilik: *"Pada Tab SD/MI Tambahkan Fase A, B, C untuk memisah media itu difase apa.
+// Begitu juga untuk Tab SMA/MA tambahkan Fase E, F. Kalau SMP/MTs hanya Fase D"*.
+//
+// Kunci luar = nilai `media_interaktif.jenjang` (tab jenjang), kunci dalam = nilai kolom
+// `media_interaktif.fase` yang disimpan, label = tulisan pada pil fase. Susunan fase mengikuti
+// Kurikulum Merdeka: SD/MI (A–C) · SMP/MTs (D) · SMA/MA (E–F) — tab **Game Edukasi** sengaja TIDAK
+// punya fase (isinya game, bukan media per fase), jadi tidak tercantum di sini.
+// ⚠️ Menambah/menghapus fase = ubah di SINI saja. Baris media yang `fase`-nya kosong (seluruh media
+// lama) TETAP tampil pada SETIAP fase jenjangnya — jangan pernah menyembunyikan media yang belum
+// diberi fase (isian Super Admin bisa "hilang" tanpa sebab yang jelas).
+const MEDIA_INTERAKTIF_FASE = [
+    'sd-mi'   => ['a' => 'Fase A', 'b' => 'Fase B', 'c' => 'Fase C'],
+    'smp-mts' => ['d' => 'Fase D'],
+    'sma-ma'  => ['e' => 'Fase E', 'f' => 'Fase F'],
+];
+
+// Tab yang dibuka lebih dulu bila guru belum memilih tab, mengikuti JENJANG lembaganya (kolom
+// `sekolah.jenjang`, skema v49). Jenjang yang tidak terdaftar di sini → tab pertama.
+const MEDIA_INTERAKTIF_TAB_JENJANG = [
+    'SD'  => 'sd-mi',
+    'MI'  => 'sd-mi',
+    'SMP' => 'smp-mts',
+    'MTs' => 'smp-mts',
+    'SMA' => 'sma-ma',
+    'MA'  => 'sma-ma',
+    'MAK' => 'sma-ma',
+    'SMK' => 'sma-ma',
+];
+
+// PERMINTAAN MEDIA — tab "Buatkan Media" pada menu Media Interaktif akun GURU (v1.111.0, skema v69).
+// Permintaan pemilik: *"tambahkan tab 'Buatkan Media'. Isinya data media yang akan diminta: Nama Guru,
+// Asal Sekolah, Judul Media. Permintaan ini akan terkirim ke super admin … tambahkan fitur aksi
+// (Sedang ditinjau, media telah dibuat). Status sedang ditinjau atau media telah dibuat akan muncul juga
+// di akun guru yang meminta"*.
+//
+// DUA keadaan saja — PERSIS seperti yang diminta pemilik (jangan menambah keadaan lain tanpa bertanya):
+//   • `ditinjau` = "Sedang ditinjau"  → keadaan AWAL saat guru mengirim permintaan (otomatis);
+//   • `selesai`  = "Media telah dibuat" → ditetapkan Super Admin setelah medianya dibuat.
+// Nilai kolom `media_permintaan.status`; label & pilnya satu tempat: inc/media_permintaan.php.
+const MEDIA_PERMINTAAN_STATUS = [
+    'ditinjau' => 'Sedang ditinjau',
+    'selesai'  => 'Media telah dibuat',
+];
+
+// Batas panjang isian formulir "Buatkan Media" (dipotong saat disimpan, bukan ditolak).
+const MEDIA_PERMINTAAN_NAMA_MAKS    = 120;
+const MEDIA_PERMINTAAN_SEKOLAH_MAKS = 160;
+const MEDIA_PERMINTAAN_JUDUL_MAKS   = 200;
+// MATA PELAJARAN (v1.111.2, skema v71) — isian teks bebas (nama mapel tiap lembaga berbeda), WAJIB,
+// minimal 2 huruf (supaya singkatan seperti "BK" tetap sah). Saran isian diambil dari daftar mapel
+// lembaga guru itu (`mapel_list()`, `<datalist>`), bukan dari daftar tetap di kode.
+const MEDIA_PERMINTAAN_MAPEL_MAKS = 120;
+// Batas jumlah permintaan per akun per hari — pengaman sederhana supaya daftar Super Admin tidak
+// dibanjiri kiriman berulang (10 permintaan sehari lebih dari cukup untuk satu guru).
+const MEDIA_PERMINTAAN_MAKS_HARI = 10;
+
+// KELAS & FASE media yang diminta (v1.111.1, skema v70) — permintaan pemilik: *"Dibawah Judul Media
+// tambahkan Kelas dan Fase agar media pembelajaran lebih fokus ke kelas dan fasenya"*.
+//   • `kelas` = angka 1..12 (disimpan sebagai teks, satu/dua digit). Batas atasnya konstanta di bawah.
+//   • `fase`  = SATU huruf A..F (Fase Kurikulum Merdeka). Label pilihannya memuat rentang kelasnya
+//     supaya guru tidak perlu menghafal padanannya; padanan kelas → fase ada di SATU tempat:
+//     `media_permintaan_fase_dari_kelas()` (inc/media_permintaan.php).
+const MEDIA_PERMINTAAN_KELAS_MAKS = 12;
+const MEDIA_PERMINTAAN_FASE = [
+    'A' => 'Fase A (Kelas 1-2)',
+    'B' => 'Fase B (Kelas 3-4)',
+    'C' => 'Fase C (Kelas 5-6)',
+    'D' => 'Fase D (Kelas 7-9)',
+    'E' => 'Fase E (Kelas 10)',
+    'F' => 'Fase F (Kelas 11-12)',
+];
 
 define('MEDIA_ENDPOINT', 'http://127.0.0.1:4310/api/app-media/upload');
 // Host yang boleh diambil server saat meneruskan GAMBAR HALAMAN DEPAN ke peramban
@@ -1543,6 +2026,12 @@ const LOGIN_MAKS_GAGAL_SISWA_NISN = 25; // maksimal kegagalan per NISN dalam jen
 // mengulang tanpa batas. IP privat/loopback dilewati (pengujian lokal & proxy).
 const PUBLIK_DAFTAR_MAKS = 5;     // maksimal pendaftaran sekolah …
 const PUBLIK_DAFTAR_MENIT = 60;   // … per IP dalam rentang menit ini
+// v1.97.0 — NOMOR WA ADMIN yang dihubungi ketika pendaftaran sekolah/madrasah DITUTUP
+// (permintaan pemilik: *"Ketika pendaftaran ditutup berikan keterangan bahwa jumlah pendaftar telah
+// mencapai batas yang ditetapkan oleh sistem. Silahkan hubungi admin di WA 081356964665"*).
+// Nilai ini hanya BAWAAN: nomornya dapat diubah Super Admin pada halaman Pendaftaran
+// (tabel `app_pengaturan`, kunci `daftar_wa`).
+const DAFTAR_WA_BAWAAN = '081356964665';
 const PUBLIK_PESAN_MAKS = 10;     // maksimal pesan kontak halaman depan …
 const PUBLIK_PESAN_MENIT = 60;    // … per IP dalam rentang menit ini
 

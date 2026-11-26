@@ -1215,6 +1215,104 @@ function sekolah_set_aktif(int $id, bool $aktif): array
     return ['ok' => true, 'pesan' => 'dinonaktifkan'];
 }
 
+// ================ PENCEGAHAN DATA GANDA SEKOLAH/MADRASAH (v1.98.0) ================
+/**
+ * Kunci pembanding NAMA untuk mencegah data ganda.
+ *
+ * Permintaan pemilik: *"Buat aplikasi menolak pendaftaran baru ketika terdeteksi sudah ada Nama
+ * sekolah/madrasah dan juga ketika terdeteksi sudah ada nama kepala sekolah/madrasah di dalam
+ * sistem. Tujuannya agar tidak terjadi data ganda."*
+ *
+ * Dua nama dianggap SAMA bila hanya berbeda pada huruf besar/kecil, spasi, atau tanda baca —
+ * mis. "MA. Al-Falah" = "ma al falah" = "MA AlFalah". Huruf beraksen tetap dipertahankan (tidak
+ * dibuang) supaya dua nama yang benar-benar berbeda tidak ikut dianggap sama.
+ */
+function nama_banding_kunci(string $teks): string
+{
+    $bersih = (string) preg_replace('/[^\p{L}\p{N}]+/u', '', trim($teks));
+    if (function_exists('mb_strtolower')) {
+        return mb_strtolower($bersih, 'UTF-8');
+    }
+    return strtolower($bersih);
+}
+
+/**
+ * Sekolah/madrasah LAIN yang namanya sama dengan `$nama` (null bila tidak ada).
+ *
+ * `$kecualiId` dipakai saat MENYIMPAN perubahan profil sekolah yang sedang diedit (sekolah itu
+ * sendiri tidak boleh dianggap bentrok dengan dirinya).
+ *
+ * Dibandingkan dengan SELURUH baris `sekolah` — termasuk yang nonaktif / ditolak — karena pemilik
+ * menentukan: nama baru bebas dipakai lagi hanya setelah Super Admin MENGHAPUS datanya
+ * (`sekolah_hapus_permanen()`), bukan sekadar menonaktifkannya.
+ *
+ * @return array<string,mixed>|null
+ */
+function sekolah_nama_ganda(string $nama, int $kecualiId = 0): ?array
+{
+    $kunci = nama_banding_kunci($nama);
+    if ($kunci === '') {
+        return null;
+    }
+    foreach (all('SELECT id, nama, kepala_sekolah, verifikasi, aktif FROM sekolah') as $s) {
+        if ($kecualiId > 0 && (int) $s['id'] === $kecualiId) {
+            continue;
+        }
+        if (nama_banding_kunci((string) $s['nama']) === $kunci) {
+            return $s;
+        }
+    }
+    return null;
+}
+
+/**
+ * Sekolah/madrasah LAIN yang NAMA KEPALA sekolah/madrasahnya sama dengan `$kepala` (null bila tidak ada).
+ *
+ * Yang dibandingkan adalah kolom identitas `sekolah.kepala_sekolah` (diisi saat pendaftaran / Kelola
+ * Sekolah). Nama kepala yang kosong ('' atau '-') TIDAK pernah dianggap bentrok — banyak lembaga
+ * memang belum mengisi nama kepalanya.
+ *
+ * @return array<string,mixed>|null
+ */
+function sekolah_kepala_ganda(string $kepala, int $kecualiId = 0): ?array
+{
+    $kunci = nama_banding_kunci($kepala);
+    if ($kunci === '' || $kunci === nama_banding_kunci('-')) {
+        return null;
+    }
+    foreach (all('SELECT id, nama, kepala_sekolah, verifikasi, aktif FROM sekolah') as $s) {
+        if ($kecualiId > 0 && (int) $s['id'] === $kecualiId) {
+            continue;
+        }
+        if (nama_banding_kunci((string) ($s['kepala_sekolah'] ?? '')) === $kunci) {
+            return $s;
+        }
+    }
+    return null;
+}
+
+/**
+ * Periksa KEDUA aturan data ganda sekaligus (dipakai `daftar.php` dan `sekolah.php`).
+ *
+ * @return array<int,string> daftar pesan galat SIAP TAMPIL (kosong = tidak ada bentrok)
+ */
+function sekolah_ganda_pesan(string $nama, string $kepala, int $kecualiId = 0): array
+{
+    $pesan = [];
+    $gandaNama = sekolah_nama_ganda($nama, $kecualiId);
+    if ($gandaNama !== null) {
+        $pesan[] = 'Sekolah/madrasah dengan nama "' . (string) $gandaNama['nama']
+            . '" sudah terdaftar di sistem (data ganda tidak diizinkan).';
+    }
+    $gandaKepala = sekolah_kepala_ganda($kepala, $kecualiId);
+    if ($gandaKepala !== null) {
+        $pesan[] = 'Nama kepala sekolah/madrasah "' . (string) $gandaKepala['kepala_sekolah']
+            . '" sudah terdaftar pada ' . (string) $gandaKepala['nama']
+            . ' (data ganda tidak diizinkan).';
+    }
+    return $pesan;
+}
+
 /**
  * HAPUS PERMANEN sebuah sekolah/madrasah beserta seluruh datanya.
  *
@@ -1337,6 +1435,11 @@ function setting_kolom(): array
         // set_setting() hanya menulis kolom yang ada di sini.
         'jenjang_sekolah'    => 'jenjang',
         'logo_sekolah'       => 'logo',
+        // v66: TANDA TANGAN KEPALA + CAP/STEMPEL lembaga pada dokumen cetak (permintaan pemilik).
+        // WAJIB terdaftar di peta ini — set_setting() hanya menulis kolom yang ada di sini.
+        'ttd_kepala_sekolah' => 'ttd_kepala',
+        'cap_sekolah'        => 'cap_sekolah',
+        'ttd_cap_aktif'      => 'ttd_cap_aktif',
         'ta_aktif_id'        => 'ta_aktif_id',
         'semester_aktif_id'  => 'semester_aktif_id',
         'jumlah_formatif'    => 'jumlah_formatif',
@@ -1385,6 +1488,11 @@ function setting_default(): array
         // & konsep "Guru Kelas" belum aktif sampai jenjangnya dipilih.
         'jenjang_sekolah'    => '',
         'logo_sekolah'       => '',
+        // v66: tanda tangan kepala & cap/stempel lembaga — kosong = belum diunggah, dan
+        // `ttd_cap_aktif` = '0' (fitur MATI) supaya lembar cetak sekolah lama tidak berubah.
+        'ttd_kepala_sekolah' => '',
+        'cap_sekolah'        => '',
+        'ttd_cap_aktif'      => '0',
         'ta_aktif_id'        => '0',
         'semester_aktif_id'  => '0',
         'jumlah_formatif'    => '4',
@@ -1479,6 +1587,41 @@ function kepala_nip(): string
 function jabatan_kepala(): string
 {
     return istilah_sekolah('Kepala Sekolah');
+}
+
+// ---------------------------------------- TANDA TANGAN KEPALA & CAP/STEMPEL (v1.104.0 / skema v66)
+// Permintaan pemilik: *"tambahkan fitur untuk upload Tanda tangan kepala sekolah/madrasah dan
+// Cap/Stempel sekolah. Fitur ini bisa diaktifkan dan non aktifkan oleh Operator sekolah/madrasah"*.
+// Keputusan pemilik: keduanya dicetak pada blok "Mengetahui, Kepala …" pada SELURUH dokumen cetak,
+// cap MENIMPA tanda tangan, dan sakelar Operator menentukan MUNCUL/TIDAKNYA pada hasil cetak.
+// Yang disimpan pada kolom `sekolah` hanya URL CDN hasil media proxy (`ttd_kepala`, `cap_sekolah`)
+// serta sakelarnya (`ttd_cap_aktif` = '1'/'0'). Token unggah tidak pernah masuk basis data.
+
+/** URL CDN gambar TANDA TANGAN kepala sekolah/madrasah ('' = belum diunggah). */
+function ttd_kepala_gambar(): string
+{
+    return trim(setting('ttd_kepala_sekolah', ''));
+}
+
+/** URL CDN gambar CAP/STEMPEL lembaga ('' = belum diunggah). */
+function cap_sekolah_gambar(): string
+{
+    return trim(setting('cap_sekolah', ''));
+}
+
+/** Sakelar fitur tanda tangan kepala & cap/stempel: true = dicetak pada dokumen cetak. */
+function ttd_cap_aktif(): bool
+{
+    return setting('ttd_cap_aktif', '0') === '1';
+}
+
+/**
+ * Fitur benar-benar akan tampil pada hasil cetak: sakelar MENYALA **dan** ada berkas yang diunggah.
+ * Dipakai halaman pengaturan untuk memberi keterangan kepada Operator.
+ */
+function ttd_cap_siap(): bool
+{
+    return ttd_cap_aktif() && (ttd_kepala_gambar() !== '' || cap_sekolah_gambar() !== '');
 }
 
 // ---------------------------------------------- DATA LEMBAGA PUBLIK (kode QR kartu pelajar, v1.71.0)
@@ -2462,6 +2605,93 @@ function guru_mapel_ids(int $guruId): array
         JOIN mapel m ON m.id = gm.mapel_id WHERE gm.guru_id = ? AND m.sekolah_id = ?', [$guruId, $sid]), 'mapel_id'));
 }
 
+/**
+ * PETA "kelas lain × mata pelajaran" yang diajar seorang guru (skema v65).
+ *
+ * Permintaan pemilik: *"Ketika guru ditandai sebagai guru kelas dan dia juga mengajar kelas lain,
+ * buat guru tersebut bisa diseting untuk mengajar kelas lain. Jadi dia guru kelas di kelas yang
+ * telah ditentukan tetapi bisa mengajar mata pelajaran tertentu di kelas yang lain"*.
+ *
+ * Kelas PERWALIAN guru kelas tetap disimpan di `guru_kelas` (satu kelas); tabel `guru_kelas_mapel`
+ * hanya memuat kelas LAIN beserta mata pelajaran yang diajarnya di sana.
+ *
+ * @return array<int,array<int,int>> kelas_id => [mapel_id, ...] (urut nama kelas, lalu nama mapel)
+ */
+function guru_kelas_mapel_peta(int $guruId, int $sekolahId = 0): array
+{
+    $sid = $sekolahId > 0 ? $sekolahId : sekolah_id();
+    if ($guruId <= 0 || $sid <= 0) {
+        return [];
+    }
+    $peta = [];
+    foreach (all('SELECT gkm.kelas_id, gkm.mapel_id FROM guru_kelas_mapel gkm
+                   JOIN kelas k ON k.id = gkm.kelas_id
+                   JOIN mapel m ON m.id = gkm.mapel_id
+                   WHERE gkm.guru_id = ? AND k.sekolah_id = ? AND m.sekolah_id = ?
+                   ORDER BY k.urutan, k.nama, m.urutan, m.nama', [$guruId, $sid, $sid]) as $r) {
+        $peta[(int) $r['kelas_id']][] = (int) $r['mapel_id'];
+    }
+    return $peta;
+}
+
+/** Kelas LAIN (di luar kelas perwalian) yang diajari seorang guru — sekolah aktif. */
+function guru_kelas_lain_ids(int $guruId): array
+{
+    return array_map('intval', array_keys(guru_kelas_mapel_peta($guruId)));
+}
+
+/** Mata pelajaran yang HANYA dipegang lewat penugasan kelas lain (di luar `guru_mapel`). */
+function guru_mapel_kelas_lain_ids(int $guruId): array
+{
+    $ids = [];
+    foreach (guru_kelas_mapel_peta($guruId) as $mapel) {
+        foreach ($mapel as $m) {
+            $ids[$m] = $m;
+        }
+    }
+    return array_values($ids);
+}
+
+/** Seluruh kelas yang diajar seorang guru: kelas perwalian ∪ kelas lain (v65). */
+function guru_kelas_semua_ids(int $guruId): array
+{
+    return array_values(array_unique(array_merge(guru_kelas_ids($guruId), guru_kelas_lain_ids($guruId))));
+}
+
+/**
+ * Benar bila guru berhak mengajar PASANGAN kelas + mata pelajaran tertentu.
+ *
+ * Dipakai halaman pengisian (penilaian, daftar hadir, jurnal) supaya GURU KELAS yang juga mengajar
+ * di kelas lain tidak bisa mengisi mata pelajaran yang bukan tugasnya pada kelas itu.
+ * Selama guru BELUM punya penugasan kelas lain sama sekali, aturan lama tetap berlaku (kelas dan
+ * mata pelajaran diperiksa terpisah) sehingga data & kebiasaan yang sudah ada tidak berubah.
+ */
+function boleh_kelas_mapel(int $kelasId, int $mapelId): bool
+{
+    if (!is_guru()) {
+        return true;
+    }
+    if ($kelasId <= 0 || $mapelId <= 0) {
+        return false;
+    }
+    $guruId = guru_id_saya();
+    if ($guruId <= 0) {
+        return false;
+    }
+    if (!boleh_kelas($kelasId) || !boleh_mapel($mapelId)) {
+        return false;
+    }
+    $petaLain = guru_kelas_mapel_peta($guruId);
+    if (!$petaLain) {
+        return true; // belum memakai penugasan kelas lain → aturan lama
+    }
+    // Pasangan yang SAH: (kelas perwalian × seluruh mapel yang dipegang) + (kelas lain × mapelnya).
+    if (in_array($kelasId, guru_kelas_ids($guruId), true)) {
+        return in_array($mapelId, guru_mapel_ids($guruId), true);
+    }
+    return in_array($mapelId, $petaLain[$kelasId] ?? [], true);
+}
+
 function kelas_diampu(int $guruId = 0): array
 {
     $guruId = $guruId > 0 ? $guruId : guru_id_saya();
@@ -2469,9 +2699,16 @@ function kelas_diampu(int $guruId = 0): array
         return [];
     }
     $sid = sekolah_id();
+    // v65: kelas perwalian ∪ kelas LAIN yang diajar (guru kelas boleh mengajar di kelas lain), jadi
+    // pilihan kelas pada Penilaian/Daftar Hadir/Jurnal ikut memuat kelas lain itu.
+    $ids = guru_kelas_semua_ids($guruId);
+    if (!$ids) {
+        return [];
+    }
+    $tanda = implode(',', array_fill(0, count($ids), '?'));
     return all('SELECT k.*, (SELECT COUNT(*) FROM siswa s WHERE s.kelas_id = k.id AND s.aktif = 1) AS jml_siswa
-                FROM kelas k JOIN guru_kelas gk ON gk.kelas_id = k.id
-                WHERE gk.guru_id = ? AND k.aktif = 1 AND k.sekolah_id = ? ORDER BY k.urutan, k.nama', [$guruId, $sid]);
+                FROM kelas k WHERE k.id IN (' . $tanda . ') AND k.aktif = 1 AND k.sekolah_id = ?
+                ORDER BY k.urutan, k.nama', array_merge($ids, [$sid]));
 }
 
 function mapel_diampu(int $guruId = 0): array
@@ -2481,8 +2718,15 @@ function mapel_diampu(int $guruId = 0): array
         return [];
     }
     $sid = sekolah_id();
-    return all('SELECT m.* FROM mapel m JOIN guru_mapel gm ON gm.mapel_id = m.id
-                WHERE gm.guru_id = ? AND m.aktif = 1 AND m.sekolah_id = ? ORDER BY m.urutan, m.nama', [$guruId, $sid]);
+    // v65: mapel yang dipegang ∪ mapel yang diajar pada kelas LAIN (biasanya sudah termasuk di
+    // `guru_mapel`, daftar gabungan ini menjaga keduanya tetap konsisten).
+    $ids = array_values(array_unique(array_merge(guru_mapel_ids($guruId), guru_mapel_kelas_lain_ids($guruId))));
+    if (!$ids) {
+        return [];
+    }
+    $tanda = implode(',', array_fill(0, count($ids), '?'));
+    return all('SELECT m.* FROM mapel m WHERE m.id IN (' . $tanda . ') AND m.aktif = 1 AND m.sekolah_id = ?
+                ORDER BY m.urutan, m.nama', array_merge($ids, [$sid]));
 }
 
 /** Daftar kelas untuk dropdown — guru hanya kelas yang diampu. */
@@ -2501,7 +2745,8 @@ function boleh_kelas(int $kelasId): bool
     if (!is_guru()) {
         return true;
     }
-    return in_array($kelasId, guru_kelas_ids(guru_id_saya()), true);
+    // v65: termasuk kelas LAIN yang diajar guru kelas (lihat guru_kelas_semua_ids()).
+    return in_array($kelasId, guru_kelas_semua_ids(guru_id_saya()), true);
 }
 
 function boleh_mapel(int $mapelId): bool
@@ -2509,7 +2754,8 @@ function boleh_mapel(int $mapelId): bool
     if (!is_guru()) {
         return true;
     }
-    return in_array($mapelId, guru_mapel_ids(guru_id_saya()), true);
+    // v65: termasuk mata pelajaran yang diajar pada kelas lain.
+    return in_array($mapelId, array_merge(guru_mapel_ids(guru_id_saya()), guru_mapel_kelas_lain_ids(guru_id_saya())), true);
 }
 
 function siswa_list(int $kelasId = 0, string $cari = '', bool $aktifSaja = true): array
@@ -3466,9 +3712,15 @@ function sekolah_lintas_saring(array $baris, string $cari): array
 /**
  * Bahan tabel "Daftar Sekolah/Madrasah" pada Ringkasan Semua Sekolah (Super Admin lintas sekolah).
  *
- * Dipakai TIGA tempat sekaligus — `index.php` (tabel + grafik "Sebaran Siswa"), lembar CETAK
- * (`cetak_sekolah_lintas.php`) dan unduhan Word (`sekolah_lintas_word.php`) — supaya angka,
- * keadaan masa aktif, dan URUTANNYA tidak pernah berbeda antar tempat.
+ * Dipakai TIGA tempat sekaligus — `index.php` (tabel), lembar CETAK (`cetak_sekolah_lintas.php`)
+ * dan unduhan Word (`sekolah_lintas_word.php`) — supaya angka, keadaan masa aktif, dan URUTANNYA
+ * tidak pernah berbeda antar tempat.
+ *
+ * ⚠️ Sejak v1.97.0 kartu grafik pada `index.php` adalah **grafik pendaftaran per bulan**
+ * (`sekolah_daftar_bulanan()`), jadi `label_grafik`/`data_grafik` (nama sekolah & jumlah siswa)
+ * TIDAK lagi dipakai halaman mana pun. Kunci itu DIPERTAHANKAN karena masih dipakai skrip uji
+ * lama (`tests_eguru_cari_lintas.sh`, `tests_eguru_urut_masa_aktif.sh`) — jangan dihapus tanpa
+ * menyesuaikan uji tersebut.
  *
  * @param string $cari kata kunci penyaring ('' = seluruh lembaga). Penyaringan dilakukan SETELAH
  *                     pengurutan, dan `tot` dihitung dari baris yang benar-benar tampil sehingga
@@ -3537,6 +3789,217 @@ function sekolah_lintas_ringkas(string $cari = ''): array
         'data_grafik'  => $dataGrafik,
         'cari'         => trim($cari),
     ];
+}
+
+// ============================ GRAFIK PENDAFTARAN SEKOLAH/MADRASAH PER BULAN (v1.97.0)
+/**
+ * Jumlah sekolah/madrasah yang MENDAFTAR setiap bulan — bahan grafik pada Ringkasan Semua Sekolah
+ * (Super Admin lintas sekolah).
+ *
+ * Permintaan pemilik: *"Pada yang saya tandai warna merah ganti dengan grafik sekolah yang mendaftar
+ * setiap bulannya."* (kotak merah = kartu grafik "Sebaran Siswa per Sekolah/Madrasah").
+ *
+ * SUMBER TANGGAL: kolom `sekolah.didaftar` (diisi `daftar.php` saat pendaftaran mandiri maupun
+ * `sekolah.php` saat Super Admin menambah lembaga), dengan cadangan `dibuat` bila kosong — jadi
+ * lembaga lama (sebelum kolom `didaftar` ada) tetap terhitung.
+ *
+ * RENTANG: dari bulan pendaftaran PALING AWAL s.d. bulan berjalan, tetapi tidak lebih dari
+ * `$maks` bulan terakhir — supaya grafik tidak dipenuhi puluhan bulan kosong bila aplikasi sudah
+ * dipakai bertahun-tahun. Bulan tanpa pendaftaran tetap ditampilkan dengan nilai 0 (grafik bulanan
+ * harus utuh, bukan hanya bulan yang ada isinya).
+ *
+ * @return array{label:list<string>,data:list<int>,bulan:list<string>,total:int,total_semua:int,puncak:int,puncak_label:string}
+ *         `label` = "Sep 2026" (bulan + tahun), `total` = jumlah pendaftar pada rentang yang tampil,
+ *         `total_semua` = jumlah SELURUH pendaftar yang tercatat.
+ */
+function sekolah_daftar_bulanan(int $maks = 12): array
+{
+    $maks = max(1, min(36, $maks));
+
+    $hitung = [];
+    foreach (all("SELECT substr(COALESCE(NULLIF(didaftar, ''), dibuat), 1, 7) AS b, COUNT(*) AS n
+                    FROM sekolah
+                   WHERE COALESCE(NULLIF(didaftar, ''), dibuat) IS NOT NULL
+                     AND COALESCE(NULLIF(didaftar, ''), dibuat) <> ''
+                   GROUP BY b") as $r) {
+        $b = (string) $r['b'];
+        if (preg_match('/^\d{4}-\d{2}$/', $b) === 1) {
+            $hitung[$b] = (int) $r['n'];
+        }
+    }
+
+    $kini = date('Y-m');
+    $awal = $kini;
+    if ($hitung) {
+        $kunci = array_keys($hitung);
+        sort($kunci);
+        $awal = $kunci[0];
+    }
+    // Batasi ke $maks bulan terakhir (mis. 12 bulan = satu tahun berjalan).
+    $batasAwal = date('Y-m', strtotime('-' . ($maks - 1) . ' month', strtotime($kini . '-01')));
+    if ($awal < $batasAwal) {
+        $awal = $batasAwal;
+    }
+
+    $singkat = [1 => 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    $label = [];
+    $data = [];
+    $bulan = [];
+    $t = strtotime($awal . '-01');
+    $akhir = strtotime($kini . '-01');
+    while ($t !== false && $akhir !== false && $t <= $akhir) {
+        $ym = date('Y-m', $t);
+        $bulan[] = $ym;
+        $label[] = ($singkat[(int) date('n', $t)] ?? '-') . ' ' . date('Y', $t);
+        $data[] = (int) ($hitung[$ym] ?? 0);
+        $t = strtotime('+1 month', $t);
+    }
+
+    $total = array_sum($data);
+    $puncak = 0;
+    $puncakLabel = '';
+    foreach ($data as $i => $n) {
+        if ($n > $puncak) {
+            $puncak = $n;
+            $puncakLabel = (string) $label[$i];
+        }
+    }
+
+    return [
+        'label'        => $label,
+        'data'         => $data,
+        'bulan'        => $bulan,
+        'total'        => $total,
+        'total_semua'  => array_sum($hitung),
+        'puncak'       => $puncak,
+        'puncak_label' => $puncakLabel,
+    ];
+}
+
+// ================== BUKA / TUTUP PENDAFTARAN SEKOLAH/MADRASAH (v1.97.0) ==================
+/**
+ * Super Admin dapat MENUTUP pendaftaran sekolah/madrasah dari halaman Pendaftaran.
+ *
+ * Permintaan pemilik: *"pada akun super admin tambahkan fitur untuk menutup pendaftaran
+ * sekolah/madrasah. Ketika pendaftaran ditutup berikan keterangan bahwa jumlah pendaftar telah
+ * mencapai batas yang ditetapkan oleh sistem. Silahkan hubungi admin di WA 081356964665"*.
+ *
+ * Keadaan ini TINGKAT APLIKASI (bukan per sekolah) sehingga disimpan pada tabel `app_pengaturan`
+ * (tanpa perubahan skema):
+ *   daftar_tutup  '1' = DITUTUP, '0'/kosong = dibuka
+ *   daftar_batas  jumlah pendaftar maksimum; 0 = tanpa batas (hanya tombol tutup yang berlaku)
+ *   daftar_wa     nomor WA admin yang dihubungi ketika pendaftaran ditutup
+ *
+ * DUA SEBAB penutupan:
+ *   'manual' — Super Admin menutup sendiri (tombol),
+ *   'batas'  — jumlah pendaftar sudah MENCAPAI batas yang ditetapkan (`daftar_batas`).
+ * Pesan yang dilihat pengunjung SAMA untuk keduanya (kalimat yang diminta pemilik); keterangan
+ * kecil di bawahnya menjelaskan sebabnya supaya Admin/pengunjung tidak bingung.
+ *
+ * SATU TEMPAT ATURAN: `daftar_status_info()` dipakai `daftar.php` (gerbang + halaman keterangan),
+ * `pendaftaran.php` (kartu Super Admin), `login.php` (label tombol), dan `index.php` (pil status).
+ * JANGAN menyalin pemeriksaan tutup/batas ke halaman lain.
+ */
+function daftar_batas(): int
+{
+    $n = trim(app_setting('daftar_batas', '0'));
+    $angka = (int) preg_replace('/\D/', '', $n);
+    return max(0, $angka);
+}
+
+/** Jumlah sekolah/madrasah yang TERDAFTAR (pendaftar) — dasar batas & grafik. */
+function daftar_terdaftar(): int
+{
+    return (int) val('SELECT COUNT(*) FROM sekolah', [], 0);
+}
+
+/** Nomor WA admin saat pendaftaran ditutup (hanya angka; nilai bawaan DAFTAR_WA_BAWAAN). */
+function daftar_wa(): string
+{
+    $w = trim(app_setting('daftar_wa', DAFTAR_WA_BAWAAN));
+    return aktivasi_wa_sah($w) ? aktivasi_wa_bersih($w) : DAFTAR_WA_BAWAAN;
+}
+
+/** Nomor WA dalam bentuk internasional 62… untuk tautan wa.me. */
+function daftar_wa_tautan(): string
+{
+    $d = daftar_wa();
+    if (str_starts_with($d, '0')) {
+        $d = '62' . substr($d, 1);
+    } elseif (str_starts_with($d, '8')) {
+        $d = '62' . $d;
+    }
+    return 'https://wa.me/' . $d;
+}
+
+/**
+ * Keadaan pendaftaran mandiri (satu sumber kebenaran).
+ *
+ * @param bool $segarkan true = buang simpanan sementara (dipakai setelah pengaturan disimpan
+ *                       pada permintaan yang sama)
+ * @return array{tutup:bool,tutup_manual:bool,sebab:string,batas:int,terdaftar:int,sisa:int,wa:string,tautan:string,pesan:string,keterangan:string}
+ */
+function daftar_status_info(bool $segarkan = false): array
+{
+    static $cache = null;
+    if ($cache !== null && !$segarkan) {
+        return $cache;
+    }
+
+    $tutupManual = app_setting('daftar_tutup', '0') === '1';
+    $batas = daftar_batas();
+    $terdaftar = daftar_terdaftar();
+
+    $sebab = '';
+    if ($tutupManual) {
+        $sebab = 'manual';
+    } elseif ($batas > 0 && $terdaftar >= $batas) {
+        $sebab = 'batas';
+    }
+
+    $wa = daftar_wa();
+    // Kalimat PERSIS permintaan pemilik (dipakai halaman pendaftaran & pratinjau di akun Super Admin).
+    $pesan = 'Jumlah pendaftar telah mencapai batas yang ditetapkan oleh sistem. '
+        . 'Silahkan hubungi admin di WA ' . $wa;
+
+    if ($sebab === 'batas') {
+        $keterangan = 'Pendaftaran ditutup otomatis karena jumlah pendaftar sudah mencapai batas '
+            . $batas . ' sekolah/madrasah.';
+    } elseif ($sebab === 'manual') {
+        $keterangan = 'Pendaftaran ditutup oleh Admin aplikasi.';
+    } else {
+        $keterangan = 'Pendaftaran dibuka — sekolah/madrasah dapat mendaftar sendiri.';
+    }
+
+    $cache = [
+        'tutup'        => $sebab !== '',
+        'tutup_manual' => $tutupManual,
+        'sebab'        => $sebab,
+        'batas'        => $batas,
+        'terdaftar'  => $terdaftar,
+        'sisa'       => $batas > 0 ? max(0, $batas - $terdaftar) : -1,
+        'wa'         => $wa,
+        'tautan'     => daftar_wa_tautan(),
+        'pesan'      => $pesan,
+        'keterangan' => $keterangan,
+    ];
+    return $cache;
+}
+
+/** Simpan keadaan pendaftaran (khusus Super Admin). */
+function daftar_status_simpan(bool $tutup, int $batas, string $wa): void
+{
+    app_setting_set('daftar_tutup', $tutup ? '1' : '0');
+    app_setting_set('daftar_batas', (string) max(0, $batas));
+    app_setting_set('daftar_wa', aktivasi_wa_bersih($wa));
+    app_setting_set('daftar_diubah', date('Y-m-d H:i:s'));
+    daftar_status_info(true);   // segarkan simpanan sementara pada permintaan ini
+}
+
+/** Kapan keadaan pendaftaran terakhir diubah ('' bila belum pernah). */
+function daftar_status_diubah(): string
+{
+    return trim(app_setting('daftar_diubah', ''));
 }
 
 // ---------------------------------------------- REKAP KEPALA & OPERATOR TIAP LEMBAGA (v1.89.0)
@@ -4875,6 +5338,11 @@ function pengawas_berkas_boleh(): array
         // menerima POST (menyimpan penilaian), jadi berkasnya juga terdaftar di
         // `pengawas_berkas_post()`. Lembar cetaknya hanya membaca.
         'supervisi_bk.php', 'cetak_supervisi_bk.php',
+        // HASIL PKG (v1.109.0/skema v68) — permintaan pemilik: *"Selain itu pengawas juga bisa
+        // melihat hasil PKG setiap guru binaannya."* Halaman `pkg_pengawas.php` hanya MEMBACA
+        // (penilaian dilakukan kepala sekolah/madrasah), jadi berkas ini sengaja TIDAK ada pada
+        // `pengawas_berkas_post()` — seluruh POST dari akun pengawas tetap 403.
+        'pkg_pengawas.php', 'cetak_pkg.php',
         // OBROLAN/CHAT (v1.51.0) — permintaan pemilik: fitur chat dipakai SEMUA PERAN, termasuk
         // pengawas. Berkas ini hanya menyentuh tabel obrolan (bukan data sekolah) sehingga tidak
         // melanggar aturan "pengawas hanya melihat & mencetak" data binaan.
@@ -4954,6 +5422,9 @@ function siswa_berkas_boleh(): array
         'siswa_absensi.php',    // rekapan daftar hadir (per mata pelajaran & per kelas)
         'siswa_nilai.php',      // rekapan nilai seluruh mata pelajaran
         'siswa_pelanggaran.php',// catatan pelanggaran dari guru mata pelajaran
+        // v1.113.0 (skema v73): MATERI & TUGAS yang dikirim guru ke siswa + lembar cetaknya.
+        // Keduanya hanya MELIHAT & MENCETAK (POST tetap ditolak gerbang_siswa()).
+        'materi_saya.php', 'cetak_materi.php',
         'cetak_siswa_data.php', 'cetak_siswa_absensi.php',
         'cetak_siswa_nilai.php', 'cetak_siswa_pelanggaran.php',
         'aktivasi.php',         // keterangan bila aplikasi sekolah terkunci

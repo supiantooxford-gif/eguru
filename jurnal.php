@@ -103,6 +103,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             tolak403('Mata pelajaran itu tidak Anda ampu.');
         }
     }
+    // v65: bila kelas DAN mata pelajaran sama-sama dipilih, pasangannya harus benar-benar ditugaskan
+    // (guru kelas boleh mengajar mata pelajaran tertentu di kelas lain).
+    if ($kelasId > 0 && $mapelId > 0 && is_guru() && !boleh_kelas_mapel($kelasId, $mapelId)) {
+        tolak403('Mata pelajaran itu tidak Anda ampu pada kelas tersebut.');
+    }
     if ($galat) {
         foreach ($galat as $g) {
             flash($g, 'err');

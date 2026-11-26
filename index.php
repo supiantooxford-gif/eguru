@@ -76,6 +76,8 @@ if (is_siswa()) {
         // Pintasan keempat halaman rekapan siswa (masing-masing punya tombol Cetak sendiri).
         $pintasanSiswa = [
             ['siswa_saya.php', 'user', 'Data Saya', 'Nama, NISN, kelas, dan identitas lain (hanya dibaca).', true],
+            // v1.113.0 (skema v73): materi/tugas kiriman guru mata pelajaran.
+            ['materi_saya.php', 'send', 'Materi & Tugas', 'Materi & tugas dari guru — dapat diunduh dan dicetak.', false],
             ['siswa_absensi.php', 'clipboard', 'Daftar Hadir', 'Rekapan per mata pelajaran & daftar hadir kelas dari wali kelas.', true],
             ['siswa_nilai.php', 'chart', 'Nilai', 'Tabel rekapan nilai seluruh mata pelajaran beserta predikatnya.', true],
             ['siswa_pelanggaran.php', 'alert', 'Pelanggaran', 'Catatan pelanggaran yang diinput guru mata pelajaran.', false],
@@ -186,11 +188,22 @@ if (is_super() && !current_sekolah()) {
     $totalJurnal = (int) val('SELECT COUNT(*) FROM jurnal', [], 0);
     $totalNilai = (int) val('SELECT COUNT(*) FROM nilai', [], 0);
 
-    // Ringkasan per sekolah untuk tabel & grafik — SATU SUMBER dengan lembar CETAK dan unduhan
+    // REKAP PENGGUNAAN MEDIA INTERAKTIF (v1.108.0) — permintaan pemilik: *"tambahkan data total
+    // media pembelajaran dan game edukasi dibuka atau digunakan oleh seluruh pengguna. Data per
+    // jenjang untuk media. tujuannya untuk mengetahui media atau game mana yang paling sering
+    // dibuka/digunakan"* (kotak merah di dalam kartu "Aktivitas Aplikasi").
+    // Satu sumber aturan: app_klik_media_rekap() (inc/daftar_apps.php) — JANGAN menghitung sendiri
+    // di halaman ini. Label jenjang diambil dari konfigurasi tab menu Media Interaktif supaya sama
+    // dengan pil tab pada halaman menunya.
+    $mediaRekap = app_klik_media_rekap(5);
+    $mediaJenjangLabel = daftar_apps_kategori('media_interaktif');
+
+    // Ringkasan per sekolah untuk tabel — SATU SUMBER dengan lembar CETAK dan unduhan
     // Word "Daftar Sekolah/Madrasah" (helper `sekolah_lintas_ringkas()`, inc/helpers.php).
     // Isinya: daftar sekolah terdaftar, sekolah aktif, baris tabel (TERURUT masa aktif paling lama
-    // di atas), jumlah total tiap kolom (dihitung dari baris yang benar-benar ditampilkan sehingga
-    // baris JUMLAH selalu sama dengan tabelnya), serta label & data grafik "Sebaran Siswa".
+    // di atas), dan jumlah total tiap kolom (dihitung dari baris yang benar-benar ditampilkan sehingga
+    // baris JUMLAH selalu sama dengan tabelnya). Sejak v1.97.0 grafik pada halaman ini adalah
+    // PENDAFTARAN PER BULAN (`sekolah_daftar_bulanan()`), bukan lagi "Sebaran Siswa".
     //
     // PENCARIAN (v1.90.0) — permintaan pemilik: *"Tambahkan fitur cari pada yang ditandai warna
     // merah untuk mempermudah pencarian nama madrasah"* (kotak merah di samping tombol Cetak/Unduh
@@ -203,8 +216,14 @@ if (is_super() && !current_sekolah()) {
     $semuaAktif = $ringkasLintas['aktif'];
     $baris = $ringkasLintas['baris'];
     $tot = $ringkasLintas['tot'];
-    $labelGrafik = $ringkasLintas['label_grafik'];
-    $dataGrafik = $ringkasLintas['data_grafik'];
+
+    // GRAFIK PENDAFTARAN PER BULAN (v1.97.0) — permintaan pemilik: *"Pada yang saya tandai warna
+    // merah ganti dengan grafik sekolah yang mendaftar setiap bulannya."* Kartu grafik "Sebaran
+    // Siswa per Sekolah/Madrasah" yang lama DIGANTI; datanya dari `sekolah_daftar_bulanan()`
+    // (inc/helpers.php) — jangan menghitung sendiri di halaman ini.
+    $daftarBulanan = sekolah_daftar_bulanan(12);
+    // Keadaan pendaftaran mandiri (dibuka/ditutup) — SATU SUMBER: daftar_status_info().
+    $daftarInfo = daftar_status_info();
     // Tautan cetak/Word/halaman ini membawa kata kunci yang sedang dipakai.
     $qLintas = $adaCariLintas ? '?cari=' . rawurlencode($cariLintas) : '';
     $qLintasAuto = $adaCariLintas ? '?cari=' . rawurlencode($cariLintas) . '&amp;auto=1' : '?auto=1';
@@ -240,15 +259,31 @@ if (is_super() && !current_sekolah()) {
     <?php endif; ?>
 
     <div class="grid g12">
-      <div class="card">
+      <div class="card" id="cardGrafikDaftar">
         <div class="card-head">
-          <div><h2>Sebaran Siswa per Sekolah/Madrasah</h2><p>Hanya sekolah/madrasah yang sudah disetujui &amp; aktif.</p></div>
+          <div>
+            <h2>Pendaftaran Sekolah/Madrasah per Bulan</h2>
+            <p>Jumlah sekolah/madrasah yang mendaftar setiap bulan
+              (maksimal 12 bulan terakhir) &middot; total
+              <b><?= (int) $daftarBulanan['total'] ?></b> pendaftar pada periode ini.</p>
+          </div>
+          <?php // Pil keadaan pendaftaran (dibuka/ditutup) — dihitung dari daftar_status_info(),
+                // sumber yang sama dengan halaman Pendaftaran & daftar.php. ?>
+          <span class="pill <?= $daftarInfo['tutup'] ? 'pill-warn' : 'pill-ok' ?>" id="pilDaftarLintas">
+            <?= $daftarInfo['tutup'] ? 'Pendaftaran ditutup' : 'Pendaftaran dibuka' ?></span>
         </div>
-        <?php if ($dataGrafik && array_sum($dataGrafik) > 0): ?>
-          <div class="chart-box"><canvas id="chSiswa"></canvas></div>
+        <?php if ($daftarBulanan['total'] > 0): ?>
+          <div class="chart-box"><canvas id="chDaftar"></canvas></div>
+          <?php if ($daftarBulanan['puncak'] > 0): ?>
+            <p class="hint xs" style="margin-bottom:0">Pendaftaran terbanyak:
+              <b><?= e($daftarBulanan['puncak_label']) ?></b> —
+              <b><?= (int) $daftarBulanan['puncak'] ?></b> sekolah/madrasah.
+              Seluruh pendaftar yang tercatat: <b><?= (int) $daftarBulanan['total_semua'] ?></b>.</p>
+          <?php endif; ?>
         <?php else: ?>
-          <div class="empty"><?= ikon('chart', 30) ?><h3>Belum ada data siswa</h3>
-            <p>Isi data siswa pada masing-masing sekolah/madrasah untuk melihat sebarannya di sini.</p></div>
+          <div class="empty"><?= ikon('chart', 30) ?><h3>Belum ada pendaftaran</h3>
+            <p>Grafik ini terisi otomatis dari pendaftaran sekolah/madrasah
+              (halaman <a href="daftar.php" target="_blank" rel="noopener">Pendaftaran</a>).</p></div>
         <?php endif; ?>
       </div>
 
@@ -273,10 +308,59 @@ if (is_super() && !current_sekolah()) {
                 // (Menu "Studio Foto Pintar" DIHAPUS pada v1.75.0 atas permintaan pemilik.) ?>
           <a class="btn btn-ghost btn-sm" href="ujian_online.php"><?= ikon('clipboard', 15) ?> Ujian Online</a>
           <a class="btn btn-ghost btn-sm" href="smart_teacher.php"><?= ikon('apps', 15) ?> Smart Teacher</a>
+          <?php // MEDIA INTERAKTIF (v1.105.0): menunya HANYA tampil di sidebar akun guru, jadi Super
+                // Admin — yang mengisi daftarnya — masuk lewat pintasan ini. ?>
+          <a class="btn btn-ghost btn-sm" href="media_interaktif.php"><?= ikon('layers', 15) ?> Media Interaktif</a>
           <?php // Aplikasi Sagu dibatasi per sekolah; pintasan ini SELALU tampil untuk Super Admin
                 // karena dialah yang menyetel daftar sekolahnya (daftar_apps_tampil() → true). ?>
           <a class="btn btn-ghost btn-sm" href="aplikasi_sagu.php"><?= ikon('star', 15) ?> Aplikasi Sagu</a>
           <a class="btn btn-ghost btn-sm" href="hasil_supervisi.php"><?= ikon('chart', 15) ?> Hasil Supervisi</a>
+        </div>
+
+        <?php // REKAP PENGGUNAAN MEDIA INTERAKTIF (v1.108.0) — permintaan pemilik (kotak merah pada
+              // kartu ini): total media pembelajaran & game edukasi yang dibuka/digunakan SELURUH
+              // pengguna, data per jenjang untuk media, dan daftar yang paling sering dibuka.
+              // Angkanya dari app_klik_media_rekap() (sumber yang sama dengan grafik "Aplikasi yang
+              // Sering Digunakan" di halaman Smart Teacher). ?>
+        <div class="divider"></div>
+        <div class="media-rekap" id="mediaRekapApps">
+          <div class="media-rekap-kepala">
+            <div>
+              <h3><?= ikon('layers', 16) ?> Media Pembelajaran &amp; Game Edukasi</h3>
+              <p class="hint">Jumlah tombol <b>Buka Media</b> / <b>Mainkan Game</b> yang diklik oleh
+                <b>seluruh pengguna</b> dari semua sekolah/madrasah — seluruh data yang tercatat
+                (tanpa batas waktu).</p>
+            </div>
+            <span class="chip" id="chipMediaTotal"><?= (int) $mediaRekap['total'] ?> dibuka</span>
+          </div>
+          <?php if ((int) $mediaRekap['total'] > 0): ?>
+            <div class="stat-mini" id="mediaRekapJenjang">
+              <?php foreach ($mediaJenjangLabel as $mjKunci => $mjLabel): ?>
+                <div><b><?= (int) ($mediaRekap['per_jenjang'][$mjKunci] ?? 0) ?></b>
+                  <span><?= e((string) $mjLabel) ?></span></div>
+              <?php endforeach; ?>
+            </div>
+            <?php if ($mediaRekap['teratas']): ?>
+              <p class="media-rekap-sub">Paling sering dibuka</p>
+              <ol class="media-rekap-teratas" id="mediaRekapTeratas">
+                <?php $noMedia = 0; foreach ($mediaRekap['teratas'] as $mj): $noMedia++; ?>
+                  <li>
+                    <span class="no"><?= (int) $noMedia ?></span>
+                    <span class="nama"><?= e((string) $mj['nama']) ?></span>
+                    <?php if ($mj['jenjang'] !== '' && isset($mediaJenjangLabel[$mj['jenjang']])): ?>
+                      <span class="jenjang"><?= e((string) $mediaJenjangLabel[$mj['jenjang']]) ?></span>
+                    <?php endif; ?>
+                    <b><?= (int) $mj['jml'] ?><span class="kali">x</span></b>
+                  </li>
+                <?php endforeach; ?>
+              </ol>
+            <?php endif; ?>
+          <?php else: ?>
+            <p class="hint" id="mediaRekapKosong">Belum ada media atau game yang dibuka pengguna.
+              Angka ini terisi otomatis setiap kali guru menekan tombol <b>Buka Media</b> atau
+              <b>Mainkan Game</b> pada menu
+              <a href="media_interaktif.php">Media Interaktif</a>.</p>
+          <?php endif; ?>
         </div>
       </div>
     </div>
@@ -494,12 +578,13 @@ if (is_super() && !current_sekolah()) {
       <?php endif; ?>
     </div>
 
-    <?php if ($dataGrafik && array_sum($dataGrafik) > 0): ?>
+    <?php if ($daftarBulanan['total'] > 0): ?>
       <script src="assets/vendor/chart.umd.min.js"></script>
       <script>
       document.addEventListener('DOMContentLoaded', function () {
-        EG.bar('chSiswa', <?= json_encode($labelGrafik, JSON_UNESCAPED_UNICODE) ?>, <?= json_encode($dataGrafik) ?>,
-          <?= count($labelGrafik) > 6 ? 'true' : 'false' ?>);
+        // Grafik PENDAFTARAN per bulan (v1.97.0) — batang tegak, satu batang = satu bulan.
+        EG.bar('chDaftar', <?= json_encode($daftarBulanan['label'], JSON_UNESCAPED_UNICODE) ?>,
+          <?= json_encode($daftarBulanan['data']) ?>, false);
       });
       </script>
     <?php endif; ?>

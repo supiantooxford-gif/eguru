@@ -19,7 +19,7 @@ require_once __DIR__ . '/helpers.php'; // untuk setting_default() saat seed (tid
 require_once __DIR__ . '/landing.php';
 
 /** Naikkan angka ini setiap kali skema berubah agar migrasi/seed ikut berjalan. */
-const SCHEMA_VERSION = '63';
+const SCHEMA_VERSION = '73';
 
 /**
  * Kolom yang MEMASTIKAN isi basis data sudah benar-benar versi terkini — dipakai
@@ -43,6 +43,21 @@ const SCHEMA_KOLOM_WAJIB = [
     // `ujian_online` (v43).
     'smart_teacher' => ['link', 'baru_pada'],
     'aplikasi_sagu' => 'link',      // v26: menu "Aplikasi Sagu" (di bawah Smart Teacher)
+    // v69: PERMINTAAN MEDIA ("Buatkan Media") — judul media yang diminta guru + status tindak lanjut.
+    // Kolom `judul`/`status` WAJIB: tanpa keduanya halaman Permintaan Media (Super Admin) dan tab
+    // "Buatkan Media" (guru) gagal dengan "no such column" dan tidak bisa memulihkan diri sendiri.
+    // v70: `kelas` & `fase` = kelas sasaran media (1..12) dan fasenya (A..F) — permintaan pemilik
+    // *"Dibawah Judul Media tambahkan Kelas dan Fase agar media pembelajaran lebih fokus ke kelas dan
+    // fasenya"*. Tanpa keduanya, formulir Buatkan Media gagal menyimpan ("no such column").
+    // v71: `mata_pelajaran` = mata pelajaran sasaran media (permintaan pemilik: *"Tambahkan Mata
+    // pelajaran sebelum kelas"*). Tanpa kolom ini formulir menyimpan gagal ("no such column").
+    'media_permintaan' => ['nama_guru', 'asal_sekolah', 'judul', 'mata_pelajaran', 'kelas', 'fase', 'status'],
+    // v67: menu "Media Interaktif" (tepat di bawah Smart Teacher, akun GURU) — daftar media
+    // pembelajaran & game edukasi GLOBAL yang dipisah per TAB JENJANG lewat kolom `jenjang`
+    // (nilai sahnya = kunci MEDIA_INTERAKTIF_JENJANG, inc/config.php).
+    // v72: `fase` = SUB TAB FASE di dalam tab jenjang (Fase A–C untuk SD/MI, D untuk SMP/MTs, E–F
+    // untuk SMA/MA). Tanpa kolom ini, formulir media gagal menyimpan ("no such column").
+    'media_interaktif' => ['link', 'jenjang', 'fase'],
     // v54: menu "Studio Foto Pintar" (di bawah Smart Teacher) — daftar aplikasi GLOBAL seperti
     // Smart Teacher, dengan lencana "Bonus" (kolom `baru_pada`) & keterangan "Aplikasi Sementara
     // Dikembangkan" selama tautannya belum diisi Super Admin.
@@ -76,7 +91,11 @@ const SCHEMA_KOLOM_WAJIB = [
                   // v49: PILIHAN JENJANG — SD/SMP/SMA/SMK (sekolah umum) atau MI/MTs/MA/MAK
                   // (madrasah). Menentukan acuan tingkat kelas & apakah lembaga memakai konsep
                   // GURU KELAS (jenjang SD/MI).
-                  'jenjang'],
+                  'jenjang',
+                  // v66: TANDA TANGAN KEPALA & CAP/STEMPEL LEMBAGA untuk dokumen cetak —
+                  // `ttd_kepala` = URL CDN gambar tanda tangan, `cap_sekolah` = URL CDN gambar
+                  // cap/stempel, `ttd_cap_aktif` = sakelar 1/0 (diatur Admin Operator).
+                  'ttd_kepala', 'cap_sekolah', 'ttd_cap_aktif'],
     // v49: `guru_kelas` = penanda GURU KELAS (jenjang SD/MI). Guru kelas memegang BANYAK mata
     // pelajaran pada SATU kelas dan otomatis ditetapkan sebagai wali kelas kelas itu.
     // v61: `sertifikasi` = status sertifikasi ('sertifikasi' / 'belum') dan `satmikal` =
@@ -114,6 +133,25 @@ const SCHEMA_KOLOM_WAJIB = [
     'bk_dokumen' => ['butir_no', 'nama_berkas'],
     'bk_supervisi' => ['total_skor', 'skor_maks', 'nilai', 'predikat'],
     'bk_supervisi_nilai' => ['butir_no', 'ketersediaan', 'skor'],
+    // v64: VIDEO TUTORIAL (permintaan pemilik) — daftar video YouTube GLOBAL yang diisi Super Admin
+    // dan ditonton akun guru, admin operator, serta kepala sekolah/madrasah. `judul` = judul video,
+    // `link` = tautan YouTube (ID videonya dibaca ulang dari tautan, lihat video_tutorial_youtube_id()).
+    'video_tutorial' => ['judul', 'link'],
+    // v68: PKG (PENILAIAN KINERJA GURU) — hasil penilaian kepala sekolah/madrasah atas setiap guru
+    // lembaganya (instrumen 13 butir / 4 dimensi, skala 1-4). Satu baris per (sekolah x guru x tahun
+    // ajaran x semester); skor tiap butir ada di `pkg_nilai`. Lihat inc/pkg.php.
+    'pkg_penilaian' => ['ta_id', 'semester_id', 'skor_a', 'skor_b', 'skor_c', 'skor_d',
+                        'total_skor', 'skor_maks', 'persen', 'predikat', 'kelebihan', 'perbaikan', 'rtl'],
+    'pkg_nilai' => ['butir_no', 'skor', 'catatan'],
+    // v73: KIRIM MATERI/TUGAS KE SISWA (permintaan pemilik) — berkas yang diunggah guru disimpan di
+    // media proxy (hanya URL-nya yang masuk basis data) beserta SNAPSHOT nama/jenis/ukuran berkas dan
+    // pengaturan waktu buka (`buka_mulai`/`batas_waktu`, boleh kosong = tanpa batas). Tanpa kolom ini
+    // formulir "Kirim Materi/Tugas" gagal menyimpan ("no such column") dan tidak bisa memulihkan diri.
+    'materi_kirim' => ['guru_nama', 'mapel_nama', 'judul', 'keterangan', 'url', 'nama_berkas',
+                       'jenis_berkas', 'ext', 'ukuran', 'buka_mulai', 'batas_waktu', 'jml_penerima'],
+    // `siswa_nama`/`kelas_nama` = SNAPSHOT supaya daftar penerima & lembar cetak tetap terbaca bila
+    // nama siswa/kelasnya kelak diubah atau siswanya dihapus.
+    'materi_penerima' => ['siswa_nama', 'kelas_nama'],
 ];
 
 /**
@@ -132,6 +170,9 @@ const SCHEMA_TABEL_WAJIB = ['app_pengaturan', 'pengawas_sekolah', 'guru_tugas',
     'nilai_pengaturan', // pengaturan penilaian per (guru, mapel) — skema v31
     'pengumuman',      // pengumuman sambutan (skema v16)
     'aplikasi_sagu',   // daftar aplikasi menu "Aplikasi Sagu", GLOBAL (skema v26)
+    // v67: daftar MEDIA INTERAKTIF & GAME EDUKASI (menu "Media Interaktif" pada akun guru), GLOBAL
+    // dengan kolom `jenjang` sebagai pemisah tab (SD/MI · SMP/MTs · SMA/MA · Game Edukasi).
+    'media_interaktif',
     // v54: daftar aplikasi menu "Studio Foto Pintar" — bentuknya sama dengan `smart_teacher`
     // (nama, link, keterangan, urutan, aktif, baru_pada).
     // ⚠️ v1.75.0: MENU-nya DIHAPUS atas permintaan pemilik, tetapi TABEL-nya sengaja DIBIARKAN supaya
@@ -181,6 +222,19 @@ const SCHEMA_TABEL_WAJIB = ['app_pengaturan', 'pengawas_sekolah', 'guru_tugas',
     // v63: SUPERVISI GURU BK — `bk_dokumen` (satu berkas per butir instrumen yang dikirim Guru BK),
     // `bk_supervisi` (hasil penilaian pengawas) dan `bk_supervisi_nilai` (skor tiap butir).
     'bk_dokumen', 'bk_supervisi', 'bk_supervisi_nilai',
+    // v64: VIDEO TUTORIAL — daftar video YouTube GLOBAL (judul + tautan) yang diisi Super Admin.
+    'video_tutorial',
+    // v68: PKG — hasil penilaian kinerja guru oleh kepala sekolah/madrasah (`pkg_penilaian`) beserta
+    // skor & catatan tiap butir instrumen (`pkg_nilai`). Lihat inc/pkg.php.
+    'pkg_penilaian', 'pkg_nilai',
+    // v69: PERMINTAAN MEDIA — permintaan "Buatkan Media" dari akun GURU (nama guru, asal sekolah,
+    // judul media, status "Sedang ditinjau"/"Media telah dibuat") yang ditindaklanjuti Super Admin
+    // pada menu "Permintaan Media". Lihat inc/media_permintaan.php.
+    'media_permintaan',
+    // v65: KELAS LAIN YANG DIAJAR GURU KELAS — satu baris per (guru, kelas lain, mata pelajaran).
+    // Guru kelas tetap memegang banyak mapel pada satu kelas perwalian (`guru_kelas`), dan boleh
+    // ditugaskan mengajar mata pelajaran tertentu di kelas lain (permintaan pemilik).
+    'guru_kelas_mapel',
     'perpus_laporan',  // kepala laporan perpustakaan hasil impor e-PERPUS (skema v23)
     'perpus_baris',    // baris laporan perpustakaan hasil impor e-PERPUS (skema v23)
     'lab_barang',      // daftar inventaris barang Kepala Lab IPA/Komputer (skema v24)
@@ -197,7 +251,11 @@ const SCHEMA_TABEL_WAJIB = ['app_pengaturan', 'pengawas_sekolah', 'guru_tugas',
     // v62: SETORAN HAFALAN menu Tugas Tambahan "Pembina Tahfidz" (permintaan pemilik) — satu baris
     // per setoran siswa per TANGGAL, menyimpan nama siswa & kelas sebagai SNAPSHOT agar lembar
     // cetak tetap terbaca bila siswa/kelasnya kelak dihapus. Lihat inc/tahfidz.php.
-    'tahfidz_setoran'];
+    'tahfidz_setoran',
+    // v73: KIRIM MATERI/TUGAS KE SISWA — `materi_kirim` (satu kiriman: judul, mapel, berkas di media
+    // proxy, pengaturan waktu buka) + `materi_penerima` (satu baris per siswa penerima, menyimpan
+    // nama siswa & kelas sebagai SNAPSHOT). Lihat inc/materi_siswa.php.
+    'materi_kirim', 'materi_penerima'];
 
 function db(): PDO
 {
@@ -597,6 +655,12 @@ function ensure_schema(PDO $pdo): void
             -- jenis: umum -> SD/SMP/SMA/SMK · madrasah -> MI/MTs/MA/MAK.
             jenjang TEXT,
             logo TEXT,
+            -- v66: TANDA TANGAN KEPALA & CAP/STEMPEL untuk dokumen cetak (permintaan pemilik).
+            -- URL CDN hasil media proxy; `ttd_cap_aktif` = 1 bila Operator menyalakan fiturnya
+            -- (0 = kosong, sehingga seluruh lembar cetak tampil persis seperti sebelumnya).
+            ttd_kepala TEXT,
+            cap_sekolah TEXT,
+            ttd_cap_aktif INTEGER NOT NULL DEFAULT 0,
             ta_aktif_id INTEGER,
             semester_aktif_id INTEGER,
             jumlah_formatif INTEGER NOT NULL DEFAULT 4,
@@ -711,6 +775,17 @@ function ensure_schema(PDO $pdo): void
             guru_id INTEGER NOT NULL REFERENCES guru(id) ON DELETE CASCADE,
             kelas_id INTEGER NOT NULL REFERENCES kelas(id) ON DELETE CASCADE,
             PRIMARY KEY (guru_id, kelas_id)
+        )');
+
+        // v65: KELAS LAIN YANG DIAJAR SEORANG GURU KELAS — satu baris per (guru, kelas lain,
+        // mata pelajaran). Guru kelas tetap memegang banyak mata pelajaran pada SATU kelas
+        // perwaliannya (tabel `guru_kelas` di atas), lalu boleh ditugaskan mengajar mata pelajaran
+        // TERTENTU di kelas LAIN lewat tabel ini (permintaan pemilik).
+        $pdo->exec('CREATE TABLE IF NOT EXISTS guru_kelas_mapel (
+            guru_id INTEGER NOT NULL REFERENCES guru(id) ON DELETE CASCADE,
+            kelas_id INTEGER NOT NULL REFERENCES kelas(id) ON DELETE CASCADE,
+            mapel_id INTEGER NOT NULL REFERENCES mapel(id) ON DELETE CASCADE,
+            PRIMARY KEY (guru_id, kelas_id, mapel_id)
         )');
 
         $pdo->exec('CREATE TABLE IF NOT EXISTS siswa (
@@ -931,6 +1006,26 @@ function ensure_schema(PDO $pdo): void
             dibuat TEXT,
             diubah TEXT
         )');
+        // MEDIA INTERAKTIF (skema v67) — permintaan pemilik: *"pada akun guru tambahkan Menu 'Media
+        // Interaktif' tepat dibawah Smart Teacher dan beri penanda Bonus berkedip. Isi dari menu ini
+        // adalah Kumpulan Media Interaktif (SD/MI - SMA/MA yang dibuatkan menu sendiri-sendiri untuk
+        // memisahkan antar jenjang) dan Game Edukasi."* → bentuk tabelnya SAMA dengan `smart_teacher`
+        // (GLOBAL, tanpa `sekolah_id`, hanya diisi Super Admin), DITAMBAH kolom **`jenjang`** sebagai
+        // pemisah tab (SD/MI · SMP/MTs · SMA/MA · Game Edukasi — nilainya dari
+        // MEDIA_INTERAKTIF_JENJANG). Tabelnya sengaja TIDAK memuat `baru_pada`: lencana "Bonus" pada
+        // menu ini SELALU tampil (keputusan pemilik), bukan per aplikasi seperti Smart Teacher.
+        $pdo->exec('CREATE TABLE IF NOT EXISTS media_interaktif (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nama TEXT NOT NULL,
+            link TEXT,
+            keterangan TEXT,
+            jenjang TEXT,
+            fase TEXT NOT NULL DEFAULT \'\',
+            urutan INTEGER NOT NULL DEFAULT 0,
+            aktif INTEGER NOT NULL DEFAULT 1,
+            dibuat TEXT,
+            diubah TEXT
+        )');
         // STUDIO FOTO PINTAR (skema v54) — permintaan pemilik: *"dibawah menu Smart Teacher
         // tambahkan menu Studio Foto Pintar (tambahkan label Bonus seperti Menu Smart Teacher) dan
         // linknya akan di isi oleh super admin"* → bentuk tabelnya SAMA dengan `smart_teacher`
@@ -1073,9 +1168,10 @@ function ensure_schema(PDO $pdo): void
         // menu 'Ujian Online'. Isi dari menu ini buat seperti menu smart teacher yaitu memasukkan
         // link aplikasi ujian online lewat akun super admin" → bentuk tabelnya SAMA PERSIS dengan
         // `smart_teacher`/`hasil_supervisi` (GLOBAL, tanpa `sekolah_id`, hanya diisi Super Admin).
-        // v43: kolom `baru_pada` — waktu aplikasi ditandai oleh Super Admin; selama
-        // DAFTAR_APPS_BARU_HARI hari menu sidebar-nya mendapat lencana "Bonus" berkedip (permintaan
-        // pemilik: "tambahkan tulisan new berkedip seperti pada aplikasi smart teacher").
+        // v43: kolom `baru_pada` — waktu aplikasi ditandai oleh Super Admin; selama tanda itu
+        // dipasang menu sidebar-nya mendapat lencana "Bonus" berkedip (permintaan pemilik:
+        // "tambahkan tulisan new berkedip seperti pada aplikasi smart teacher"). v1.99.0: tidak
+        // lagi ada batas hari — lencana hilang hanya bila centangnya dilepas.
         $pdo->exec('CREATE TABLE IF NOT EXISTS ujian_online (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nama TEXT NOT NULL,
@@ -2181,6 +2277,195 @@ function ensure_schema(PDO $pdo): void
             }
         }
 
+        // ---------------------------------------------------------------- MIGRASI v73
+        // KIRIM MATERI/TUGAS KE SISWA (v1.113.0) — permintaan pemilik: *"Pada akun guru tambahkan menu
+        // 'Kirim Materi/Tugas Ke Siswa'. Isi dari menu ini guru bisa mengirim sekaligus ke siswa yang
+        // dia ajar atau memilih siswa tertentu. Modulnya: Judul Materi/Tugas, Mata Pelajaran, Unggah
+        // (bisa pdf, word, gambar dan Maksimal 2MB) dan ada setingan batas waktu tugas/materi bisa
+        // dibuka oleh siswa. Hasilnya akan terkirim ke akun siswa dengan menampilkan nama guru
+        // pengirim, mata pelajaran, file/dokumen (bisa di download dan dicetak)"*.
+        //
+        // DUA tabel BARU (hanya CREATE TABLE/CREATE INDEX — tidak ada tabel lama yang dibangun ulang
+        // dan tidak ada data yang berubah). Keduanya KOSONG setelah migrasi: tidak ada materi contoh
+        // yang dipaksakan ke akun siswa mana pun.
+        //   • `materi_kirim` — SATU kiriman materi/tugas. Berkas hanya disimpan sebagai URL CDN hasil
+        //     media proxy platform (`url`) + SNAPSHOT nama/jenis/ekstensi/ukuran berkas. `guru_nama`,
+        //     `mapel_nama`, dan `kelas_teks` juga SNAPSHOT supaya tampilan di akun siswa & lembar
+        //     cetak tetap terbaca walau guru/mapel/kelasnya kelak diubah atau dihapus.
+        //     `buka_mulai` & `batas_waktu` = pengaturan waktu (boleh KOSONG = tanpa batas); waktu
+        //     dibandingkan di SERVER lewat materi_keadaan() — bukan hanya disembunyikan di tampilan.
+        //   • `materi_penerima` — satu baris per SISWA penerima (UNIQUE materi × siswa), menyimpan
+        //     `siswa_nama` & `kelas_nama` sebagai SNAPSHOT. ON DELETE CASCADE: menghapus kiriman atau
+        //     siswa otomatis membersihkan baris penerimanya.
+        $pdo->exec('CREATE TABLE IF NOT EXISTS materi_kirim (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sekolah_id INTEGER NOT NULL DEFAULT 1 REFERENCES sekolah(id) ON DELETE CASCADE,
+            guru_id INTEGER REFERENCES guru(id) ON DELETE SET NULL,
+            guru_nama TEXT NOT NULL DEFAULT \'\',
+            mapel_id INTEGER REFERENCES mapel(id) ON DELETE SET NULL,
+            mapel_nama TEXT NOT NULL DEFAULT \'\',
+            kelas_teks TEXT NOT NULL DEFAULT \'\',
+            judul TEXT NOT NULL DEFAULT \'\',
+            keterangan TEXT,
+            url TEXT NOT NULL DEFAULT \'\',
+            nama_berkas TEXT NOT NULL DEFAULT \'\',
+            jenis_berkas TEXT NOT NULL DEFAULT \'\',
+            ext TEXT NOT NULL DEFAULT \'\',
+            ukuran INTEGER NOT NULL DEFAULT 0,
+            buka_mulai TEXT,
+            batas_waktu TEXT,
+            jml_penerima INTEGER NOT NULL DEFAULT 0,
+            dibuat TEXT,
+            diubah TEXT
+        )');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_materi_kirim_guru
+                    ON materi_kirim(sekolah_id, guru_id, dibuat)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_materi_kirim_waktu
+                    ON materi_kirim(sekolah_id, batas_waktu)');
+        $pdo->exec('CREATE TABLE IF NOT EXISTS materi_penerima (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            materi_id INTEGER NOT NULL REFERENCES materi_kirim(id) ON DELETE CASCADE,
+            sekolah_id INTEGER NOT NULL DEFAULT 1 REFERENCES sekolah(id) ON DELETE CASCADE,
+            siswa_id INTEGER REFERENCES siswa(id) ON DELETE CASCADE,
+            siswa_nama TEXT NOT NULL DEFAULT \'\',
+            kelas_id INTEGER REFERENCES kelas(id) ON DELETE SET NULL,
+            kelas_nama TEXT NOT NULL DEFAULT \'\',
+            dibuat TEXT,
+            UNIQUE (materi_id, siswa_id)
+        )');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_materi_penerima_materi
+                    ON materi_penerima(materi_id)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_materi_penerima_siswa
+                    ON materi_penerima(siswa_id, materi_id)');
+
+        // ---------------------------------------------------------------- MIGRASI v69
+        // PERMINTAAN MEDIA ("Buatkan Media") — permintaan pemilik: *"Pada yang saya tandai warna merah
+        // tambahkan tab 'Buatkan Media'. Isinya data media yang akan diminta: Nama Guru, Asal Sekolah,
+        // Judul Media. Permintaan ini akan terkirim ke super admin. Jadi di halaman super admin
+        // tambahkan Menu Permintaan Media dengan isi daftar Guru + Judul media yang diminta dan
+        // tambahkan fitur aksi (Sedang ditinjau, media telah dibuat). Status sedang ditinjau atau media
+        // telah dibuat akan muncul juga di akun guru yang meminta"*.
+        //
+        // SATU tabel BARU (hanya CREATE TABLE/CREATE INDEX — tidak ada tabel lama yang dibangun ulang
+        // dan tidak ada data yang berubah). Tabelnya KOSONG setelah migrasi: tidak ada permintaan yang
+        // ditebak/dicontohkan.
+        //   • `nama_guru` & `asal_sekolah` = SNAPSHOT seperti yang DIKETIK guru pada formulir (bukan
+        //     dibaca ulang dari tabel guru/sekolah) supaya permintaan lama tetap terbaca apa adanya
+        //     walau namanya kelak diubah atau akunnya dihapus;
+        //   • `user_id`/`guru_id`/`sekolah_id` = ON DELETE SET NULL — permintaan TIDAK ikut terhapus
+        //     saat akun/guru/sekolah dihapus (Super Admin masih perlu riwayatnya);
+        //   • `status` = 'ditinjau' (Sedang ditinjau, keadaan awal saat dikirim) atau 'selesai'
+        //     (Media telah dibuat). Nilai sahnya satu tempat: MEDIA_PERMINTAAN_STATUS (inc/config.php).
+        $pdo->exec('CREATE TABLE IF NOT EXISTS media_permintaan (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sekolah_id INTEGER REFERENCES sekolah(id) ON DELETE SET NULL,
+            guru_id INTEGER REFERENCES guru(id) ON DELETE SET NULL,
+            user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            nama_guru TEXT NOT NULL DEFAULT \'\',
+            asal_sekolah TEXT NOT NULL DEFAULT \'\',
+            judul TEXT NOT NULL DEFAULT \'\',
+            mata_pelajaran TEXT NOT NULL DEFAULT \'\',
+            kelas TEXT NOT NULL DEFAULT \'\',
+            fase TEXT NOT NULL DEFAULT \'\',
+            status TEXT NOT NULL DEFAULT \'ditinjau\',
+            diubah_oleh TEXT,
+            dibuat TEXT,
+            diperbarui TEXT
+        )');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_media_permintaan_status
+                    ON media_permintaan(status, dibuat)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_media_permintaan_user
+                    ON media_permintaan(user_id, dibuat)');
+
+        // ---------------------------------------------------------------- MIGRASI v70
+        // KELAS & FASE pada permintaan media — permintaan pemilik: *"Dibawah Judul Media tambahkan
+        // Kelas dan Fase agar media pembelajaran lebih fokus ke kelas dan fasenya"*.
+        //
+        // Hanya db_add_column (tabel TIDAK dibangun ulang, data lama aman). Kedua kolom dibiarkan
+        // KOSONG pada permintaan yang sudah ada — tidak ada kelas/fase yang ditebak; tampilannya "-".
+        //   • `kelas` = angka 1..12 (teks) sasaran media;
+        //   • `fase`  = satu huruf A..F (Fase Kurikulum Merdeka). Padanan kelas → fase ada di KODE
+        //     (`media_permintaan_fase_dari_kelas()`, inc/media_permintaan.php), bukan di basis data.
+        // ⚠️ Blok ini SENGAJA diletakkan SETELAH migrasi v69 (meski nomornya lebih baru): migrasi
+        // dijalankan berurutan mengikuti letaknya di berkas, sedangkan CREATE TABLE `media_permintaan`
+        // ada pada blok v69 — bila blok ini di atasnya, ALTER TABLE gagal "no such table" pada
+        // basis data baru dan seluruh aplikasi ikut gagal.
+        db_add_column($pdo, 'media_permintaan', 'kelas', "TEXT NOT NULL DEFAULT ''");
+        db_add_column($pdo, 'media_permintaan', 'fase', "TEXT NOT NULL DEFAULT ''");
+
+        // ---------------------------------------------------------------- MIGRASI v71
+        // MATA PELAJARAN pada permintaan media — permintaan pemilik: *"Tambahkan Mata pelajaran sebelum
+        // kelas"*. Hanya db_add_column (tabel TIDAK dibangun ulang, data lama aman); kolomnya dibiarkan
+        // KOSONG pada permintaan yang sudah ada (tampil "-"), tidak ada mapel yang ditebak.
+        // ⚠️ Sama seperti v70: blok ini WAJIB berada SETELAH blok v69 yang membuat tabelnya.
+        db_add_column($pdo, 'media_permintaan', 'mata_pelajaran', "TEXT NOT NULL DEFAULT ''");
+
+        // ---------------------------------------------------------------- MIGRASI v68
+        // PKG (PENILAIAN KINERJA GURU) — permintaan pemilik: *"Pada akun kepala sekolah/madrasah
+        // tambahkan menu PKG … digunakan untuk menilai setiap guru pada lembaganya sendiri (Instrumen
+        // penilaian seperti yang saya upload) dan hasil penilaiannya masuk ke menu Hasil PKG pada akun
+        // guru. Selain itu pengawas juga bisa melihat hasil PKG setiap guru binaannya."*
+        //
+        // DUA tabel BARU (hanya CREATE TABLE/CREATE INDEX — tidak ada tabel lama yang dibangun ulang
+        // dan tidak ada data yang berubah). Keduanya KOSONG setelah migrasi: tidak ada penilaian yang
+        // ditebak, sehingga tidak ada guru yang tiba-tiba "sudah dinilai".
+        //   • `pkg_penilaian` — SATU penilaian kepala sekolah/madrasah untuk satu guru pada satu
+        //     periode (tahun ajaran + semester). UNIQUE pada (sekolah, guru, ta, semester) membuat
+        //     penilaian ulang pada periode yang sama MEMPERBARUI baris yang ada (bukan menumpuk baris
+        //     kembar). `ta_nama`/`semester_nama` disimpan sebagai SNAPSHOT supaya lembar cetak & riwayat
+        //     tetap terbaca bila tahun ajarannya kelak dihapus. `skor_a..skor_d` = jumlah skor tiap
+        //     dimensi, `total_skor` (maks `skor_maks` = 52), `persen`, dan `predikat`.
+        //   • `pkg_nilai` — skor (1..4) + catatan/bukti fisik TIAP butir instrumen (13 butir). Ikut
+        //     terhapus bila penilaiannya dihapus (CASCADE).
+        // ⚠️ Daftar butir instrumen (13 butir, 4 dimensi) ada di KODE (`pkg_instrumen()` pada
+        // inc/pkg.php), BUKAN di basis data — supaya tidak perlu migrasi bila ejaannya diperbaiki.
+        $pdo->exec('CREATE TABLE IF NOT EXISTS pkg_penilaian (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sekolah_id INTEGER NOT NULL DEFAULT 1 REFERENCES sekolah(id) ON DELETE CASCADE,
+            guru_id INTEGER NOT NULL REFERENCES guru(id) ON DELETE CASCADE,
+            ta_id INTEGER REFERENCES tahun_ajaran(id) ON DELETE SET NULL,
+            semester_id INTEGER REFERENCES semester(id) ON DELETE SET NULL,
+            ta_nama TEXT,
+            semester_nama TEXT,
+            pangkat TEXT,
+            mapel_kelas TEXT,
+            penilai_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            penilai_nama TEXT,
+            penilai_jabatan TEXT,
+            penilai_nip TEXT,
+            tempat TEXT,
+            tanggal TEXT NOT NULL,
+            skor_a INTEGER NOT NULL DEFAULT 0,
+            skor_b INTEGER NOT NULL DEFAULT 0,
+            skor_c INTEGER NOT NULL DEFAULT 0,
+            skor_d INTEGER NOT NULL DEFAULT 0,
+            total_skor INTEGER NOT NULL DEFAULT 0,
+            skor_maks INTEGER NOT NULL DEFAULT 52,
+            persen REAL NOT NULL DEFAULT 0,
+            predikat TEXT,
+            kelebihan TEXT,
+            perbaikan TEXT,
+            rtl TEXT,
+            dibuat TEXT,
+            diubah TEXT,
+            UNIQUE (sekolah_id, guru_id, ta_id, semester_id)
+        )');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_pkg_penilaian_sekolah
+                    ON pkg_penilaian(sekolah_id, tanggal)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_pkg_penilaian_guru
+                    ON pkg_penilaian(guru_id, tanggal)');
+
+        $pdo->exec('CREATE TABLE IF NOT EXISTS pkg_nilai (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pkg_id INTEGER NOT NULL REFERENCES pkg_penilaian(id) ON DELETE CASCADE,
+            butir_no INTEGER NOT NULL,
+            skor INTEGER,
+            catatan TEXT,
+            UNIQUE (pkg_id, butir_no)
+        )');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_pkg_nilai_pkg
+                    ON pkg_nilai(pkg_id)');
+
         // ---------------------------------------------------------------- MIGRASI v63
         // SUPERVISI GURU BK & DOKUMEN PER BUTIR INSTRUMEN (v1.95.0) — permintaan pemilik:
         // *"pada tugas tambahan Bimbingan Konseling tambahkan modul untuk mengirim dokumen (maksimal
@@ -2250,6 +2535,118 @@ function ensure_schema(PDO $pdo): void
         )');
         $pdo->exec('CREATE INDEX IF NOT EXISTS idx_bk_nilai_supervisi
                     ON bk_supervisi_nilai(supervisi_id)');
+
+        // ---------------------------------------------------------------- MIGRASI v65
+        // GURU KELAS BOLEH MENGAJAR DI KELAS LAIN (v1.100.0) — permintaan pemilik: *"Ketika guru
+        // ditandai sebagai guru kelas dan dia juga mengajar kelas lain, buat guru tersebut bisa
+        // diseting untuk mengajar kelas lain. Jadi dia guru kelas di kelas yang telah ditentukan
+        // tetapi bisa mengajar mata pelajaran tertentu di kelas yang lain"*.
+        //
+        // SATU tabel BARU (hanya CREATE TABLE — tidak ada tabel lama yang dibangun ulang, tidak ada
+        // data yang berubah). Tabelnya KOSONG setelah migrasi: tidak ada penugasan yang ditebak,
+        // sehingga perilaku seluruh guru yang sudah ada TIDAK berubah sampai admin mengisinya.
+        //   • `guru_kelas`     (v49) = kelas PERWALIAN guru kelas (tetap SATU kelas);
+        //   • `guru_kelas_mapel`     = pasangan (kelas lain × mata pelajaran) yang diajar guru itu.
+        // Pemeriksaan cakupan memakai `boleh_kelas_mapel()`; selama guru belum punya baris di tabel
+        // ini, aturan lama (kelas & mapel diperiksa terpisah) tetap berlaku.
+        $pdo->exec('CREATE TABLE IF NOT EXISTS guru_kelas_mapel (
+            guru_id INTEGER NOT NULL REFERENCES guru(id) ON DELETE CASCADE,
+            kelas_id INTEGER NOT NULL REFERENCES kelas(id) ON DELETE CASCADE,
+            mapel_id INTEGER NOT NULL REFERENCES mapel(id) ON DELETE CASCADE,
+            PRIMARY KEY (guru_id, kelas_id, mapel_id)
+        )');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_guru_kelas_mapel_guru
+                    ON guru_kelas_mapel(guru_id)');
+
+        // ---------------------------------------------------------------- MIGRASI v67
+        // MENU "MEDIA INTERAKTIF" PADA AKUN GURU (v1.105.0) — permintaan pemilik: *"pada akun guru
+        // tambahkan Menu 'Media Interaktif' tepat dibawah Smart Teacher dan beri penanda Bonus
+        // berkedip. Isi dari menu ini adalah Kumpulan Media Interaktif (SD/MI - SMA/MA yang dibuatkan
+        // menu sendiri-sendiri untuk memisahkan antar jenjang) dan Game Edukasi."*
+        //
+        // SATU tabel BARU (hanya CREATE TABLE + CREATE INDEX; tidak ada tabel lama yang dibangun
+        // ulang dan tidak ada data yang berubah). Tabelnya KOSONG setelah migrasi — tidak ada media
+        // contoh yang dipaksakan; daftar media diisi Super Admin dari halaman menunya sendiri.
+        //   • `jenjang` = pemisah TAB (kunci MEDIA_INTERAKTIF_JENJANG: sd-mi/smp-mts/sma-ma/game);
+        //   • `urutan`  = urutan tampil di dalam tab (kelipatan 10, diatur tombol ▲▼).
+        // Kolom `jenjang` juga ditambahkan lewat db_add_column() supaya basis data yang tabelnya
+        // sudah terlanjur dibuat (mis. percobaan versi ini) tetap lengkap.
+        $pdo->exec('CREATE TABLE IF NOT EXISTS media_interaktif (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nama TEXT NOT NULL,
+            link TEXT,
+            keterangan TEXT,
+            jenjang TEXT,
+            fase TEXT NOT NULL DEFAULT \'\',
+            urutan INTEGER NOT NULL DEFAULT 0,
+            aktif INTEGER NOT NULL DEFAULT 1,
+            dibuat TEXT,
+            diubah TEXT
+        )');
+        db_add_column($pdo, 'media_interaktif', 'jenjang', 'TEXT');
+        // Indeks WAJIB dibuat SETELAH kolomnya ada (lihat catatan pada blok indeks di atas).
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_media_interaktif_tab
+                    ON media_interaktif(jenjang, aktif, urutan)');
+
+        // ---------------------------------------------------------------- MIGRASI v72
+        // SUB TAB FASE di dalam tab jenjang Media Interaktif — permintaan pemilik: *"Pada Tab SD/MI
+        // Tambahkan Fase A, B, C untuk memisah media itu difase apa. Begitu juga untuk Tab SMA/MA
+        // tambahkan Fase E, F. Kalau SMP/MTs hanya Fase D"*.
+        //
+        // Hanya db_add_column (tabel TIDAK dibangun ulang, media yang sudah ada aman). Kolomnya
+        // dibiarkan KOSONG pada media lama — media tanpa fase tetap TAMPIL pada SETIAP fase
+        // jenjangnya (lihat daftar_apps_fase_tampil()), jadi tidak ada media yang "hilang".
+        //   • `fase` = kunci fase pada MEDIA_INTERAKTIF_FASE (a/b/c/d/e/f), bergantung jenjangnya.
+        // ⚠️ Blok ini SENGAJA diletakkan SETELAH blok v67 yang membuat tabelnya (migrasi dijalankan
+        // berurutan mengikuti letaknya di berkas).
+        db_add_column($pdo, 'media_interaktif', 'fase', "TEXT NOT NULL DEFAULT ''");
+
+        // ---------------------------------------------------------------- MIGRASI v66
+        // TANDA TANGAN KEPALA & CAP/STEMPEL LEMBAGA PADA DOKUMEN CETAK (v1.104.0) — permintaan
+        // pemilik: *"Pada bagian yang saya tandai warna merah tambahkan fitur untuk upload Tanda
+        // tangan kepala sekolah/madrasah dan Cap/Stempel sekolah. Fitur ini bisa diaktifkan dan
+        // non aktifkan oleh Operator sekolah/madrasah"*. Keputusan pemilik: tanda tangan & cap
+        // dicetak pada blok "Mengetahui, Kepala …" di SEMUA dokumen cetak, cap MENIMPA tanda tangan
+        // (seperti dokumen resmi), dan sakelar Operator menentukan MUNCUL/TIDAKNYA keduanya pada
+        // hasil cetak (bukan sekadar boleh/tidaknya mengunggah).
+        //
+        // Hanya MENAMBAH kolom pada tabel `sekolah` — tidak ada tabel yang dibangun ulang dan tidak
+        // ada data yang berubah: sekolah lama bernilai kosong/0 sehingga seluruh lembar cetaknya
+        // tetap tampil persis seperti sebelum versi ini sampai Operator menyalakan fiturnya.
+        if (db_has_table($pdo, 'sekolah')) {
+            db_add_column($pdo, 'sekolah', 'ttd_kepala', 'TEXT');
+            db_add_column($pdo, 'sekolah', 'cap_sekolah', 'TEXT');
+            db_add_column($pdo, 'sekolah', 'ttd_cap_aktif', 'INTEGER NOT NULL DEFAULT 0');
+        }
+
+        // ---------------------------------------------------------------- MIGRASI v64
+        // VIDEO TUTORIAL (v1.96.0) — permintaan pemilik: *"Dibawah menu dashboard akun guru,
+        // operator, kepala sekolah tambahkan menu Video Tutorial. Isi dari menu ini adalah kumpulan
+        // video yang diupload oleh super admin. Video berupa thumbail youtube yang bisa dibuka oleh
+        // guru, operator dan kepala sekolah. Admin mengisi menu tersebut dengan memberikan judul
+        // video dan link youtube"*.
+        //
+        // SATU tabel BARU (hanya CREATE TABLE/CREATE INDEX — tidak ada tabel lama yang dibangun
+        // ulang dan tidak ada data yang berubah). Tabelnya KOSONG setelah migrasi: tidak ada video
+        // contoh yang dipaksakan. Daftarnya **GLOBAL** (tanpa kolom `sekolah_id`) — seluruh
+        // sekolah/madrasah melihat kumpulan video yang sama.
+        //   • `judul`  = judul video (diisi Super Admin, bukan diambil dari YouTube);
+        //   • `link`   = tautan YouTube apa adanya (watch/youtu.be/shorts/embed);
+        //   • `urutan` = urutan tampil (kelipatan 10, diatur tombol ▲▼).
+        // ID video TIDAK disimpan: selalu dibaca ulang dari `link` lewat video_tutorial_youtube_id()
+        // supaya thumbnail/embed tidak pernah memakai ID yang sudah tidak cocok dengan tautannya.
+        $pdo->exec('CREATE TABLE IF NOT EXISTS video_tutorial (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            judul TEXT NOT NULL,
+            link TEXT NOT NULL,
+            keterangan TEXT,
+            urutan INTEGER NOT NULL DEFAULT 0,
+            aktif INTEGER NOT NULL DEFAULT 1,
+            dibuat TEXT,
+            diubah TEXT
+        )');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_video_tutorial_urut
+                    ON video_tutorial(aktif, urutan)');
 
         // ---------------------------------------------------------------- MIGRASI v62
         // SETORAN HAFALAN — menu Tugas Tambahan "Pembina Tahfidz" (v1.88.0) — permintaan pemilik:

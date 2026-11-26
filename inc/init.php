@@ -65,9 +65,30 @@ require_once __DIR__ . '/chat.php';
 // ketiga halamannya (`perangkat_saya.php`, `perangkat_masuk.php`, `perangkat_jenis.php`). Modul ini
 // memuat `inc/dokumen.php` sendiri (aturan validasi & batas ukuran berkas) — jangan dihapus.
 require_once __DIR__ . '/perangkat.php';
+// KIRIM MATERI/TUGAS KE SISWA (v1.113.0/skema v73) — modul ini dipakai halaman guru
+// (`materi_kirim.php`), halaman siswa (`materi_saya.php`), lembar cetak (`cetak_materi.php`), dan
+// SIDEBAR (lencana menu "Materi & Tugas" pada akun siswa), jadi di-require di sini. Modul ini memuat
+// `inc/dokumen.php` sendiri (aturan validasi & batas ukuran berkas) — jangan dihapus.
+require_once __DIR__ . '/materi_siswa.php';
 // DAFTAR HADIR MEETING/PERTEMUAN (v1.73.0/skema v55) — modul ini dipakai halaman pengawas, halaman
 // akun lembaga, endpoint tanda tangan, lembar cetak, DAN sidebar (lencana jumlah pertemuan yang belum
 // ditandatangani), jadi di-require di sini. Modul ini juga memuat `inc/notulen_ttd.php` (batas &
 // pembaca PNG tanda tangan dipakai bersama).
 require_once __DIR__ . '/meeting.php';
+// TANDA TANGAN RAPAT pada akun guru (v1.101.0) — modul ini dipakai halaman `ttd_rapat.php`,
+// endpoint `upload_notulen_ttd.php`, DAN sidebar (lencana jumlah rapat yang belum ditandatangani),
+// jadi di-require di sini. Modul ini memuat `inc/notulen_ttd.php`.
+require_once __DIR__ . '/ttd_rapat.php';
+// VIDEO TUTORIAL (v1.96.0/skema v64) — modul ini dipakai HALAMAN `video_tutorial.php` dan SIDEBAR
+// (lencana jumlah video pada sub menu "Layanan" milik Super Admin), jadi dimuat di sini.
+require_once __DIR__ . '/video_tutorial.php';
+// PKG — PENILAIAN KINERJA GURU (v1.109.0/skema v68) — modul ini dipakai tiga halaman (menu PKG akun
+// kepala sekolah/madrasah, Hasil PKG akun guru, Hasil PKG akun pengawas), LEMBAR CETAK `cetak_pkg.php`,
+// dan SIDEBAR (lencana jumlah guru yang belum dinilai / jumlah hasil PKG milik guru).
+require_once __DIR__ . '/pkg.php';
+// PERMINTAAN MEDIA — tab "Buatkan Media" (akun guru) & menu "Permintaan Media" (Super Admin) —
+// v1.111.0/skema v69 (+ isian Kelas & Fase sejak v1.111.1/skema v70). Dimuat di sini karena lencana
+// jumlah permintaan dipakai SIDEBAR Super Admin, sedangkan formulir & daftarnya dipakai halaman
+// `media_interaktif.php` dan `permintaan_media.php`.
+require_once __DIR__ . '/media_permintaan.php';
 require_once __DIR__ . '/layout.php';

@@ -79,6 +79,9 @@ function ikon(string $name, int $size = 18): string
         // SILANG — dipakai daftar perangkat (v1.67.0) untuk menandai perangkat yang BELUM dikirim
         // (pasangan dari ikon 'check' yang menandai yang sudah ada).
         'x'         => '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
+        // PUTAR — dipakai menu "Video Tutorial" (v1.96.0): tombol putar pada thumbnail YouTube,
+        // tombol "Buka di YouTube", dan judul kartu daftar video.
+        'play'      => '<path d="M8 4.8 20 12 8 19.2z"/>',
     ];
     $d = $p[$name] ?? $p['doc'];
     return '<svg class="ic" width="' . $size . '" height="' . $size . '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . $d . '</svg>';
@@ -117,6 +120,9 @@ function page_top(string $judul, string $sub = ''): void
         'notulen.php', 'notulen_form.php', 'cetak_notulen.php',
         // Laporan Rekap Pelanggaran Siswa (kepala sekolah/madrasah + Super Admin dalam konteks) — v1.26.0.
         'laporan_pelanggaran.php', 'cetak_rekap_pelanggaran.php',
+        // PKG (v1.109.0/skema v68) — daftar/formulir penilaian & lembar cetaknya memuat data SATU
+        // sekolah, jadi Super Admin tanpa konteks mendapat halaman "pilih sekolah dulu".
+        'pkg.php', 'cetak_pkg.php',
         // Laporan Rekap Jumlah Pertemuan Guru (kepala sekolah/madrasah + Super Admin dalam konteks) — v1.28.0.
         'laporan_pertemuan.php', 'cetak_rekap_pertemuan.php'];
     $menuSekolah[] = 'aktivasi.php';      // halaman aktivasi juga halaman "di sekolah"
@@ -129,6 +135,9 @@ function page_top(string $judul, string $sub = ''): void
     // Halaman "Jenis Perangkat" (Super Admin) SENGAJA tidak didaftarkan — daftarnya tingkat aplikasi.
     $menuSekolah[] = 'perangkat_saya.php';
     $menuSekolah[] = 'perangkat_masuk.php';
+    // KIRIM MATERI/TUGAS KE SISWA (v1.113.0/skema v73) — memuat data SATU sekolah, jadi Super Admin
+    // tanpa konteks mendapat halaman "pilih sekolah dulu" (bukan halaman kosong/403).
+    $menuSekolah[] = 'materi_kirim.php';
     $diSekolah = in_array($here, $menuSekolah, true);
     $menunggu = $super ? jumlah_pendaftaran_menunggu() : 0;
 
@@ -145,6 +154,20 @@ function page_top(string $judul, string $sub = ''): void
         ? meeting_belum_ttd((int) $sekolah['id'], (int) ($u['id'] ?? 0)) : 0;
     $jmlPerangkatSaya = ($sekolah && is_guru()) ? perangkat_jumlah_saya() : 0;
     $jmlPerangkatBaru = ($sekolah && in_array($r, ['kepala', 'super'], true)) ? perangkat_jumlah_menunggu() : 0;
+
+    // Lencana menu KIRIM MATERI/TUGAS KE SISWA (v1.113.0/skema v73):
+    //   • guru  → jumlah materi/tugas yang sudah ia kirim (menu "Kirim Materi/Tugas Ke Siswa");
+    //   • siswa → jumlah materi/tugas yang SEDANG dapat ia buka (menu "Materi & Tugas").
+    $jmlMateriSaya = ($sekolah && is_guru()) ? materi_jumlah_guru(guru_id_saya()) : 0;
+    $swLencana = ($sekolah && is_siswa()) ? siswa_saya() : null;
+    $jmlMateriSiswa = $swLencana ? materi_jumlah_siswa((int) $swLencana['id']) : 0;
+
+    // Lencana menu PKG (v1.109.0/skema v68):
+    //   • kepala sekolah/madrasah & Super Admin dalam konteks → jumlah guru yang BELUM dinilai pada
+    //     periode aktif (menu "PKG");
+    //   • guru → jumlah hasil PKG atas dirinya sendiri (menu "Hasil PKG").
+    $jmlPkgBelum = ($sekolah && in_array($r, ['kepala', 'super'], true)) ? pkg_jumlah_belum() : 0;
+    $jmlPkgSaya = ($sekolah && is_guru()) ? pkg_jumlah_saya() : 0;
 
     // Menu TUGAS TAMBAHAN yang tampil untuk pengguna ini (permintaan pemilik):
     //   - Super Admin / Kepala Sekolah-Madrasah / Admin Operator → SELURUH menu yang diaktifkan;
@@ -228,6 +251,15 @@ function page_top(string $judul, string $sub = ''): void
       <a class="nav-item <?= $here === 'index.php' ? 'on' : '' ?>" href="index.php"><?= ikon('dashboard') ?><span>Beranda</span></a>
       <a class="nav-item <?= $here === 'siswa_saya.php' ? 'on' : '' ?>" href="siswa_saya.php"><?= ikon('user') ?><span>Data Saya</span></a>
 
+      <?php // MATERI & TUGAS (v1.113.0/skema v73) — permintaan pemilik: materi/tugas yang dikirim
+            // guru *"akan terkirim ke akun siswa dengan menampilkan nama guru pengirim, mata
+            // pelajaran, file/dokumen (bisa di download dan dicetak)"*. Halaman ini hanya melihat &
+            // mencetak (gerbang_siswa()). Lencana = jumlah materi yang SEDANG dapat dibuka. ?>
+      <div class="nav-sec">Pembelajaran</div>
+      <a class="nav-item <?= in_array($here, ['materi_saya.php', 'cetak_materi.php'], true) ? 'on' : '' ?>" href="materi_saya.php"><?= ikon('send') ?><span>Materi &amp; Tugas</span>
+        <?php if ($jmlMateriSiswa > 0): ?><span class="pill pill-warn" style="margin-left:auto"><?= (int) $jmlMateriSiswa ?></span><?php endif; ?>
+      </a>
+
       <div class="nav-sec">Rekapan</div>
       <a class="nav-item <?= in_array($here, ['siswa_absensi.php', 'cetak_siswa_absensi.php'], true) ? 'on' : '' ?>" href="siswa_absensi.php"><?= ikon('clipboard') ?><span>Daftar Hadir</span></a>
       <a class="nav-item <?= in_array($here, ['siswa_nilai.php', 'cetak_siswa_nilai.php'], true) ? 'on' : '' ?>" href="siswa_nilai.php"><?= ikon('chart') ?><span>Nilai</span></a>
@@ -258,7 +290,9 @@ function page_top(string $judul, string $sub = ''): void
       // ==========================================================================================
       $layananAktif = in_array($here, ['pendaftaran.php', 'pengawas.php', 'tugas_menu.php',
           'pengumuman.php', 'tentang.php', 'logo.php', 'grup.php', 'biaya_aktivasi.php',
-          'landing.php', 'perangkat_jenis.php', 'rekap_kepala_operator.php'], true);
+          'landing.php', 'perangkat_jenis.php', 'rekap_kepala_operator.php', 'video_tutorial.php',
+          // PERMINTAAN MEDIA (v1.111.0/skema v69) — permintaan "Buatkan Media" dari akun guru.
+          'permintaan_media.php'], true);
       $jmlTugasAktif = (int) val('SELECT COUNT(*) FROM tugas_menu WHERE aktif = 1', [], 0);
       $jmlPengumuman = pengumuman_jumlah_aktif();
       // Pesan kontak dari formulir halaman depan yang belum dibaca (menu "Halaman Depan").
@@ -274,6 +308,9 @@ function page_top(string $judul, string $sub = ''): void
       $jmlPerangkatJenis = perangkat_jenis_jumlah(true);
       // Jumlah SELURUH lembaga terdaftar (menu "Rekap Kepala & Operator", v1.89.0) — lencana sub menu.
       $jmlLembagaSemua = (int) val('SELECT COUNT(*) FROM sekolah', [], 0);
+      // Jumlah PERMINTAAN MEDIA yang masih "Sedang ditinjau" (v1.111.0/skema v69) — lencana sub menu
+      // "Permintaan Media". Satu sumber aturan: media_permintaan_jumlah_ditinjau().
+      $jmlMintaMedia = media_permintaan_jumlah_ditinjau();
       ?>
       <div class="nav-sec"><?= tetap_kata('Lintas Sekolah/Madrasah') ?></div>
       <a class="nav-item <?= $here === 'index.php' && !$sekolah ? 'on' : '' ?>" href="index.php"><?= ikon('chart') ?><span>Ringkasan Semua</span></a>
@@ -345,6 +382,27 @@ function page_top(string $judul, string $sub = ''): void
           <a class="nav-item <?= $here === 'rekap_kepala_operator.php' ? 'on' : '' ?>" href="rekap_kepala_operator.php"><?= ikon('users') ?><span>Rekap Kepala &amp; Operator</span>
             <?php if ($jmlLembagaSemua > 0): ?><span class="pill pill-ok" style="margin-left:auto"><?= $jmlLembagaSemua ?></span><?php endif; ?>
           </a>
+          <?php // VIDEO TUTORIAL (v1.96.0/skema v64) — permintaan pemilik: *"Isi dari menu ini adalah
+                // kumpulan video yang diupload oleh super admin. Video berupa thumbail youtube yang
+                // bisa dibuka oleh guru, operator dan kepala sekolah. Admin mengisi menu tersebut
+                // dengan memberikan judul video dan link youtube"*.
+                // Menu untuk akun guru/operator/kepala ada di blok "Utama" (di bawah Dashboard);
+                // halaman ini SATU-SATUNYA tempat pengisiannya (Super Admin). ?>
+          <a class="nav-item <?= $here === 'video_tutorial.php' ? 'on' : '' ?>" href="video_tutorial.php"><?= ikon('play') ?><span>Video Tutorial</span>
+            <?php if (video_tutorial_jumlah(true) > 0): ?>
+              <span class="pill pill-ok" style="margin-left:auto"><?= video_tutorial_jumlah(true) ?></span>
+            <?php endif; ?>
+          </a>
+          <?php // PERMINTAAN MEDIA (v1.111.0/skema v69) — permintaan pemilik: *"di halaman super admin
+                // tambahkan Menu Permintaan Media dengan isi daftar Guru + Judul media yang diminta dan
+                // tambahkan fitur aksi (Sedang ditinjau, media telah dibuat)"*. Permintaannya dikirim
+                // akun guru lewat tab "Buatkan Media" pada menu Media Interaktif. Lencana = jumlah yang
+                // masih "Sedang ditinjau" (perlu ditindak lanjuti). ?>
+          <a class="nav-item <?= $here === 'permintaan_media.php' ? 'on' : '' ?>" href="permintaan_media.php"><?= ikon('send') ?><span>Permintaan Media</span>
+            <?php if ($jmlMintaMedia > 0): ?>
+              <span class="pill pill-warn" style="margin-left:auto"><?= (int) $jmlMintaMedia ?> baru</span>
+            <?php endif; ?>
+          </a>
         </div>
       </details>
 
@@ -404,6 +462,11 @@ function page_top(string $judul, string $sub = ''): void
             // guru BKnya untuk di supervisi)"*. Diletakkan di blok LINTAS SEKOLAH supaya SELALU
             // terlihat — halamannya sendiri yang menampilkan daftar binaan yang punya Guru BK. ?>
       <a class="nav-item <?= $here === 'supervisi_bk.php' ? 'on' : '' ?>" href="supervisi_bk.php"><?= ikon('support') ?><span>Supervisi Guru BK</span></a>
+      <?php // HASIL PKG (v1.109.0/skema v68 — permintaan pemilik): *"Selain itu pengawas juga bisa
+            // melihat hasil PKG setiap guru binaannya."* Diletakkan di blok LINTAS SEKOLAH supaya
+            // SELALU terlihat — halamannya sendiri yang menampilkan PEMILIH BINAAN lebih dulu.
+            // Hanya lihat & cetak: penilaian dilakukan kepala sekolah/madrasah (menu "PKG"). ?>
+      <a class="nav-item <?= in_array($here, ['pkg_pengawas.php', 'cetak_pkg.php'], true) ? 'on' : '' ?>" href="pkg_pengawas.php"><?= ikon('clipboard') ?><span>Hasil PKG</span></a>
       <?php if ($sekolah): ?>
         <div class="nav-sec">Binaan yang Dilihat</div>
         <a class="nav-item <?= $here === 'index.php' && $sekolah ? 'on' : '' ?>" href="index.php"><?= ikon('chart') ?><span>Dashboard Binaan</span></a>
@@ -460,6 +523,11 @@ function page_top(string $judul, string $sub = ''): void
     <?php if ($sekolah && in_array($r, ['kepala', 'operator', 'guru'], true)): ?>
       <div class="nav-sec">Utama</div>
       <a class="nav-item <?= $here === 'index.php' ? 'on' : '' ?>" href="index.php"><?= ikon('dashboard') ?><span>Dashboard</span></a>
+      <?php // VIDEO TUTORIAL (v1.96.0/skema v64) — permintaan pemilik: *"Dibawah menu dashboard akun
+            // guru, operator, kepala sekolah tambahkan menu Video Tutorial."* Daftarnya GLOBAL (diisi
+            // Super Admin), jadi menu ini TIDAK butuh konteks lain selain sekolah yang sudah aktif.
+            // Diletakkan TEPAT di bawah Dashboard — jangan dipindah ke blok Administrasi. ?>
+      <a class="nav-item <?= $here === 'video_tutorial.php' ? 'on' : '' ?>" href="video_tutorial.php"><?= ikon('play') ?><span>Video Tutorial</span></a>
     <?php endif; ?>
 
     <?php if ($sekolah && in_array($r, ['kepala', 'operator', 'guru', 'super'], true)): ?>
@@ -481,6 +549,17 @@ function page_top(string $judul, string $sub = ''): void
           <?php if ($jmlMeetingBelum > 0): ?><span class="pill pill-warn" style="margin-left:auto"><?= (int) $jmlMeetingBelum ?></span><?php endif; ?>
         </a>
       <?php endif; ?>
+      <?php // TANDA TANGAN RAPAT (v1.101.0) — permintaan pemilik: *"Pada saat operator memilih guru
+            // hadir pada kegiatan rapat. Buat guru bisa menandatangani lewat akun guru masing-masing.
+            // Pada akun guru muncul tanda tangani rapat. Yang muncul hanya yang dicentang oleh
+            // operator."* Tampil hanya untuk akun yang TERTAUT ke data guru (`ttd_rapat_boleh()`);
+            // lencana = jumlah rapat yang sudah dicentang operator tetapi belum ia tandatangani.
+            // Diletakkan tepat di bawah "Daftar Hadir Meeting" — jangan dipindah ke blok lain. ?>
+      <?php if (ttd_rapat_boleh()): $jmlTtdRapat = ttd_rapat_belum(ttd_rapat_guru_id()); ?>
+        <a class="nav-item <?= $here === 'ttd_rapat.php' ? 'on' : '' ?>" href="ttd_rapat.php"><?= ikon('edit') ?><span>Tanda Tangan Rapat</span>
+          <?php if ($jmlTtdRapat > 0): ?><span class="pill pill-warn" style="margin-left:auto"><?= (int) $jmlTtdRapat ?></span><?php endif; ?>
+        </a>
+      <?php endif; ?>
       <?php // "Dokumen Saya" — kotak masuk dokumen dari menu Kurikulum. Ditampilkan untuk akun GURU
             // (penerima dokumen, permintaan pemilik). Kepala/operator melihat daftar yang sama pada
             // menu Kurikulum; pengawas juga (hanya lihat). Jangan ditambahkan di blok menu lain. ?>
@@ -492,6 +571,15 @@ function page_top(string $judul, string $sub = ''): void
         <a class="nav-item <?= $here === 'perangkat_saya.php' ? 'on' : '' ?>" href="perangkat_saya.php"><?= ikon('upload') ?><span>Kirim Perangkat</span>
           <?php if ($jmlPerangkatSaya > 0): ?><span class="pill pill-ok" style="margin-left:auto"><?= (int) $jmlPerangkatSaya ?></span><?php endif; ?>
         </a>
+        <?php // KIRIM MATERI/TUGAS KE SISWA (v1.113.0/skema v73) — permintaan pemilik: *"Pada akun guru
+              // tambahkan menu 'Kirim Materi/Tugas Ke Siswa'. Isi dari menu ini guru bisa mengirim
+              // sekaligus ke siswa yang dia ajar atau memilih siswa tertentu …"*. Letak menu
+              // DITETAPKAN pemilik lewat kotak merah pada tangkapan layar sidebar: TEPAT di bawah
+              // "Kirim Perangkat" dan di atas "Ujian Online" — jangan dipindah ke blok lain.
+              // Lencana = jumlah materi/tugas yang sudah ia kirim. ?>
+        <a class="nav-item <?= $here === 'materi_kirim.php' ? 'on' : '' ?>" href="materi_kirim.php"><?= ikon('send') ?><span>Kirim Materi/Tugas Ke Siswa</span>
+          <?php if ($jmlMateriSaya > 0): ?><span class="pill pill-ok" style="margin-left:auto"><?= (int) $jmlMateriSaya ?></span><?php endif; ?>
+        </a>
       <?php endif; ?>
       <?php // PERANGKAT MASUK (v1.67.0) — akun Kepala Sekolah/Madrasah (+ Super Admin dalam konteks)
             // meninjau kiriman perangkat guru: Disetujui / Direvisi / Ditolak + keterangannya.
@@ -499,6 +587,19 @@ function page_top(string $judul, string $sub = ''): void
       <?php if (in_array($r, ['kepala', 'super'], true)): ?>
         <a class="nav-item <?= $here === 'perangkat_masuk.php' ? 'on' : '' ?>" href="perangkat_masuk.php"><?= ikon('folder') ?><span>Perangkat Masuk</span>
           <?php if ($jmlPerangkatBaru > 0): ?><span class="pill pill-warn" style="margin-left:auto"><?= (int) $jmlPerangkatBaru ?> baru</span><?php endif; ?>
+        </a>
+      <?php endif; ?>
+      <?php // PKG (v1.109.0/skema v68 — PERMINTAAN PEMILIK): *"Pada akun kepala sekolah/madrasah
+            // tambahkan menu PKG (yang saya tandai warna merah) … digunakan untuk menilai setiap guru
+            // pada lembaganya sendiri (Instrumen penilaian seperti yang saya upload) dan hasil
+            // penilaiannya masuk ke menu Hasil PKG pada akun guru."*
+            // Letak menu DITETAPKAN pemilik lewat kotak merah pada tangkapan layar: TEPAT di bawah
+            // "Perangkat Masuk" dan di atas "Ujian Online" — jangan dipindah ke blok lain.
+            // Hanya kepala sekolah/madrasah (+ Super Admin dalam konteks); Admin Operator dan guru
+            // tidak menilai. Lencana = jumlah guru yang belum dinilai pada periode aktif. ?>
+      <?php if (in_array($r, ['kepala', 'super'], true)): ?>
+        <a class="nav-item <?= in_array($here, ['pkg.php', 'cetak_pkg.php'], true) ? 'on' : '' ?>" href="pkg.php"><?= ikon('clipboard') ?><span>PKG</span>
+          <?php if ($jmlPkgBelum > 0): ?><span class="pill pill-warn" style="margin-left:auto"><?= (int) $jmlPkgBelum ?> belum</span><?php endif; ?>
         </a>
       <?php endif; ?>
       <?php // UJIAN ONLINE — permintaan pemilik: "Dibawah menu pelanggaran siswa tambahkan menu
@@ -514,10 +615,34 @@ function page_top(string $judul, string $sub = ''): void
             // yang saya tandai warna merah") — aplikasi studio fotonya tetap ada sebagai salah satu
             // kartu DI DALAM menu Smart Teacher. Jangan dihidupkan kembali tanpa permintaan baru. ?>
       <a class="nav-item <?= $here === 'smart_teacher.php' ? 'on' : '' ?>" href="smart_teacher.php"><?= ikon('apps') ?><?= daftar_apps_nama_sidebar('smart_teacher', 'Smart Teacher') ?><?= daftar_apps_gangguan_pil('smart_teacher') ?><?= daftar_apps_aktivasi_pil('smart_teacher') ?></a>
+      <?php // MEDIA INTERAKTIF (v1.105.0) — permintaan pemilik: *"pada akun guru tambahkan Menu
+            // 'Media Interaktif' tepat dibawah Smart Teacher dan beri penanda Bonus berkedip. Isi dari
+            // menu ini adalah Kumpulan Media Interaktif (SD/MI - SMA/MA yang dibuatkan menu sendiri-
+            // sendiri untuk memisahkan antar jenjang) dan Game Edukasi."*
+            // PILIHAN PEMILIK: menunya **HANYA untuk akun guru** — kepala sekolah/madrasah & Admin
+            // Operator TIDAK melihatnya (jangan ditambahkan ke peran lain tanpa bertanya). Super Admin
+            // mengisi daftarnya lewat pintasan pada dashboard Super Admin + alamat
+            // `media_interaktif.php`.
+            // Lencana "Bonus" SELALU tampil (bukan mengikuti tanda bonus per aplikasi seperti Smart
+            // Teacher) → daftar_apps_nama_sidebar_bonus(). ?>
+      <?php if ($r === 'guru' && daftar_apps_peran_boleh('media_interaktif')): ?>
+        <a class="nav-item <?= $here === 'media_interaktif.php' ? 'on' : '' ?>" href="media_interaktif.php"><?= ikon('layers') ?><?= daftar_apps_nama_sidebar_bonus('Media Interaktif') ?></a>
+      <?php endif; ?>
       <?php // Aplikasi Sagu: dibatasi per sekolah (lihat daftar_apps_tampil()) — sekolah yang tidak
             // dicentang Super Admin tidak melihat menunya sama sekali. ?>
       <?php if (daftar_apps_tampil('aplikasi_sagu')): ?>
         <a class="nav-item <?= $here === 'aplikasi_sagu.php' ? 'on' : '' ?>" href="aplikasi_sagu.php"><?= ikon('star') ?><span>Aplikasi Sagu</span></a>
+      <?php endif; ?>
+      <?php // HASIL PKG (v1.109.0/skema v68 — PERMINTAAN PEMILIK): *"pada akun Guru tambahkan menu
+            // Hasil PKG (yang saya tandai warna biru) … hasil penilaiannya masuk ke menu Hasil PKG
+            // pada akun guru."* Letaknya DITETAPKAN pemilik lewat kotak biru pada tangkapan layar:
+            // TEPAT di bawah "Aplikasi Sagu" dan di atas "Hasil Supervisi" — jangan dipindah.
+            // HANYA akun guru (kepala/operator tidak butuh; pengawas punya menunya sendiri pada blok
+            // "Lintas Sekolah/Madrasah"). Halaman ini hanya-lihat (hasil milik guru itu sendiri). ?>
+      <?php if ($r === 'guru'): ?>
+        <a class="nav-item <?= in_array($here, ['pkg_hasil.php', 'cetak_pkg.php'], true) ? 'on' : '' ?>" href="pkg_hasil.php"><?= ikon('clipboard') ?><span>Hasil PKG</span>
+          <?php if ($jmlPkgSaya > 0): ?><span class="pill pill-ok" style="margin-left:auto"><?= (int) $jmlPkgSaya ?></span><?php endif; ?>
+        </a>
       <?php endif; ?>
       <a class="nav-item <?= $here === 'hasil_supervisi.php' ? 'on' : '' ?>" href="hasil_supervisi.php"><?= ikon('chart') ?><span>Hasil Supervisi</span></a>
       <?php // CATATAN (v1.32.0): menu "Bendahara" yang dahulu berdiri sendiri di sini SUDAH DIHAPUS

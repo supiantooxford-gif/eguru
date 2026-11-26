@@ -14,6 +14,9 @@
  */
 declare(strict_types=1);
 require_once __DIR__ . '/inc/init.php';
+// JEMBATAN TUSMART (v1.103.0): notulen rapat yang dibuat Kepala Tata Usaha di aplikasi TUSmart
+// ikut masuk Daftar Notulen — HANYA pada akun kepala sekolah/madrasah lembaga yang sama (NPSN).
+require_once __DIR__ . '/inc/notulen_tusmart.php';
 
 // Permintaan pemilik (v1.21.0): "Pada akun operator menu notulen rubah Kembali menjadi bisa
 // menambahkan seperti sebelumnya. Jadi yang bisa membuat notulen baru adalah akun operator dan guru
@@ -75,10 +78,22 @@ $rows = all('SELECT n.*,
     (SELECT COUNT(*) FROM notulen_foto f WHERE f.notulen_id = n.id) AS jml_foto
     FROM notulen n' . $where . ' ORDER BY n.tanggal DESC, n.id DESC LIMIT 300', $p);
 
+// NOTULEN TUSMART (v1.103.0, permintaan pemilik): rapat yang dibuat Kepala Tata Usaha di aplikasi
+// TUSmart ikut tampil pada Daftar Notulen ini — khusus akun KEPALA sekolah/madrasah lembaga yang
+// memang dikelola di TUSmart (dicocokkan lewat NPSN di `notulen_tusmart_boleh()`). Saringan
+// pencarian/tanggal yang sama ikut diterapkan supaya hasilnya konsisten dengan baris e-GURU.
+$tsRows = notulen_tusmart_daftar($cari, $fDari, $fSampai);
+$tsBoleh = notulen_tusmart_boleh();
+
 // Ringkasan: dihitung dari SELURUH notulen sekolah ini (bukan hanya baris berfilter).
 $totalNotulen = (int) val('SELECT COUNT(*) FROM notulen WHERE sekolah_id = ?', [sekolah_id()], 0);
 $bulanIni = (int) val('SELECT COUNT(*) FROM notulen WHERE sekolah_id = ? AND strftime("%Y-%m", tanggal) = ?',
     [sekolah_id(), date('Y-m')], 0);
+// Notulen TUSmart menambah angka ringkasan (hanya terlihat oleh kepala yang berhak).
+if ($tsBoleh) {
+    $totalNotulen += notulen_tusmart_jumlah();
+    $bulanIni += notulen_tusmart_jumlah_bulan(date('Y-m'));
+}
 $guruAktif = (int) val('SELECT COUNT(*) FROM guru WHERE aktif = 1 AND sekolah_id = ?', [sekolah_id()], 0);
 
 // Filter aktif → dipakai tautan cetak supaya mengikuti yang tampil di layar.
@@ -105,7 +120,7 @@ page_top('Notulen Rapat');
   </div>
   <div class="card stat card-tight">
     <div class="stat-ic p"><?= ikon('filter', 18) ?></div>
-    <div><div class="stat-num" style="font-size:1.3rem"><?= count($rows) ?></div><div class="stat-lbl">Baris ditampilkan</div></div>
+    <div><div class="stat-num" style="font-size:1.3rem"><?= count($rows) + count($tsRows) ?></div><div class="stat-lbl">Baris ditampilkan</div></div>
   </div>
 </div>
 
@@ -113,7 +128,12 @@ page_top('Notulen Rapat');
   <div class="card-head">
     <div>
       <h2>Daftar Notulen Rapat</h2>
-      <p>Berita acara rapat beserta daftar hadir guru, siap dilihat dan dicetak.</p>
+      <p>Berita acara rapat beserta daftar hadir guru, siap dilihat dan dicetak.
+        <?php if ($tsBoleh): ?>
+          Termasuk <b><?= count($tsRows) ?> notulen</b> yang dibuat Kepala Tata Usaha di aplikasi
+          <b>TUSmart</b> dan dapat dilihat serta dicetak dari sini.
+        <?php endif; ?>
+      </p>
     </div>
     <div class="flex">
       <?php if ($bolehUbah): ?>
@@ -143,7 +163,7 @@ page_top('Notulen Rapat');
     <?php endif; ?>
   </form>
 
-  <?php if (!$rows): ?>
+  <?php if (!$rows && !$tsRows): ?>
     <div class="empty">
       <?= ikon('doc', 34) ?>
       <h3>Belum ada notulen rapat</h3>
@@ -210,6 +230,43 @@ page_top('Notulen Rapat');
                     <input type="hidden" name="id" value="<?= (int) $r['id'] ?>">
                     <button class="btn btn-danger btn-sm" type="submit"><?= ikon('trash', 15) ?></button>
                   </form>
+                <?php endif; ?>
+              </div>
+            </td>
+          </tr>
+        <?php endforeach; ?>
+        <?php // ---------------- NOTULEN TUSMART (v1.103.0) — hanya lihat & cetak, khusus akun kepala.
+              // Baris ini TIDAK dapat diubah/dihapus dari e-GURU: sumbernya aplikasi TUSmart. ?>
+        <?php foreach ($tsRows as $r): $tid = (int) $r['id']; ?>
+          <tr class="notulen-tusmart">
+            <td class="nowrap">
+              <?= e(tanggal_id((string) $r['tanggal'])) ?>
+              <span class="tbl-sub"><?= e(hari_id((string) $r['tanggal'])) ?><?= trim((string) $r['waktu']) !== '' ? ' &middot; ' . e((string) $r['waktu']) : '' ?></span>
+            </td>
+            <td>
+              <b><?= e((string) ($r['judul'] !== '' ? $r['judul'] : '(topik belum diisi)')) ?></b>
+              <span class="tbl-sub"><?= e((string) ($r['tempat'] !== '' ? $r['tempat'] : 'tempat belum diisi')) ?></span>
+              <span class="pill pill-gold" style="margin-left:6px">TUSmart</span>
+            </td>
+            <td class="ctr"><span class="pill pill-ok"><?= (int) $r['jumlah_hadir'] ?> guru</span></td>
+            <td class="ctr">
+              <span class="pill <?= (int) $r['jumlah_foto'] > 0 ? 'pill-ok' : 'pill-gray' ?>"
+                    title="Foto bukti kegiatan (maksimal <?= (int) NOTULEN_FOTO_MAKS ?>)">
+                <?= (int) $r['jumlah_foto'] ?>/<?= (int) NOTULEN_FOTO_MAKS ?>
+              </span>
+            </td>
+            <td class="sm">
+              <?= e($r['pimpinan'] !== '' ? $r['pimpinan'] : '-') ?>
+              <span class="tbl-sub">Notulis: <?= e($r['notulis'] !== '' ? $r['notulis'] : '-') ?></span>
+              <span class="tbl-sub">Tanda tangan: <?= (int) $r['jumlah_ttd'] ?> pihak</span>
+            </td>
+            <td>
+              <div class="row-actions">
+                <a class="btn btn-ghost btn-sm" href="<?= e(notulen_tusmart_cetak_url($tid, 'berita')) ?>" target="_blank" title="Cetak Berita Acara"><?= ikon('print', 15) ?> Berita Acara</a>
+                <a class="btn btn-ghost btn-sm" href="<?= e(notulen_tusmart_cetak_url($tid, 'hadir')) ?>" target="_blank" title="Cetak &amp; tanda tangan Daftar Hadir"><?= ikon('clipboard', 15) ?> Daftar Hadir</a>
+                <a class="btn btn-ghost btn-sm" href="<?= e(notulen_tusmart_cetak_url($tid, 'isi')) ?>" target="_blank" title="Cetak Isi Notulen Rapat"><?= ikon('report', 15) ?> Isi Notulen</a>
+                <?php if ((int) $r['jumlah_foto'] > 0): ?>
+                  <a class="btn btn-ghost btn-sm" href="<?= e(notulen_tusmart_cetak_url($tid, 'foto')) ?>" target="_blank" title="Cetak Foto Dokumentasi (<?= (int) $r['jumlah_foto'] ?> foto)"><?= ikon('star', 15) ?> Foto Dokumentasi</a>
                 <?php endif; ?>
               </div>
             </td>

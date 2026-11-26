@@ -100,6 +100,15 @@ function petunjuk_daftar(): array
                     : ['Periksa kartu ringkasan untuk mengetahui keadaan administrasi sekolah/madrasah.',
                        'Grafik & daftar "perlu ditindaklanjuti" dipakai untuk memantau kelengkapan data guru.'],
                 'Isi dashboard otomatis mengikuti data yang sudah diisi — tidak ada yang perlu disetel di halaman ini.'),
+            petunjuk_baris('Video Tutorial', 'play', 'video_tutorial.php',
+                'Kumpulan video panduan penggunaan aplikasi (YouTube) yang diisi pengelola aplikasi. '
+                . 'Tampil sebagai thumbnail yang dapat diklik untuk menonton langsung di dalam aplikasi.',
+                ['Klik salah satu <b>thumbnail</b> video untuk membuka pemutarnya di halaman ini.',
+                 'Tombol <b>Buka di YouTube</b> membuka video yang sama pada tab baru (bila ingin '
+                 . 'kualitas penuh, komentar, atau menyimpannya).',
+                 'Daftar video diperbarui pengelola aplikasi — tidak ada yang perlu Anda isi di halaman ini.'],
+                'Bila thumbnail tidak muncul (mis. video dihapus pemiliknya di YouTube), gunakan tombol '
+                . '<b>Buka di YouTube</b> pada kartu video itu.'),
         ]));
     }
 
@@ -136,7 +145,11 @@ function petunjuk_daftar(): array
                 . 'menolak dengan alasan, meninjau ulang, atau menghapus.',
                 ['Pendaftar baru disetujui otomatis dengan masa aktif ' . (int) PENDAFTARAN_HARI_AKTIF
                  . ' hari, jadi hanya perlu ditinjau bila ada masalah.',
-                 'Tombol "Tolak" mewajibkan alasan; alasannya akan terlihat oleh pendaftar saat mencoba masuk.'],
+                 'Tombol "Tolak" mewajibkan alasan; alasannya akan terlihat oleh pendaftar saat mencoba masuk.',
+                 'Kartu <b>Buka/Tutup Pendaftaran</b> menutup pendaftaran sekolah/madrasah. Selama ditutup, '
+                 . 'halaman pendaftaran hanya menampilkan keterangan bahwa jumlah pendaftar telah mencapai '
+                 . 'batas yang ditetapkan oleh sistem beserta nomor WA admin. Isi <b>Batas jumlah pendaftar</b> '
+                 . '(0 = tanpa batas) agar pendaftaran tertutup otomatis saat batasnya tercapai.'],
                 'Halaman ini hanya menampilkan rekapan akun tiap sekolah, bukan daftar nama penggunanya.'),
             petunjuk_baris('Akun Pengawas', 'eye', 'pengawas.php',
                 'Membuat akun Pengawas Sekolah/Madrasah beserta sekolah/madrasah binaannya.',
@@ -226,6 +239,26 @@ function petunjuk_daftar(): array
                 . 'per Nama Dokumen pada tiap mata pelajaran &amp; kelas yang diampu), lalu kepala sekolah/madrasah '
                 . 'meninjaunya pada menu <b>Perangkat Masuk</b>. Menu "Perangkat Guru" yang lama (halaman '
                 . 'publik + kode download) sudah dihapus karena tidak dipakai lagi.'),
+            petunjuk_baris('Video Tutorial', 'play', 'video_tutorial.php',
+                'Mengisi kumpulan video tutorial (YouTube) yang tampil pada menu <b>Video Tutorial</b> di '
+                . 'akun Guru, Admin Operator, dan Kepala Sekolah/Madrasah — tepat di bawah menu Dashboard mereka.',
+                ['Isi <b>Judul Video</b> (ditulis sendiri, tidak diambil otomatis dari YouTube) dan '
+                 . '<b>Link YouTube</b>-nya — boleh <b>youtube.com/watch?v=…</b>, <b>youtu.be/…</b>, atau <b>/shorts/…</b>.',
+                 'Tambahkan keterangan bila perlu, lalu tekan <b>Tambah Video</b>.',
+                 'Atur urutan tampilnya dengan tombol ▲▼, ubah lewat <b>Ubah</b>, atau '
+                 . '<b>Sembunyikan</b> video yang sedang tidak dipakai (datanya tidak hilang).'],
+                'Daftar ini berlaku untuk SELURUH sekolah/madrasah (pengaturan tingkat aplikasi) dan '
+                . 'hanya dapat diubah oleh Super Admin. Video yang sama tidak dapat dimasukkan dua kali; '
+                . 'kartu Pratinjau di bawah formulir menampilkan persis seperti yang dilihat guru.'),
+            petunjuk_baris('Permintaan Media', 'send', 'permintaan_media.php',
+                'Menindaklanjuti permintaan pembuatan media interaktif yang dikirim akun <b>guru</b> lewat '
+                . 'tab <b>Buatkan Media</b> pada menu Media Interaktif mereka.',
+                ['Daftar memuat kolom yang sama dengan formulir guru: <b>nama guru</b>, <b>asal sekolah/madrasah</b>, <b>judul media</b>, <b>mata pelajaran</b>, <b>kelas</b>, dan <b>fase</b>, ditambah waktu kirim, status, dan aksi.',
+                 'Tetapkan status dengan dua tombol aksi: <b>Sedang ditinjau</b> atau <b>Media telah dibuat</b> — tombol yang sedang berlaku tampil nonaktif.',
+                 'Gunakan penyaring <b>Status</b> dan kotak <b>Cari</b> (nama guru / sekolah / judul) bila permintaannya sudah banyak.'],
+                'Status yang Anda tetapkan LANGSUNG tampil pada tab <b>Buatkan Media</b> di akun guru yang '
+                . 'meminta, sehingga ia tahu permintaannya sedang ditinjau atau sudah selesai dibuatkan. '
+                . 'Lencana pada sub menu Layanan menunjukkan jumlah permintaan yang masih <b>Sedang ditinjau</b>.'),
             petunjuk_baris('Akun Super Admin', 'key', 'pengguna.php',                'Mengelola seluruh akun aplikasi (Super Admin, kepala sekolah/madrasah, admin operator, guru, pengawas).',
                 ['Pilih peran dan sekolah/madrasah saat menambah akun baru.',
                  'Gunakan "Tetapkan sandi baru" bila pengguna lupa sandinya.'],
@@ -332,6 +365,15 @@ function petunjuk_daftar(): array
                  'Simpan — hasilnya otomatis tampil pada akun guru Bimbingan Konseling, dan rekapan seluruh binaan ada di halaman pertama.'],
                 'Nilai akhir dihitung dari total skor dibagi 44 x 100 dengan predikat mengikuti ambang '
                 . 'sekolah/madrasah masing-masing. Lembar cetak supervisi dapat dibuka dari rekap.'),
+            petunjuk_baris('Hasil PKG', 'clipboard', 'pkg_pengawas.php',
+                'Hasil Penilaian Kinerja Guru (PKG) setiap guru sekolah/madrasah binaan — diisi kepala '
+                . 'sekolah/madrasah pada menu <b>PKG</b> akunnya (instrumen 13 butir, skala 1-4).',
+                ['Halaman pertama memuat daftar binaan — tekan <b>Buka Hasil PKG</b> pada binaan yang dituju.',
+                 'Tabel menampilkan seluruh guru beserta jumlah penilaian dan <b>hasil terakhir</b> (predikat &amp; capaian).',
+                 'Klik <b>Lihat</b> untuk membuka rincian butir, rekapitulasi dimensi, dan catatan RTL; tombol <b>Cetak</b> mencetak lembar PKG A4.'],
+                'Akun pengawas hanya <b>melihat dan mencetak</b> — penilaian dilakukan kepala '
+                . 'sekolah/madrasah. Kategori predikat PKG: 86-100% Sangat Baik, 70-85% Baik, 55-69% '
+                . 'Cukup, di bawah 55% Kurang.'),
         ]), 'Menu ini untuk memeriksa keadaan binaan — penginputan data dilakukan oleh guru dan admin sekolah/madrasah.'));
 
         $tugasBinaan = tugas_menu_semua_aktif();
@@ -447,6 +489,20 @@ function petunjuk_daftar(): array
                 . 'Pengawas sekolah/madrasah binaan juga dapat memberi <b>catatan pengawas</b> pada tiap '
                 . 'perangkat; catatan itu tampil di kolom Status Tinjauan (terpisah dari hasil tinjauan '
                 . 'kepala sekolah/madrasah).');
+            // KIRIM MATERI/TUGAS KE SISWA (v1.113.0/skema v73).
+            $adm[] = petunjuk_baris('Kirim Materi/Tugas Ke Siswa', 'send', 'materi_kirim.php',
+                'Mengirim materi pelajaran atau tugas kepada siswa yang Anda ajar — berkasnya berupa '
+                . '<b>pdf, Word (.docx), atau gambar</b> dengan ukuran maksimal <b>2 MB</b>.',
+                ['Isi <b>Judul Materi/Tugas</b>, pilih <b>Mata Pelajaran</b> yang Anda ampu, lalu pilih berkasnya.',
+                 'Isi <b>Keterangan/Petunjuk</b> bila perlu (mis. cara mengerjakan atau cara mengumpulkan).',
+                 'Atur <b>Dibuka Mulai</b> dan <b>Batas Waktu</b> bila materi/tugas hanya boleh dibuka pada rentang waktu tertentu — biarkan kosong bila tidak dibatasi.',
+                 'Pilih penerima: <b>Seluruh siswa yang saya ajar</b>, atau <b>Pilih siswa tertentu</b> lalu centang namanya.',
+                 'Tekan <b>Kirim ke Akun Siswa</b> — kiriman langsung tampil pada menu <b>Materi &amp; Tugas</b> akun siswa masing-masing.'],
+                'Pada akun siswa, materi/tugas menampilkan <b>nama guru pengirim</b>, <b>mata pelajaran</b>, '
+                . 'dan berkas yang dapat <b>diunduh</b> serta <b>dicetak</b>. Setelah <b>Batas Waktu</b> '
+                . 'lewat (atau sebelum <b>Dibuka Mulai</b>), siswa tidak dapat lagi membuka, mengunduh, '
+                . 'atau mencetaknya. Kiriman yang salah dapat dihapus lewat tombol <b>Hapus</b> pada '
+                . 'tabel "Materi/Tugas yang Saya Kirim".');
         }
         if (in_array(peran(), ['kepala', 'super'], true) && $adaSekolah) {
             $adm[] = petunjuk_baris('Perangkat Masuk', 'folder', 'perangkat_masuk.php',
@@ -460,6 +516,18 @@ function petunjuk_daftar(): array
                 . '(menu <b>Kirim Perangkat</b> dan dashboard). Memilih "Belum Ditinjau" membatalkan tinjauan. '
                 . 'Pengawas sekolah/madrasah binaan juga dapat menulis <b>catatan pengawas</b> pada tiap '
                 . 'perangkat; catatan itu tampil di kolom Status Tinjauan (terpisah dari hasil tinjauan Anda).');
+            $adm[] = petunjuk_baris('PKG', 'clipboard', 'pkg.php',
+                'Menilai kinerja setiap guru sekolah/madrasah ini dengan instrumen <b>PKG</b> (13 butir, 4 '
+                . 'dimensi, skala 1-4, skor maksimal 52).',
+                ['Pilih <b>Tahun Ajaran</b> dan <b>Semester</b> pada penyaring, lalu tekan <b>Nilai</b> pada baris guru yang dituju.',
+                 'Beri skala <b>1-4</b> untuk seluruh 13 butir (wajib lengkap) beserta catatan/bukti fisiknya; rekapitulasi terisi otomatis.',
+                 'Isi kelebihan, area yang perlu ditingkatkan, dan rencana tindak lanjut (RTL), lalu <b>Simpan Penilaian</b>.',
+                 'Hasilnya otomatis tampil pada menu <b>Hasil PKG</b> akun guru yang bersangkutan; tombol <b>Cetak</b> menghasilkan lembar PKG A4.'],
+                'Satu penilaian per guru per periode (tahun ajaran x semester) — menilai ulang pada periode '
+                . 'yang sama akan <b>memperbarui</b> penilaian tersebut. Kategori predikat: 86-100% Sangat '
+                . 'Baik, 70-85% Baik, 55-69% Cukup, di bawah 55% Kurang. Lencana pada menu menunjukkan '
+                . 'jumlah guru yang belum dinilai pada periode aktif. Pengawas sekolah/madrasah binaan '
+                . 'juga dapat melihat hasilnya (menu <b>Hasil PKG</b> pada akunnya).');
         }
         $adm[] = petunjuk_baris('Daftar Hadir Meeting', 'calendar', 'meeting_hadir.php',
             'Daftar hadir pertemuan/meeting yang diaktifkan pengawas bina untuk sekolah/madrasah ini.',
@@ -472,6 +540,24 @@ function petunjuk_daftar(): array
              . 'beserta tanda tangan Pemimpin Meeting.'],
             'Lencana angka pada menu menunjukkan pertemuan yang belum Anda tandatangani. Halaman ini hanya '
             . 'memuat data sekolah/madrasah Anda sendiri.');
+        if (guru_id_saya() > 0) {
+            $adm[] = petunjuk_baris('Tanda Tangan Rapat', 'edit', 'ttd_rapat.php',
+                'Daftar hadir rapat sekolah/madrasah yang <b>dicentang atas nama Anda</b> oleh Admin '
+                . 'Operator pada menu Notulen Rapat, untuk Anda tandatangani sendiri dari akun guru.',
+                ['Buka salah satu rapat, lalu tekan <b>Tanda Tangan</b> pada panel "Tanda Tangan Anda".',
+                 'Coretkan tanda tangan pada kotak yang muncul — bisa memakai jari/stylus di HP atau tablet, '
+                 . 'dan tetikus pada komputer.',
+                 'Tekan <b>Ulangi</b> untuk mengganti tanda tangan, atau <b>Hapus Tersimpan</b> pada dialog '
+                 . 'untuk menghapusnya.',
+                 'Tanda tangan yang tersimpan langsung tampil pada kolom tanda tangan lembar <b>Daftar Hadir '
+                 . 'Rapat</b> yang dicetak Admin Operator.'],
+                'Hanya rapat yang namanya <b>dicentang</b> operator pada daftar hadir yang muncul di sini — '
+                . 'rapat yang tidak dicentang tidak ditampilkan. Bila sekolah/madrasah Anda juga memakai '
+                . 'aplikasi <b>TUSmart</b>, rapat yang dibuat Kepala Tata Usaha di sana otomatis ikut muncul '
+                . '(bertanda <b>TUSmart</b>) dan tanda tangan Anda langsung tercetak pada Daftar Hadir di '
+                . 'TUSmart. Lencana angka pada menu menunjukkan rapat yang belum Anda tandatangani. Anda '
+                . 'hanya dapat menandatangani baris nama Anda sendiri.');
+        }
         $adm[] = petunjuk_baris('Ujian Online', 'clipboard', 'ujian_online.php',
             'Daftar tautan aplikasi ujian online yang disiapkan pengelola aplikasi (mis. aplikasi CBT).',
             ['Klik "Buka Aplikasi" untuk membuka aplikasinya pada tab baru.',
@@ -490,6 +576,28 @@ function petunjuk_daftar(): array
              . 'silakan coba lagi beberapa saat kemudian; tidak ada data yang perlu diisi ulang.'],
             daftar_apps_aktivasi_pesan() . ' Bagi lembaga yang masih masa uji coba, halaman ini hanya '
             . 'menampilkan keterangan tersebut sampai kode aktivasi dimasukkan pada menu Status & Aktivasi.');
+        // MEDIA INTERAKTIF (v1.105.0) — panduan khusus akun guru (menunya tidak ada pada peran lain).
+        if (is_guru()) {
+            $adm[] = petunjuk_baris('Media Interaktif', 'layers', 'media_interaktif.php',
+                'Kumpulan media pembelajaran interaktif dan game edukasi untuk kegiatan belajar, dipisah '
+                . 'per jenjang (SD/MI, SMP/MTs, SMA/MA) serta tab Game Edukasi.',
+                ['Pilih <b>tab jenjang</b> di atas daftar — tab yang sesuai jenjang sekolah/madrasah Anda '
+                 . 'sudah terbuka otomatis.',
+                 'Di bawah pil jenjang ada <b>pil Fase</b> (SD/MI: Fase A–C · SMP/MTs: Fase D · '
+                 . 'SMA/MA: Fase E–F) — pilih fase yang Anda ajar untuk menyaring medianya. Media yang '
+                 . 'belum diberi fase oleh pengelola aplikasi tetap tampil pada semua fase.',
+                 'Klik <b>Buka Media</b> pada kartu media (atau <b>Mainkan Game</b> pada tab '
+                 . '<b>Game Edukasi</b>) untuk membukanya pada tab baru.',
+                 'Keterangan pada tiap kartu menjelaskan isi media atau game-nya.',
+                 'Bila media yang Anda butuhkan belum ada, buka tab <b>Buatkan Media</b> (pil paling '
+                 . 'kanan pada baris tab): isi <b>Nama Guru</b>, <b>Asal Sekolah/Madrasah</b>, '
+                 . '<b>Judul Media</b>, <b>Mata Pelajaran</b>, lalu <b>Kelas</b> dan <b>Fase</b> '
+                 . 'sasarannya (fase terisi otomatis mengikuti kelas) dan tekan <b>Kirim Permintaan</b> '
+                 . '— statusnya dapat Anda pantau pada tabel <b>Permintaan Media Saya</b> di bawah formulir.'],
+                'Daftar media diisi pengelola aplikasi (Super Admin), jadi tidak ada yang perlu Anda isi '
+                . 'selain mengirim permintaan lewat tab Buatkan Media. Menu ini hanya tersedia pada akun '
+                . 'guru.');
+        }
         if (daftar_apps_tampil('aplikasi_sagu')) {
             $adm[] = petunjuk_baris('Aplikasi Sagu', 'star', 'aplikasi_sagu.php',
                 'Daftar aplikasi tambahan yang disiapkan pengelola aplikasi untuk sekolah/madrasah ini.',
@@ -499,6 +607,18 @@ function petunjuk_daftar(): array
         $adm[] = petunjuk_baris('Hasil Supervisi', 'chart', 'hasil_supervisi.php',
             'Daftar aplikasi atau tautan hasil supervisi yang disiapkan pengelola aplikasi.',
             ['Klik "Buka Aplikasi" untuk membukanya pada tab baru.']);
+        if (is_guru()) {
+            $adm[] = petunjuk_baris('Hasil PKG', 'clipboard', 'pkg_hasil.php',
+                'Hasil Penilaian Kinerja Guru (PKG) atas diri Anda yang diisi <b>Kepala '
+                . 'Sekolah/Madrasah</b> — instrumen 13 butir, 4 dimensi, skala 1-4 (skor maksimal 52).',
+                ['Daftar memuat hasil tiap periode (semester &amp; tahun ajaran) beserta skor, capaian, dan predikatnya.',
+                 'Klik <b>Lihat</b> untuk membaca rincian skor tiap butir, rekapitulasi dimensi, serta catatan kelebihan, area perbaikan, dan rencana tindak lanjut.',
+                 'Tombol <b>Cetak</b> menghasilkan lembar PKG A4 beserta kolom tanda tangan guru dan kepala sekolah/madrasah.'],
+                'Halaman ini hanya memuat hasil milik Anda sendiri dan bersifat hanya-lihat. Kategori '
+                . 'predikat: 86-100% Sangat Baik, 70-85% Baik, 55-69% Cukup, di bawah 55% Kurang. Bila '
+                . 'belum ada hasil, kepala sekolah/madrasah belum menyimpan penilaian PKG untuk Anda pada '
+                . 'periode mana pun.');
+        }
         $tambah(petunjuk_grup('Administrasi', $adm,
             'Menu harian administrasi pembelajaran. Tombol yang muncul menyesuaikan peran Anda.'));
     }

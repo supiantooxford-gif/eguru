@@ -72,6 +72,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($nama === '') {
             $galat[] = 'Nama sekolah/madrasah wajib diisi.';
         }
+        // v1.98.0 — PENCEGAHAN DATA GANDA (permintaan pemilik): nama sekolah/madrasah DAN nama kepala
+        // sekolah/madrasah tidak boleh sudah dipakai lembaga lain. Aturannya SATU dengan halaman
+        // pendaftaran publik (`sekolah_ganda_pesan()`, inc/helpers.php).
+        foreach (sekolah_ganda_pesan($nama, $kepala) as $pesanGanda) {
+            $galat[] = $pesanGanda . ' Hapus dulu data sekolah/madrasah yang lama bila memang data ganda.';
+        }
         if ($jenjang !== '' && !jenjang_sah($jenjang, $jenis)) {
             $galat[] = 'Jenjang "' . $jenjang . '" tidak berlaku untuk jenis lembaga yang dipilih.';
         }
@@ -127,6 +133,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect('sekolah.php');
         }
         $jenis = ((string) ($_POST['jenis'] ?? 'umum')) === 'madrasah' ? 'madrasah' : 'umum';
+        // v1.98.0 — data ganda juga dijaga saat MENGUBAH profil sekolah: `$id` dikecualikan supaya
+        // sekolah yang sedang diedit tidak dianggap bentrok dengan dirinya sendiri.
+        $gandaUbah = sekolah_ganda_pesan($nama, trim((string) ($_POST['kepala_sekolah'] ?? '')), $id);
+        if ($gandaUbah) {
+            foreach ($gandaUbah as $pesanGanda) {
+                flash($pesanGanda . ' Perubahan TIDAK disimpan.', 'err');
+            }
+            redirect('sekolah.php?edit=' . $id);
+        }
         // v49: jenjang hanya ditulis bila medannya benar-benar dikirim (form lama tetap aman); nilai
         // yang tidak berlaku untuk jenis tersebut dibuang (dikosongkan) — tidak ada nilai yang ditebak.
         $kirimJenjang = array_key_exists('jenjang', $_POST);

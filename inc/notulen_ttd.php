@@ -219,26 +219,75 @@ function notulen_ttd_gambar(array $peta, string $pihak, string $kelas = 'ttd-img
         . e((string) ($peta[$pihak]['oleh'] ?? '')) . '">';
 }
 
-/** Tombol pembuka dialog tanda tangan (disembunyikan CSS/JS bila perangkat tanpa layar sentuh). */
-function notulen_ttd_tombol(string $pihak, bool $sudahAda = false, string $kelas = 'ttd-tombol'): string
+/**
+ * Tombol pembuka dialog tanda tangan (disembunyikan CSS/JS bila perangkat tanpa layar sentuh).
+ * `$selalu = true` menandai tombol dengan `data-ttd-selalu` supaya TETAP tampil juga pada perangkat
+ * tanpa layar sentuh — dipakai halaman yang seluruh gunanya menandatangani ("Tanda Tangan Rapat"
+ * pada akun guru, v1.101.0; kanvasnya sudah menangani tetikus maupun jari).
+ */
+function notulen_ttd_tombol(string $pihak, bool $sudahAda = false, string $kelas = 'ttd-tombol',
+    bool $selalu = false): string
 {
-    return '<button type="button" class="' . e($kelas) . '" data-ttd-tombol="' . e($pihak) . '" hidden>'
+    return '<button type="button" class="' . e($kelas) . '" data-ttd-tombol="' . e($pihak) . '"'
+        . ($selalu ? ' data-ttd-selalu' : '') . ' hidden>'
         . ($sudahAda ? 'Ulangi' : 'Tanda Tangan') . '</button>';
 }
 
 /**
  * Data untuk skrip: daftar pihak, status tersimpan, dan alamat endpoint.
  * Dicetak `cetak_notulen.php` pada `<script type="application/json" id="ttdData">`.
+ * `$sumber` (opsional) diteruskan ke endpoint tanda tangan — dipakai halaman "Tanda Tangan Rapat"
+ * untuk menandai rapat yang berasal dari aplikasi TUSmart (v1.102.0).
  */
-function notulen_ttd_skrip_json(int $notulenId, array $pihak, array $peta): string
+function notulen_ttd_skrip_json(int $notulenId, array $pihak, array $peta, string $sumber = ''): string
 {
     $data = ['id' => $notulenId, 'pihak' => [], 'endpoint' => 'upload_notulen_ttd.php'];
+    if ($sumber !== '') {
+        $data['sumber'] = $sumber;
+    }
     foreach ($pihak as $kunci => $info) {
         $data['pihak'][$kunci] = ['label' => $info['label'], 'nama' => $info['nama'],
             'ada' => isset($peta[$kunci])];
     }
     return (string) json_encode($data,
         JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+}
+
+/**
+ * Mendekode data URL PNG hasil `<canvas>` menjadi byte gambar.
+ * Dipakai BERSAMA oleh endpoint e-GURU dan cabang TUSmart (`sumber=tusmart`) supaya aturan &
+ * pesan kesalahannya persis sama.
+ *
+ * @return array{ok: bool, pesan: string, bytes: string}
+ */
+function notulen_ttd_png_dari_data_url(string $data): array
+{
+    $data = trim($data);
+    if ($data === '') {
+        return ['ok' => false,
+            'pesan' => 'Tanda tangan masih kosong — coretkan tanda tangan terlebih dahulu.', 'bytes' => ''];
+    }
+    if (strlen($data) > 8 * 1024 * 1024) {
+        return ['ok' => false, 'pesan' => 'Gambar tanda tangan terlalu besar.', 'bytes' => ''];
+    }
+    $b64 = $data;
+    if (str_starts_with($data, 'data:')) {
+        $koma = strpos($data, ',');
+        if ($koma === false) {
+            return ['ok' => false, 'pesan' => 'Format gambar tanda tangan tidak dikenal.', 'bytes' => ''];
+        }
+        $kepala = substr($data, 0, $koma);
+        if (stripos($kepala, 'image/png') === false) {
+            return ['ok' => false, 'pesan' => 'Gambar tanda tangan harus berformat PNG.', 'bytes' => ''];
+        }
+        $b64 = substr($data, $koma + 1);
+    }
+    $b64 = preg_replace('/\s+/', '', $b64) ?? '';
+    $bytes = base64_decode($b64, true);
+    if ($bytes === false || $bytes === '') {
+        return ['ok' => false, 'pesan' => 'Gambar tanda tangan tidak dapat dibaca.', 'bytes' => ''];
+    }
+    return ['ok' => true, 'pesan' => '', 'bytes' => (string) $bytes];
 }
 
 /**

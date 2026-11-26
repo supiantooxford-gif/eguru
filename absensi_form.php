@@ -38,6 +38,10 @@ if (!boleh_kelas($kelasId)) {
 if (!boleh_mapel($mapelId)) {
     tolak403('Mata pelajaran itu tidak Anda ampu.');
 }
+// v65: pasangan kelas + mapel yang benar-benar ditugaskan (guru kelas boleh mengajar di kelas lain).
+if (!boleh_kelas_mapel($kelasId, $mapelId)) {
+    tolak403('Mata pelajaran itu tidak Anda ampu pada kelas tersebut.');
+}
 // Guru hanya boleh membuka pertemuan miliknya sendiri (bukan catatan guru lain pada kelas yang sama).
 if ($sesi && is_guru() && (int) ($sesi['guru_id'] ?? 0) !== guru_id_saya()) {
     tolak403('Catatan pertemuan ini milik guru lain.');

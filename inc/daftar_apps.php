@@ -60,7 +60,7 @@ function daftar_apps_konfig(?string $menu = null): ?array
             // LENCANA "Bonus" BERKEDIP pada sidebar (PERMINTAAN PEMILIK v1.72.2): *"Pada menu Smart
             // Teacher juga tambahkan fitur 'Bonus' berkedip"*. Super Admin menandainya lewat centang
             // pada formulir aplikasinya (kolom `smart_teacher.baru_pada`, skema v53); lencana tampil
-            // DI ATAS nama menu dan hilang sendiri setelah DAFTAR_APPS_BARU_HARI hari.
+            // DI ATAS nama menu SELAMA tanda bonusnya dipasang (v1.99.0: batas hari dihapus).
             'label_baru' => true,
             // HANYA LEMBAGA YANG SUDAH MELAKUKAN AKTIVASI (permintaan pemilik, v1.78.0) — lihat
             // catatan lengkap pada entri `ujian_online` di bawah & fungsi daftar_apps_aktivasi_boleh().
@@ -94,6 +94,78 @@ function daftar_apps_konfig(?string $menu = null): ?array
             // sekolah/madrasah yang dicentang Super Admin pada halaman ini (tabel `menu_sekolah`).
             'per_sekolah' => true,
         ],
+        // Menu "MEDIA INTERAKTIF" (v1.105.0 / skema v67) — permintaan pemilik: *"pada akun guru
+        // tambahkan Menu 'Media Interaktif' tepat dibawah Smart Teacher dan beri penanda Bonus
+        // berkedip. Isi dari menu ini adalah Kumpulan Media Interaktif (SD/MI - SMA/MA yang dibuatkan
+        // menu sendiri-sendiri untuk memisahkan antar jenjang) dan Game Edukasi."*
+        // Pilihan pemilik (jangan diubah tanpa bertanya):
+        //   1. SATU halaman dengan **TAB per jenjang** (SD/MI · SMP/MTs · SMA/MA) + tab
+        //      **Game Edukasi** → kunci `'kategori'` di bawah (`daftar_apps_kategori()`);
+        //   2. menunya **HANYA untuk akun guru** → kunci `'hanya_guru'` (kepala & operator tidak
+        //      melihat menunya dan halamannya ditolak 403; Super Admin tetap boleh karena dialah
+        //      pengisi daftarnya);
+        //   3. lencana **"Bonus" berkedip SELALU tampil** pada menu sidebar, bukan mengikuti tanda
+        //      bonus per aplikasi seperti Smart Teacher → TIDAK memakai `'label_baru'`, melainkan
+        //      `daftar_apps_nama_sidebar_bonus()` di inc/layout.php.
+        'media_interaktif' => [
+            'tabel'      => 'media_interaktif',
+            'menu'       => 'Media Interaktif',
+            'judul'      => 'Kumpulan Media Interaktif & Game Edukasi',
+            'berkas'     => 'media_interaktif.php',
+            'form_id'    => 'formMedia',
+            'placeholder' => 'mis. Media Pembelajaran Matematika Kelas 4',
+            'contoh_ket' => 'Penjelasan singkat media interaktif ini…',
+            'kategori'   => MEDIA_INTERAKTIF_JENJANG,
+            'kategori_jenjang' => MEDIA_INTERAKTIF_TAB_JENJANG,
+            // SUB TAB FASE (v1.112.0 / skema v72) — permintaan pemilik: *"Pada Tab SD/MI Tambahkan
+            // Fase A, B, C untuk memisah media itu difase apa. Begitu juga untuk Tab SMA/MA tambahkan
+            // Fase E, F. Kalau SMP/MTs hanya Fase D"*. Kunci luar = kunci TAB JENJANG, kunci dalam =
+            // nilai kolom `fase`. Tab yang tidak tercantum (Game Edukasi) tidak punya baris fase.
+            // Satu sumber susunannya: MEDIA_INTERAKTIF_FASE (inc/config.php).
+            'kategori_fase' => MEDIA_INTERAKTIF_FASE,
+            'hanya_guru' => true,
+            // PERINGATAN DI SISI KANAN BARIS TAB (v1.106.0) — permintaan pemilik: *"Yang saya tandai
+            // warna biru buat keterangan peringatan 'Penggunaan media interaktif (aktif atau tidaknya)
+            // tergantung dari kebijakan pihak gemini'. Buat tulisan warna merah dan berkedip sebagai
+            // peringatan"*. Kalimatnya DIPAKAI PERSIS seperti yang diketik pemilik (jangan
+            // "dirapikan"/diganti istilahnya). Dicetak `daftar_apps_halaman()` sebagai
+            // `.apps-kat-ingat` — merah + berkedip (gaya di assets/style.css).
+            'ingat_kategori' => 'Penggunaan media interaktif (aktif atau tidaknya) tergantung dari '
+                              . 'kebijakan pihak gemini',
+            // TEKS TOMBOL PADA KARTU (v1.107.0) — permintaan pemilik: *"Kata 'Buka Aplikasi' pada
+            // menu Media Interaktif jenjang MI/SD - SMA/MA ganti dengan 'Buka Media'. Sedangkan kata
+            // 'Buka Aplikasi' pada Game Edukasi ganti dengan 'Mainkan Game'"*. Teks per TAB disetel
+            // lewat `buka_label_kategori` (kunci = nilai `jenjang`); tab yang tidak disetel memakai
+            // `buka_label` (bila kosong → teks bawaan "Buka Aplikasi").
+            // Satu sumber aturan: `daftar_apps_buka_label()`; jangan menulis teks tombol di kartu.
+            'buka_label'          => 'Buka Media',
+            'buka_label_kategori' => ['game' => 'Mainkan Game'],
+            // TAB "BUATKAN MEDIA" (v1.111.0 / skema v69) — permintaan pemilik: *"Pada yang saya tandai
+            // warna merah tambahkan tab 'Buatkan Media'. Isinya data media yang akan diminta: Nama
+            // Guru, Asal Sekolah, Judul Media. Permintaan ini akan terkirim ke super admin. Jadi di
+            // halaman super admin tambahkan Menu Permintaan Media …"*. Tab ini menjadi pil KE-5 pada
+            // baris pil (tepat setelah "Game Edukasi" — posisi yang ditandai pemilik) dan HANYA tampil
+            // untuk akun guru; Super Admin menindaklanjutinya lewat menu "Permintaan Media".
+            // Seluruh aturannya ada di inc/media_permintaan.php — jangan menyalinnya ke sini.
+            'permintaan_media' => true,
+            // POPUP KUTIPAN PEMBUKA (v1.105.1 — permintaan pemilik: *"saat guru mengklik menu Media
+            // Interaktif yang muncul duluan adalah popup dengan tulisan: '…' - Supianto (Pengembang)"*).
+            // Dicetak sebagai `<dialog>` oleh daftar_apps_halaman() dan dibuka lebih dulu oleh
+            // `initPopupAwal()` (assets/app.js). Hanya menu yang memuat kunci ini yang punya popup.
+            // v1.105.2 (permintaan pemilik: *"Popup hanya muncul satu kali saja setiap guru mengklik
+            // Menu Interaktif. Tidak perlu ditampilkan di super admin ketika akan mengisi"*):
+            //  • **SEKALI per sesi login** untuk akun GURU — penandanya `$_SESSION['popup_awal_lihat']`
+            //    (dihapus otomatis saat keluar karena logout.php mengosongkan sesi). Aturannya satu
+            //    tempat: `popup_awal_perlu_tampil()` di bawah;
+            //  • **Super Admin TIDAK PERNAH** melihatnya (dialah pengisi daftar media — popup hanya
+            //    menghalangi pekerjaannya).
+            'popup_awal' => [
+                'teks'   => 'Pendidikan adalah kunci pembuka pintu masa depan. Mari manfaatkan teknologi '
+                          . 'untuk keberkahan ilmu dan kemajuan umat.',
+                'sumber' => APP_AUTHOR,          // "Supianto" (konstanta aplikasi, bukan tulisan mati)
+                'peran'  => 'Pengembang',
+            ],
+        ],
         'hasil_supervisi' => [
             'tabel'      => 'hasil_supervisi',
             'menu'       => 'Hasil Supervisi',
@@ -119,9 +191,10 @@ function daftar_apps_konfig(?string $menu = null): ?array
             // menjadi "Bonus" pada v1.72.2): *"Pada menu ujian online tambahkan tulisan new berkedip
             // seperti pada aplikasi smart teacher"* → *"Tulisan new berkedip ganti dengan tulisan
             // Bonus"*. Super Admin menandainya lewat centang pada formulir aplikasinya (kolom
-            // `ujian_online.baru_pada`); lencana tampil DI ATAS nama menu pada sidebar dan hilang
-            // sendiri setelah DAFTAR_APPS_BARU_HARI hari. Sejak v1.72.2 menu **Smart Teacher** juga
-            // memakai fitur ini; menu daftar aplikasi lain belum.
+            // `ujian_online.baru_pada`); lencana tampil DI ATAS nama menu pada sidebar SELAMA tanda
+            // bonusnya dipasang (v1.99.0: batas 30 hari yang membuat lencana Ujian Online lenyap
+            // sendiri DIHAPUS). Sejak v1.72.2 menu **Smart Teacher** juga memakai fitur ini; menu
+            // daftar aplikasi lain belum.
             'label_baru' => true,
             // HANYA LEMBAGA YANG SUDAH MELAKUKAN AKTIVASI (permintaan pemilik, v1.78.0):
             // *"Pada Menu Ujian Online dan Menu Smart Teacher hanya bisa diakses oleh lembaga yang
@@ -713,14 +786,17 @@ function daftar_apps_urutan_baru(string $menu): int
 // Teacher**.
 //
 // Cara kerjanya: Super Admin mencentang **"Tandai sebagai bonus"** pada formulir aplikasinya, lalu
-// lencana (merah, berkedip) tampil DI ATAS nama menu pada sidebar **selama `DAFTAR_APPS_BARU_HARI`
-// (30) hari** dan hilang sendiri setelahnya. Pilihan pemilik (jangan diubah tanpa bertanya): **hanya
-// pada MENU SIDEBAR** — tidak dipasang pada kartu aplikasi maupun tabel pengelolaan.
+// lencana (merah, berkedip) tampil DI ATAS nama menu pada sidebar **selama tanda itu dipasang** dan
+// hanya hilang bila centangnya dilepas (disimpan). ⚠️ v1.99.0 — sebelumnya lencana HILANG SENDIRI
+// setelah `DAFTAR_APPS_BARU_HARI` (30) hari; batas itu DIHAPUS atas permintaan pemilik (*"Pada menu
+// Ujian Online tambahkan tulisan Bonus Berkedip seperti Smart Teacher"*) karena lencana di menu Ujian
+// Online lenyap sendiri tanpa ada yang melepasnya. Pilihan pemilik (jangan diubah tanpa bertanya):
+// **hanya pada MENU SIDEBAR** — tidak dipasang pada kartu aplikasi maupun tabel pengelolaan.
 //
-// Yang disimpan hanya WAKTU penandaan (`baru_pada`), bukan angka hari, sehingga hitungannya tetap
-// benar walau aplikasi tidak dibuka berhari-hari. Menu yang belum memakai fitur ini (mis. Aplikasi
-// Sagu, Hasil Supervisi, Bendahara) TIDAK terpengaruh: kolomnya hanya ada pada tabel menu yang entri
-// konfigurasinya memuat `'label_baru' => true`.
+// Yang disimpan hanya WAKTU penandaan (`baru_pada`) sebagai penanda "berlabel bonus"; tanggalnya
+// ditampilkan pada formulir. Menu yang belum memakai fitur ini (mis. Aplikasi Sagu, Hasil Supervisi,
+// Bendahara) TIDAK terpengaruh: kolomnya hanya ada pada tabel menu yang entri konfigurasinya memuat
+// `'label_baru' => true`.
 // ================================================================================================
 
 /** Apakah sebuah menu daftar aplikasi memakai lencana "Bonus" pada sidebar. */
@@ -730,29 +806,30 @@ function daftar_apps_label_baru(string $menu): bool
     return $k !== null && !empty($k['label_baru']);
 }
 
-/** Apakah SATU aplikasi masih berstatus bonus (mendapat lencana "Bonus"). */
+/**
+ * Apakah SATU aplikasi berstatus bonus (mendapat lencana "Bonus").
+ * v1.99.0: TIDAK lagi dibatasi umur — lencana tampil selama tanda bonusnya dipasang (permintaan
+ * pemilik: lencana di menu Ujian Online tidak boleh lenyap sendiri).
+ */
 function daftar_apps_baru(?array $app): bool
 {
     $waktu = trim((string) ($app['baru_pada'] ?? ''));
     if ($waktu === '') {
         return false;
     }
-    $ts = strtotime($waktu);
-    if ($ts === false) {
-        return false;
-    }
-    return $ts > time() - (DAFTAR_APPS_BARU_HARI * 86400);
+    return strtotime($waktu) !== false;
 }
 
-/** Sisa hari lencana "Bonus" sebuah aplikasi (0 bila sudah tidak berlaku). */
-function daftar_apps_baru_sisa(?array $app): int
+/** Tanggal penandaan bonus ('' bila tidak berlabel) — untuk keterangan pada formulir. */
+function daftar_apps_baru_tanggal(?array $app): string
 {
-    if (!daftar_apps_baru($app)) {
-        return 0;
+    $waktu = trim((string) ($app['baru_pada'] ?? ''));
+    if ($waktu === '' || strtotime($waktu) === false) {
+        return '';
     }
-    $ts = (int) strtotime((string) $app['baru_pada']);
-    $sisa = (int) ceil(($ts + DAFTAR_APPS_BARU_HARI * 86400 - time()) / 86400);
-    return max(0, min(DAFTAR_APPS_BARU_HARI, $sisa));
+    $bulan = [1 => 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    $ts = (int) strtotime($waktu);
+    return (int) date('j', $ts) . ' ' . $bulan[(int) date('n', $ts)] . ' ' . date('Y', $ts);
 }
 
 /**
@@ -806,7 +883,7 @@ function daftar_apps_badge_new(string $menu, string $kelas = ''): string
         return '';
     }
     $teks = DAFTAR_APPS_BARU_TEKS;
-    $judul = 'Ada ' . $jml . ' aplikasi bonus · tampil ' . DAFTAR_APPS_BARU_HARI . ' hari sejak ditandai';
+    $judul = 'Ada ' . $jml . ' aplikasi bonus · lencana tampil selama tanda bonus dipasang';
     return '<span class="new-tag' . ($kelas !== '' ? ' ' . $kelas : '') . '" title="' . e($judul) . '">'
         . e($teks) . '</span>';
 }
@@ -824,6 +901,395 @@ function daftar_apps_nama_sidebar(string $menu, string $nama): string
     }
     return '<span class="nav-nama">' . $badge . '<span>' . e($nama) . '</span></span>';
 }
+
+/**
+ * Nama menu untuk SIDEBAR dengan lencana "Bonus" yang **SELALU** tampil (permintaan pemilik
+ * v1.105.0 untuk menu **Media Interaktif**: *"beri penanda Bonus berkedip"*).
+ *
+ * Perbedaannya dengan `daftar_apps_nama_sidebar()`: lencana di sini TIDAK bergantung pada tanda
+ * bonus per aplikasi (menu Media Interaktif tidak punya kolom `baru_pada`) — pilihannya memang
+ * "lencana selalu tampil". Jangan dipakai untuk menu yang memakai `'label_baru' => true`, karena
+ * lencananya akan tampil terus walau Super Admin melepas semua tanda bonusnya.
+ */
+function daftar_apps_nama_sidebar_bonus(string $nama): string
+{
+    return '<span class="nav-nama"><span class="new-tag">' . e(DAFTAR_APPS_BARU_TEKS) . '</span>'
+        . '<span>' . e($nama) . '</span></span>';
+}
+
+// ================================================================================================
+// TAB KATEGORI PADA MENU DAFTAR APLIKASI (v1.105.0 — menu "Media Interaktif")
+// ------------------------------------------------------------------------------------------------
+// Permintaan pemilik: *"Isi dari menu ini adalah Kumpulan Media Interaktif (SD/MI - SMA/MA yang
+// dibuatkan menu sendiri-sendiri untuk memisahkan antar jenjang) dan Game Edukasi."* Pilihan
+// pemilik: SATU halaman dengan **tab** (bukan sub menu di sidebar), jadi satu menu = satu halaman
+// dengan pil tab per jenjang.
+//
+// Cara kerjanya: menu yang konfigurasinya memuat `'kategori'` (kunci => label) punya kolom
+// `jenjang` pada tabelnya. Tab yang sedang dibuka dibaca dari `?jenjang=<kunci>`; bila kosong,
+// tabnya mengikuti **jenjang lembaga** guru (`'kategori_jenjang'`, mis. MI → SD/MI) supaya guru
+// langsung melihat media untuk jenjangnya sendiri, dan bila jenjangnya belum dipilih → tab pertama.
+//
+// ATURAN: baris yang jenjangnya KOSONG atau tidak dikenal tetap ditampilkan pada tab PERTAMA —
+// jangan pernah membuat baris yang tidak tampil di tab mana pun (isian Super Admin bisa hilang
+// dari pandangan tanpa sebab yang jelas).
+// ================================================================================================
+
+/** Daftar tab sebuah menu daftar aplikasi (kunci => label); [] bila menu tidak bertab. */
+function daftar_apps_kategori(string $menu): array
+{
+    $k = daftar_apps_konfig($menu);
+    return ($k !== null && is_array($k['kategori'] ?? null)) ? $k['kategori'] : [];
+}
+
+/** Kunci tab yang SAH dari sebuah nilai masukan ('' bila tidak sah). */
+function daftar_apps_kategori_sah(string $menu, $nilai): string
+{
+    $n = trim((string) $nilai);
+    $kat = daftar_apps_kategori($menu);
+    return ($n !== '' && isset($kat[$n])) ? $n : '';
+}
+
+/** Label tab ('' bila menu tidak bertab / kuncinya tidak dikenal). */
+function daftar_apps_kategori_label(string $menu, string $kunci): string
+{
+    return (string) (daftar_apps_kategori($menu)[$kunci] ?? '');
+}
+
+/** Tab milik SATU baris aplikasi (baris tanpa tab dianggap milik tab PERTAMA). */
+function daftar_apps_kategori_baris(string $menu, ?array $app): string
+{
+    $kat = daftar_apps_kategori($menu);
+    if (!$kat) {
+        return '';
+    }
+    $sah = daftar_apps_kategori_sah($menu, $app['jenjang'] ?? '');
+    return $sah !== '' ? $sah : (string) array_key_first($kat);
+}
+
+/** Tab yang sedang dibuka pada halaman menu ini ('' bila menu tidak bertab). */
+function daftar_apps_kategori_aktif(string $menu): string
+{
+    $kat = daftar_apps_kategori($menu);
+    if (!$kat) {
+        return '';
+    }
+    $dariUrl = daftar_apps_kategori_sah($menu, $_GET['jenjang'] ?? '');
+    if ($dariUrl !== '') {
+        return $dariUrl;
+    }
+    $k = daftar_apps_konfig($menu);
+    $peta = (array) ($k['kategori_jenjang'] ?? []);
+    $ikutJenjang = daftar_apps_kategori_sah($menu, $peta[jenjang_sekolah()] ?? '');
+    if ($ikutJenjang !== '') {
+        return $ikutJenjang;
+    }
+    return (string) array_key_first($kat);
+}
+
+// ================================================================================================
+// SUB TAB FASE di dalam tab jenjang (v1.112.0 / skema v72) — permintaan pemilik: *"Pada Tab SD/MI
+// Tambahkan Fase A, B, C untuk memisah media itu difase apa. Begitu juga untuk Tab SMA/MA tambahkan
+// Fase E, F. Kalau SMP/MTs hanya Fase D"*.
+//
+// Bentuknya SATU tingkat di bawah tab jenjang: baris pil fase muncul HANYA untuk tab yang punya fase
+// (SD/MI · SMP/MTs · SMA/MA). Tab **Game Edukasi** tidak punya fase — isinya game, bukan media per
+// fase. Susunannya dari konfigurasi menu (kunci `'kategori_fase'` → MEDIA_INTERAKTIF_FASE).
+//
+// ATURAN: media yang `fase`-nya KOSONG atau tidak dikenal **tetap tampil pada SETIAP fase** jenjangnya
+// (`daftar_apps_fase_tampil()`), jadi media lama yang belum dipecah per fase tidak pernah hilang dari
+// pandangan guru. Jangan mengubahnya menjadi "hanya tampil di fase pertama" tanpa bertanya pemilik.
+// ================================================================================================
+
+/** Peta fase sebuah menu (`jenjang => [fase => label]`); [] bila menu ini tidak berfase. */
+function daftar_apps_fase_menu(string $menu): array
+{
+    $k = daftar_apps_konfig($menu);
+    return ($k !== null && is_array($k['kategori_fase'] ?? null)) ? $k['kategori_fase'] : [];
+}
+
+/** Daftar fase pada SATU tab jenjang (kunci => label); [] bila tab itu tidak berfase. */
+function daftar_apps_fase(string $menu, string $kat): array
+{
+    $peta = daftar_apps_fase_menu($menu);
+    $isi = $peta[$kat] ?? [];
+    return is_array($isi) ? $isi : [];
+}
+
+/** true bila menu ini punya fase pada salah satu tabnya (dipakai formulir Super Admin). */
+function daftar_apps_berfase(string $menu): bool
+{
+    foreach (daftar_apps_fase_menu($menu) as $isi) {
+        if (is_array($isi) && $isi) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** Kunci fase yang SAH untuk sebuah tab ('' bila kosong/tidak dikenal / tab itu tidak berfase). */
+function daftar_apps_fase_sah(string $menu, string $kat, $nilai): string
+{
+    $n = strtolower(trim((string) $nilai));
+    return ($n !== '' && isset(daftar_apps_fase($menu, $kat)[$n])) ? $n : '';
+}
+
+/** Label fase ('' bila tab tidak berfase / kuncinya tidak dikenal). */
+function daftar_apps_fase_label(string $menu, string $kat, string $kunci): string
+{
+    return (string) (daftar_apps_fase($menu, $kat)[$kunci] ?? '');
+}
+
+/**
+ * Fase milik SATU baris media pada tab jenjangnya ('' = media itu berlaku untuk SEMUA fase tab itu).
+ *
+ * Nilai `fase` yang tidak sah untuk jenjang baris itu (mis. Fase E pada baris SMP/MTs) diperlakukan
+ * seperti kosong supaya media tetap tampil (tidak hilang) — bukan disembunyikan.
+ */
+function daftar_apps_fase_baris(string $menu, string $kat, ?array $app): string
+{
+    return daftar_apps_fase_sah($menu, $kat, $app['fase'] ?? '');
+}
+
+/** true bila media ini tampil pada fase yang sedang dibuka (media tanpa fase selalu tampil). */
+function daftar_apps_fase_tampil(string $menu, string $kat, ?array $app, string $faseAktif): bool
+{
+    $f = daftar_apps_fase_baris($menu, $kat, $app);
+    return $f === '' || $faseAktif === '' || $f === $faseAktif;
+}
+
+/** Fase yang sedang dibuka pada tab jenjang ini ('' bila tab itu tidak berfase). */
+function daftar_apps_fase_aktif(string $menu, string $kat): string
+{
+    $daftar = daftar_apps_fase($menu, $kat);
+    if (!$daftar) {
+        return '';
+    }
+    $dariUrl = daftar_apps_fase_sah($menu, $kat, $_GET['fase'] ?? '');
+    return $dariUrl !== '' ? $dariUrl : (string) array_key_first($daftar);
+}
+
+/**
+ * true bila menu ini HANYA boleh dibuka akun guru (kunci `'hanya_guru'`; sekarang hanya menu
+ * "Media Interaktif"). Super Admin DILEWATKAN: dialah pengisi daftarnya — tanpa pengecualian ini
+ * tidak ada seorang pun yang dapat mengisi media untuk guru.
+ */
+function daftar_apps_hanya_guru(string $menu): bool
+{
+    $k = daftar_apps_konfig($menu);
+    return $k !== null && !empty($k['hanya_guru']);
+}
+
+/** true bila pengguna yang sedang masuk boleh membuka menu ini menurut batasan perannya. */
+function daftar_apps_peran_boleh(string $menu): bool
+{
+    if (!daftar_apps_hanya_guru($menu)) {
+        return true;
+    }
+    if (is_super()) {
+        return true;
+    }
+    $u = current_user();
+    return $u !== null && (string) ($u['role'] ?? '') === 'guru';
+}
+
+/** Keterangan yang tampil saat menu khusus guru dibuka peran lain (dipakai tolak403()). */
+function daftar_apps_peran_pesan(): string
+{
+    return 'Menu ini hanya tersedia untuk akun guru.';
+}
+
+/**
+ * true bila menu ini punya TAB "Buatkan Media" (kunci `'permintaan_media'`; sekarang hanya menu
+ * "Media Interaktif"). Permintaannya sendiri disimpan & ditampilkan oleh `inc/media_permintaan.php`.
+ */
+function daftar_apps_permintaan_media(string $menu): bool
+{
+    $k = daftar_apps_konfig($menu);
+    return $k !== null && !empty($k['permintaan_media']);
+}
+
+/**
+ * Apakah halaman ini sedang membuka TAB "Buatkan Media" (`?buatkan=1`)?
+ *
+ * Hanya untuk akun GURU — Super Admin tetap melihat halaman pengisian daftar media (dialah pengisi
+ * media untuk guru) dan menindaklanjuti permintaannya lewat menu "Permintaan Media".
+ */
+function daftar_apps_mode_buatkan(string $menu): bool
+{
+    return daftar_apps_permintaan_media($menu)
+        && !is_super()
+        && (string) ($_GET['buatkan'] ?? '') !== '';
+}
+
+// ================================================================================================
+// TEKS TOMBOL BUKA PADA KARTU (v1.107.0) — permintaan pemilik: *"Kata 'Buka Aplikasi' pada menu
+// Media Interaktif jenjang MI/SD - SMA/MA ganti dengan 'Buka Media'. Sedangkan kata 'Buka Aplikasi'
+// pada Game Edukasi ganti dengan 'Mainkan Game'"*.
+// Karena itu teks tombol dapat disetel per MENU (`'buka_label'`) dan per TAB (`'buka_label_kategori'`,
+// kunci = nilai `jenjang`). Modul lain tidak menyetelnya sehingga tetap berbunyi "Buka Aplikasi".
+// JANGAN menulis teks tombol langsung di halaman/kartu — satu sumber di konfigurasi menu.
+// ================================================================================================
+
+/** Teks bawaan tombol buka pada kartu bila menunya tidak menyetel sendiri. */
+const DAFTAR_APPS_BUKA_TEKS = 'Buka Aplikasi';
+
+/**
+ * Teks tombol buka pada kartu untuk sebuah menu (dan tab yang sedang dibuka, bila menu bertab).
+ * Tab yang tidak punya teks sendiri memakai teks menu; menu tanpa setelan memakai teks bawaan.
+ */
+function daftar_apps_buka_label(?string $menu = null, ?string $katAktif = null): string
+{
+    $k = $menu !== null ? daftar_apps_konfig($menu) : null;
+    $teks = trim((string) ($k['buka_label'] ?? ''));
+    if ($teks === '') {
+        $teks = DAFTAR_APPS_BUKA_TEKS;
+    }
+    $peta = (array) ($k['buka_label_kategori'] ?? []);
+    $perTab = trim((string) ($peta[(string) $katAktif] ?? ''));
+    return $perTab !== '' ? $perTab : $teks;
+}
+
+/**
+ * BARIS PIL TAB sebuah menu bertab (sekarang hanya "Media Interaktif").
+ *
+ * Sejak v1.111.0 baris ini dipakai DUA tempat: halaman daftar media (mode biasa) dan TAB
+ * "Buatkan Media" (`?buatkan=1`, lihat inc/media_permintaan.php) — karena itu markup-nya dipindahkan
+ * ke fungsi ini supaya keduanya persis sama (termasuk peringatan `.apps-kat-ingat` di sisi kanan).
+ *
+ * ⚠️ Pil jenjang WAJIB tetap membawa `data-kat` dan `<span class="mut">angka</span>`: uji
+ * `tests_eguru_media_interaktif.sh` & `check_eguru_media_interaktif_ui.sh` membaca keduanya untuk
+ * memeriksa jumlah isi tiap tab. Pil "Buatkan Media" sengaja TIDAK memakai `data-kat`/`mut`.
+ *
+ * @param array<string,string> $jmlPerTab  jumlah aplikasi per tab
+ * @param array<string,mixed>  $k          konfigurasi menu (dari daftar_apps_konfig())
+ * @param array<string,string> $jmlPerFase jumlah media per fase pada TAB yang sedang dibuka
+ *                                         (v1.112.0; kosong = tab itu tidak punya fase)
+ */
+function daftar_apps_tab_bar(string $menu, string $berkasDasar, string $katAktif,
+                             array $jmlPerTab, bool $super, array $k,
+                             array $jmlPerFase = []): void
+{
+    $kategori = daftar_apps_kategori($menu);
+    if (!$kategori) {
+        return;
+    }
+    $ingatKat = trim((string) ($k['ingat_kategori'] ?? ''));
+    $buatkan = daftar_apps_permintaan_media($menu) && !$super;
+    $buatkanAktif = $buatkan && (string) ($_GET['buatkan'] ?? '') !== '';
+    ?>
+    <div class="apps-kat-baris">
+      <div class="chip-list warna apps-kat" id="kat-<?= e($menu) ?>">
+        <?php foreach ($kategori as $katKunci => $katLabel): ?>
+          <a class="chip <?= !$buatkanAktif && $katKunci === $katAktif ? 'on' : '' ?>"
+             href="<?= e(daftar_apps_url($berkasDasar, ['jenjang' => (string) $katKunci])) ?>#<?= e($k['form_id']) ?>"
+             data-kat="<?= e((string) $katKunci) ?>">
+            <?= e((string) $katLabel) ?>
+            <span class="mut"><?= (int) ($jmlPerTab[$katKunci] ?? 0) ?></span>
+          </a>
+        <?php endforeach; ?>
+        <?php // TAB "BUATKAN MEDIA" (v1.111.0) — pil KE-5, tepat setelah "Game Edukasi" (posisi yang
+              // ditandai pemilik pada tangkapan layar). Hanya untuk akun guru; Super Admin mengelola
+              // permintaannya pada menu "Permintaan Media". ?>
+        <?php if ($buatkan): ?>
+          <a class="chip chip-buatkan <?= $buatkanAktif ? 'on' : '' ?>"
+             href="<?= e(daftar_apps_url($berkasDasar, ['buatkan' => 1])) ?>#cardBuatkanMedia"
+             id="pilBuatkanMedia">
+            <?= ikon('plus', 14) ?>Buatkan Media
+          </a>
+        <?php endif; ?>
+      </div>
+      <?php if ($ingatKat !== ''): ?>
+        <div class="apps-kat-ingat" id="ingat-<?= e($menu) ?>" role="note">
+          <?= ikon('alert', 15) ?><span class="apps-kat-ingat-teks"><?= e($ingatKat) ?></span>
+        </div>
+      <?php endif; ?>
+    </div>
+    <?php // SUB TAB FASE (v1.112.0) — baris pil KEDUA di bawah baris jenjang, hanya untuk tab yang
+          // punya fase (SD/MI · SMP/MTs · SMA/MA). Tidak dicetak pada mode "Buatkan Media" (permintaan
+          // media tidak terikat fase) dan pada tab Game Edukasi. Tautan biasa + mempertahankan
+          // `?jenjang=` supaya tetap bekerja tanpa JavaScript. ?>
+    <?php $daftarFase = $buatkanAktif ? [] : daftar_apps_fase($menu, $katAktif);
+          $faseAktif = $daftarFase ? daftar_apps_fase_aktif($menu, $katAktif) : ''; ?>
+    <?php if ($daftarFase): ?>
+      <div class="chip-list apps-fase" id="fase-<?= e($menu) ?>">
+        <?php foreach ($daftarFase as $faseKunci => $faseLabel): ?>
+          <a class="chip<?= $faseKunci === $faseAktif ? ' on' : '' ?>"
+             href="<?= e(daftar_apps_url($berkasDasar,
+                    ['jenjang' => (string) $katAktif, 'fase' => (string) $faseKunci])) ?>#<?= e($k['form_id']) ?>"
+             data-fase="<?= e((string) $faseKunci) ?>">
+            <?= e((string) $faseLabel) ?>
+            <span class="mut"><?= (int) ($jmlPerFase[$faseKunci] ?? 0) ?></span>
+          </a>
+        <?php endforeach; ?>
+      </div>
+    <?php endif; ?>
+    <?php if ($buatkanAktif): ?>
+      <p class="apps-kat-ket">Anda sedang membuka tab <b>Buatkan Media</b>.
+        Isi <b>Nama Guru</b>, <b>Asal <?= e(istilah_sekolah('Sekolah')) ?></b>, dan <b>Judul Media</b>
+        yang ingin dibuatkan — permintaan langsung masuk ke pengelola aplikasi (Super Admin), dan
+        <b>statusnya</b> dapat Anda pantau di bawah.</p>
+    <?php elseif ($daftarFase): ?>
+      <p class="apps-kat-ket">Pilih jenjang, lalu <b>fase</b> untuk melihat media interaktifnya.
+        Tab <b><?= e((string) ($kategori[$katAktif] ?? '')) ?></b> &middot;
+        <b><?= e(daftar_apps_fase_label($menu, $katAktif, $faseAktif)) ?></b> sedang dibuka<?= $super
+            ? ' — media baru yang Anda tambahkan masuk ke fase ini (bisa diubah pada pilihan <b>Fase</b> di formulir).' : '.' ?></p>
+    <?php else: ?>
+      <p class="apps-kat-ket">Pilih jenjang untuk melihat media interaktifnya.
+        Tab <b><?= e((string) ($kategori[$katAktif] ?? '')) ?></b> sedang dibuka<?= $super
+            ? ' — aplikasi baru yang Anda tambahkan masuk ke tab ini (bisa diubah pada pilihan <b>Jenjang</b> di formulir).' : '.' ?></p>
+    <?php endif; ?>
+    <?php
+}
+
+// ================================================================================================
+// POPUP KUTIPAN PEMBUKA — SEKALI per sesi login, dan TIDAK untuk Super Admin (v1.105.2)
+// ------------------------------------------------------------------------------------------------
+// Permintaan pemilik: *"Popup hanya muncul satu kali saja setiap guru mengklik Menu Interaktif.
+// Tidak perlu ditampilkan di super admin ketika akan mengisi"*.
+//
+// Aturan (SATU tempat — jangan mengulang pemeriksaannya di halaman/skrip):
+//  • hanya untuk menu yang konfigurasinya memuat `'popup_awal'` (sekarang: Media Interaktif);
+//  • **Super Admin TIDAK PERNAH** melihatnya — dialah pengisi daftar media, popup hanya menghalangi;
+//  • akun GURU melihatnya **SEKALI per sesi login**. Penanda `$_SESSION['popup_awal_lihat'][<menu>]`
+//    dipasang setelah popup dicetak; sesi dikosongkan `logout.php` (`$_SESSION = []` +
+//    `session_destroy()`), jadi guru melihatnya lagi setelah keluar–masuk kembali. Ini pola yang sama
+//    dengan penanda popup "Selamat datang" (`$_SESSION['sambutan_tampil']`) — bukan batas waktu/hari.
+//  • Tamu (belum masuk) tidak pernah — halamannya sendiri sudah dialihkan ke halaman masuk.
+// ================================================================================================
+
+/** Konfigurasi popup pembuka sebuah menu (`null` bila menu itu tidak punya popup). */
+function popup_awal_konfig(string $menu): ?array
+{
+    $k = daftar_apps_konfig($menu);
+    $p = $k['popup_awal'] ?? null;
+    return is_array($p) ? $p : null;
+}
+
+/** true bila popup pembuka menu ini harus dicetak SEKARANG (lihat aturan di blok komentar atas). */
+function popup_awal_perlu_tampil(string $menu): bool
+{
+    if (popup_awal_konfig($menu) === null) {
+        return false;
+    }
+    if (is_super()) {
+        return false;    // Super Admin = pengisi daftar, jangan dihalangi popup
+    }
+    if (current_user() === null) {
+        return false;
+    }
+    return empty($_SESSION['popup_awal_lihat'][$menu]);
+}
+
+/** Tandai popup pembuka menu ini SUDAH dilihat pada sesi ini (dipanggil setelah dicetak). */
+function popup_awal_selesai(string $menu): void
+{
+    if (!isset($_SESSION['popup_awal_lihat']) || !is_array($_SESSION['popup_awal_lihat'])) {
+        $_SESSION['popup_awal_lihat'] = [];
+    }
+    $_SESSION['popup_awal_lihat'][$menu] = 1;
+}
+
 
 /**
  * Inisial nama aplikasi untuk lencana pada kartu (maks. 2 huruf).
@@ -1113,6 +1579,73 @@ function app_klik_app_jumlah(): int
     return (int) val('SELECT COUNT(*) FROM (SELECT 1 FROM app_klik GROUP BY menu, LOWER(TRIM(nama)))', [], 0);
 }
 
+/**
+ * REKAP PENGGUNAAN MEDIA INTERAKTIF (media pembelajaran & game edukasi) — v1.108.0.
+ *
+ * Permintaan pemilik: *"tambahkan data total media pembelajaran dan game edukasi dibuka atau
+ * digunakan oleh seluruh pengguna. Data per jenjang untuk media. tujuannya untuk mengetahui media
+ * atau game mana yang paling sering dibuka/digunakan"* (kotak merah pada kartu "Aktivitas Aplikasi"
+ * dasbor Super Admin lintas sekolah).
+ *
+ * Sumbernya sama dengan grafik "Aplikasi yang Sering Digunakan": tabel `app_klik` (SELURUH
+ * pengguna, SELURUH sekolah/madrasah, seluruh data yang tercatat — tanpa batas waktu).
+ * Pengelompokan per jenjang memakai `media_interaktif.jenjang` baris yang diKLIK (`app_id`), dengan
+ * cadangan pencocokan NAMA untuk baris lama. Baris yang medianya sudah dihapus tetap dihitung pada
+ * `total`, tetapi tidak masuk jenjang mana pun (tidak ada data jenjang yang bisa ditebak).
+ *
+ * @return array{total:int, per_jenjang:array<string,int>, teratas:array<int,array{nama:string,jml:int,jenjang:string}>}
+ */
+function app_klik_media_rekap(int $batas = 5): array
+{
+    $batas = max(1, min(20, $batas));
+    $hasil = ['total' => 0, 'per_jenjang' => [], 'teratas' => []];
+    foreach (array_keys(daftar_apps_kategori('media_interaktif')) as $kunci) {
+        $hasil['per_jenjang'][(string) $kunci] = 0;
+    }
+    $hasil['total'] = (int) val("SELECT COUNT(*) FROM app_klik WHERE menu = 'media_interaktif'", [], 0);
+    if ($hasil['total'] === 0) {
+        return $hasil;
+    }
+
+    // Per jenjang: media yang diklik (app_id) → jenjangnya; cadangan lewat nama bila app_id sudah
+    // tidak ada (mis. baris lama/media yang pernah dihapus lalu dibuat ulang).
+    foreach (all("SELECT COALESCE(NULLIF(TRIM(m.jenjang), ''), NULLIF(TRIM(mn.jenjang), ''), '') AS jenjang,
+                         COUNT(*) AS jml
+                    FROM app_klik a
+                    LEFT JOIN media_interaktif m ON m.id = a.app_id
+                    LEFT JOIN media_interaktif mn ON mn.id =
+                         (SELECT x.id FROM media_interaktif x
+                           WHERE LOWER(TRIM(x.nama)) = LOWER(TRIM(a.nama))
+                           ORDER BY x.id DESC LIMIT 1)
+                   WHERE a.menu = 'media_interaktif'
+                   GROUP BY 1") as $r) {
+        $j = (string) $r['jenjang'];
+        if (isset($hasil['per_jenjang'][$j])) {
+            $hasil['per_jenjang'][$j] += (int) $r['jml'];
+        }
+    }
+
+    // Paling sering dibuka: satu baris per MEDIA (app_id), namanya ejaan klik TERAKHIR.
+    foreach (all("SELECT a1.app_id AS app_id,
+                         COUNT(*) AS jml,
+                         (SELECT TRIM(a2.nama) FROM app_klik a2
+                           WHERE a2.menu = 'media_interaktif' AND a2.app_id = a1.app_id
+                           ORDER BY a2.id DESC LIMIT 1) AS nama,
+                         (SELECT TRIM(m.jenjang) FROM media_interaktif m WHERE m.id = a1.app_id) AS jenjang
+                    FROM app_klik a1
+                   WHERE a1.menu = 'media_interaktif'
+                   GROUP BY a1.app_id
+                   ORDER BY jml DESC, nama COLLATE NOCASE ASC
+                   LIMIT " . $batas) as $r) {
+        $hasil['teratas'][] = [
+            'nama'    => (string) ($r['nama'] ?? ''),
+            'jml'     => (int) $r['jml'],
+            'jenjang' => (string) ($r['jenjang'] ?? ''),
+        ];
+    }
+    return $hasil;
+}
+
 /** Label menu daftar aplikasi dari kuncinya — untuk keterangan pada grafik. */
 function app_klik_menu_label(string $menu): string
 {
@@ -1153,8 +1686,24 @@ function daftar_apps_halaman(string $menu, ?array $tugas = null): void
         }
     }
 
+    // TAB KATEGORI (v1.105.0) — menu bertab (sekarang hanya "Media Interaktif"). Semua tautan &
+    // pengalihan halaman ini membawa `?jenjang=<tab aktif>` supaya menyimpan/mengubah aplikasi pada
+    // tab SMP/MTs misalnya tidak melompat kembali ke tab pertama.
+    $kategori = daftar_apps_kategori($menu);
+    $katAktif = $kategori ? daftar_apps_kategori_aktif($menu) : '';
+    $berkasDasar = $berkas;   // alamat TANPA tab — dipakai tautan pil tab
+    if ($kategori) {
+        $berkas = daftar_apps_url($berkasDasar, ['jenjang' => $katAktif]);
+    }
+
     require_login(); // daftar GLOBAL: tidak memerlukan konteks sekolah
     $super = is_super();
+
+    // MENU KHUSUS AKUN GURU (v1.105.0) — "Media Interaktif" hanya untuk guru; kepala & operator
+    // ditolak. Aturan satu tempat: daftar_apps_peran_boleh() (Super Admin selalu boleh).
+    if (!daftar_apps_peran_boleh($menu)) {
+        tolak403(daftar_apps_peran_pesan());
+    }
 
     // Menu yang DIBATASI PER SEKOLAH: hanya boleh dibuka dari sekolah yang dicentang Super Admin
     // (Super Admin sendiri selalu boleh — di halaman inilah ia menyetel daftar sekolahnya).
@@ -1245,6 +1794,27 @@ function daftar_apps_halaman(string $menu, ?array $tugas = null): void
         return;
     }
 
+    // ---------------------------------------- PERMINTAAN MEDIA: kiriman dari akun GURU (v1.111.0)
+    // Tab "Buatkan Media" mengirim `aksi=minta_media`. Ditangani SEBELUM blok pengubahan Super Admin
+    // (yang menolak seluruh POST dari peran lain) karena justru akun guru-lah yang mengirimnya.
+    if (daftar_apps_permintaan_media($menu) && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
+        && (string) ($_POST['aksi'] ?? '') === 'minta_media') {
+        if (!is_guru()) {
+            tolak403('Permintaan media hanya dapat dikirim dari akun guru.');
+        }
+        csrf_guard();
+        $hasil = media_permintaan_simpan([
+            'nama_guru'    => (string) ($_POST['nama_guru'] ?? ''),
+            'asal_sekolah' => (string) ($_POST['asal_sekolah'] ?? ''),
+            'judul'        => (string) ($_POST['judul'] ?? ''),
+            'mata_pelajaran' => (string) ($_POST['mata_pelajaran'] ?? ''),
+            'kelas'        => (string) ($_POST['kelas'] ?? ''),
+            'fase'         => (string) ($_POST['fase'] ?? ''),
+        ]);
+        flash((string) $hasil['pesan'], !empty($hasil['ok']) ? 'ok' : 'err');
+        redirect(media_permintaan_url($menu) . '#cardPermintaanSaya');
+    }
+
     // ---------------------------------------------------------------- pengubahan (Super Admin saja)
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$super) {
@@ -1278,6 +1848,27 @@ function daftar_apps_halaman(string $menu, ?array $tugas = null): void
             } elseif (tautan_aman($link) === '') {
                 $galat[] = 'Link aplikasi harus dimulai dengan http:// atau https://.';
             }
+            // TAB JENJANG (menu "Media Interaktif", v1.105.0): wajib salah satu tab yang terdaftar
+            // supaya barisnya tidak pernah "hilang" dari semua tab.
+            if ($kategori && daftar_apps_kategori_sah($menu, $_POST['jenjang'] ?? '') === '') {
+                $galat[] = 'Tab jenjang wajib dipilih.';
+            }
+            // SUB TAB FASE (v1.112.0): boleh KOSONG (= media berlaku untuk semua fase jenjangnya),
+            // tetapi bila diisi harus fase milik jenjang yang dipilih (Fase A–C hanya untuk SD/MI,
+            // Fase D untuk SMP/MTs, Fase E–F untuk SMA/MA). Fase yang tidak cocok jenjangnya ditolak
+            // supaya media tidak "hilang" dari tab fase mana pun.
+            $daftarFaseMenu = daftar_apps_berfase($menu);
+            $faseDipilih = '';
+            if ($daftarFaseMenu) {
+                $jenjangDipilih = daftar_apps_kategori_sah($menu, $_POST['jenjang'] ?? '');
+                $faseKiriman = trim((string) ($_POST['fase'] ?? ''));
+                if ($faseKiriman !== '') {
+                    $faseDipilih = daftar_apps_fase_sah($menu, $jenjangDipilih, $faseKiriman);
+                    if ($faseDipilih === '') {
+                        $galat[] = 'Fase tidak sesuai dengan jenjang yang dipilih.';
+                    }
+                }
+            }
             if (strlen($nama) > 160) {
                 $nama = substr($nama, 0, 160);
             }
@@ -1293,13 +1884,32 @@ function daftar_apps_halaman(string $menu, ?array $tugas = null): void
             }
 
             if ($s) {
-                q('UPDATE ' . $tabel . ' SET nama = ?, link = ?, keterangan = ?, aktif = ?, diubah = ? WHERE id = ?',
-                    [$nama, $link, $ket, $aktif, $now, (int) $s['id']]);
+                if ($kategori && $daftarFaseMenu) {
+                    q('UPDATE ' . $tabel . ' SET nama = ?, link = ?, keterangan = ?, jenjang = ?, fase = ?, aktif = ?, diubah = ? WHERE id = ?',
+                        [$nama, $link, $ket, daftar_apps_kategori_sah($menu, $_POST['jenjang'] ?? ''),
+                         $faseDipilih, $aktif, $now, (int) $s['id']]);
+                } elseif ($kategori) {
+                    q('UPDATE ' . $tabel . ' SET nama = ?, link = ?, keterangan = ?, jenjang = ?, aktif = ?, diubah = ? WHERE id = ?',
+                        [$nama, $link, $ket, daftar_apps_kategori_sah($menu, $_POST['jenjang'] ?? ''), $aktif, $now, (int) $s['id']]);
+                } else {
+                    q('UPDATE ' . $tabel . ' SET nama = ?, link = ?, keterangan = ?, aktif = ?, diubah = ? WHERE id = ?',
+                        [$nama, $link, $ket, $aktif, $now, (int) $s['id']]);
+                }
                 $appId = (int) $s['id'];
                 flash('Aplikasi ' . $nama . ' diperbarui.');
             } else {
-                q('INSERT INTO ' . $tabel . ' (nama, link, keterangan, urutan, aktif, dibuat, diubah) VALUES (?,?,?,?,?,?,?)',
-                    [$nama, $link, $ket, daftar_apps_urutan_baru($menu), $aktif, $now, $now]);
+                if ($kategori && $daftarFaseMenu) {
+                    q('INSERT INTO ' . $tabel . ' (nama, link, keterangan, jenjang, fase, urutan, aktif, dibuat, diubah) VALUES (?,?,?,?,?,?,?,?,?)',
+                        [$nama, $link, $ket, daftar_apps_kategori_sah($menu, $_POST['jenjang'] ?? ''),
+                         $faseDipilih, daftar_apps_urutan_baru($menu), $aktif, $now, $now]);
+                } elseif ($kategori) {
+                    q('INSERT INTO ' . $tabel . ' (nama, link, keterangan, jenjang, urutan, aktif, dibuat, diubah) VALUES (?,?,?,?,?,?,?,?)',
+                        [$nama, $link, $ket, daftar_apps_kategori_sah($menu, $_POST['jenjang'] ?? ''),
+                         daftar_apps_urutan_baru($menu), $aktif, $now, $now]);
+                } else {
+                    q('INSERT INTO ' . $tabel . ' (nama, link, keterangan, urutan, aktif, dibuat, diubah) VALUES (?,?,?,?,?,?,?)',
+                        [$nama, $link, $ket, daftar_apps_urutan_baru($menu), $aktif, $now, $now]);
+                }
                 $appId = (int) db()->lastInsertId();
                 flash('Aplikasi ' . $nama . ' ditambahkan ke daftar ' . $namaMenu . '.');
             }
@@ -1310,8 +1920,7 @@ function daftar_apps_halaman(string $menu, ?array $tugas = null): void
                 daftar_apps_set_baru($menu, $appId, $baru);
                 if ($baru) {
                     flash('Aplikasi ' . $nama . ' ditandai BONUS — tulisan ' . DAFTAR_APPS_BARU_TEKS
-                        . ' tampil pada menu ' . $namaMenu . ' di sidebar selama '
-                        . DAFTAR_APPS_BARU_HARI . ' hari.');
+                        . ' tampil pada menu ' . $namaMenu . ' di sidebar sampai tanda bonusnya dilepas.');
                 }
             }
 
@@ -1383,6 +1992,41 @@ function daftar_apps_halaman(string $menu, ?array $tugas = null): void
     // ---------------------------------------------------------------- tampilan
     $edit = $super ? daftar_apps_by_id($menu, (int) ($_GET['edit'] ?? 0)) : null;
     $semua = $super ? daftar_apps_list($menu, false) : daftar_apps_list($menu, true);
+
+    // TAB KATEGORI (v1.105.0): hitung isi tiap tab DULU (untuk angka pada pil), lalu sisakan baris
+    // milik tab yang sedang dibuka. Baris bertab kosong/tak dikenal ikut tab PERTAMA (lihat
+    // daftar_apps_kategori_baris()) sehingga tidak pernah ada isian yang tak tampil di tab mana pun.
+    $jmlPerTab = [];
+    if ($kategori) {
+        foreach ($kategori as $katKunci => $katLabel) {
+            $jmlPerTab[$katKunci] = 0;
+        }
+        foreach ($semua as $a) {
+            $jmlPerTab[daftar_apps_kategori_baris($menu, $a)]++;
+        }
+        $semua = array_values(array_filter($semua,
+            static fn(array $a): bool => daftar_apps_kategori_baris($menu, $a) === $katAktif));
+    }
+
+    // SUB TAB FASE (v1.112.0): angka tiap pil fase dihitung dari baris TAB yang sedang dibuka
+    // (media tanpa fase ikut dihitung pada SETIAP fase karena memang tampil di sana), lalu daftar
+    // disaring ke fase yang sedang dibuka. Tab tanpa fase (Game Edukasi) tidak tersentuh.
+    $daftarFase = $kategori ? daftar_apps_fase($menu, $katAktif) : [];
+    $faseAktif = $daftarFase ? daftar_apps_fase_aktif($menu, $katAktif) : '';
+    $jmlPerFase = [];
+    if ($daftarFase) {
+        foreach ($daftarFase as $faseKunci => $faseLabel) {
+            $jmlPerFase[$faseKunci] = 0;
+            foreach ($semua as $a) {
+                if (daftar_apps_fase_tampil($menu, $katAktif, $a, (string) $faseKunci)) {
+                    $jmlPerFase[$faseKunci]++;
+                }
+            }
+        }
+        $semua = array_values(array_filter($semua,
+            static fn(array $a): bool => daftar_apps_fase_tampil($menu, $katAktif, $a, $faseAktif)));
+    }
+
     $jmlAktif = 0;
     foreach ($semua as $a) {
         if ((int) $a['aktif'] === 1) {
@@ -1393,6 +2037,10 @@ function daftar_apps_halaman(string $menu, ?array $tugas = null): void
     // peran lain hanya menghitung yang aktif (daftarnya memang sudah tersaring).
     $jmlChip = count($semua);
     $jmlDisembunyikan = $jmlChip - $jmlAktif;
+
+    // TEKS TOMBOL BUKA (v1.107.0) — dihitung SEKALI: menu Media Interaktif memakai "Buka Media"
+    // (dan "Mainkan Game" pada tab Game Edukasi); menu lain tetap "Buka Aplikasi".
+    $labelBuka = daftar_apps_buka_label($menu, $katAktif);
 
     // AKSES PER APLIKASI: sekolah yang tidak dituju Super Admin melihat keterangan
     // "Madrasah Anda belum punya akses ke aplikasi keuangan" (permintaan pemilik), bukan tombol buka.
@@ -1415,6 +2063,15 @@ function daftar_apps_halaman(string $menu, ?array $tugas = null): void
     $klikRingkas = $grafikSering ? app_klik_ringkas(8) : [];
     $klikTotal = $grafikSering ? app_klik_total() : 0;
     $klikAppJml = $grafikSering ? app_klik_app_jumlah() : 0;
+
+    // ------------------------------------------------- TAB "BUATKAN MEDIA" (v1.111.0)
+    // Saat guru membuka `?buatkan=1`, halaman ini menampilkan formulir permintaan media + daftar
+    // permintaan miliknya (bukan daftar kartu media). Seluruh isinya dari inc/media_permintaan.php —
+    // baris pil tab ikut dicetak di dalamnya lewat daftar_apps_tab_bar() supaya tampilannya sama.
+    if (daftar_apps_mode_buatkan($menu)) {
+        media_permintaan_tab_guru($menu, $berkasDasar, $katAktif, $jmlPerTab, $k);
+        return;
+    }
 
     page_top($namaMenu, $tugas !== null ? 'Tugas Tambahan' : '');
     ?>
@@ -1519,7 +2176,13 @@ function daftar_apps_halaman(string $menu, ?array $tugas = null): void
             Daftar ini <b>global</b>, jadi terlihat sama bagi semua sekolah/madrasah dan semua pengguna.
           <?php endif; ?>
         <?php else: ?>
-          Klik <b>Buka Aplikasi</b> untuk membuka aplikasinya pada tab baru.
+          <?php // v1.107.0: teks tombol mengikuti konfigurasi menu (Media Interaktif memakai
+                // "Buka Media" / "Mainkan Game"); menu lain tetap "Buka Aplikasi". ?>
+          <?php if ($labelBuka === DAFTAR_APPS_BUKA_TEKS): ?>
+            Klik <b><?= e($labelBuka) ?></b> untuk membuka aplikasinya pada tab baru.
+          <?php else: ?>
+            Klik <b><?= e($labelBuka) ?></b> untuk membukanya pada tab baru.
+          <?php endif; ?>
         <?php endif; ?>
       </p>
     </div>
@@ -1533,6 +2196,28 @@ function daftar_apps_halaman(string $menu, ?array $tugas = null): void
       <?php endif; ?>
     </div>
   </div>
+
+  <?php // TAB KATEGORI (v1.105.0 — menu "Media Interaktif"): satu pil per jenjang + Game Edukasi.
+        // Tautan biasa (bukan JavaScript) supaya tetap bekerja tanpa skrip, dan angka pada tiap pil
+        // = jumlah aplikasi pada tab itu. Gaya memakai pola "chip tab berwarna" yang sudah dipakai
+        // menu Tugas Tambahan (.chip-list.warna).
+        // v1.105.1: jarak baris pil ke keterangannya DIRAPIKAN (permintaan pemilik: *"dibuat lebih
+        // rapi karena saat ini saling berdempetan antara tulisan dan tab"*) — dulu keterangan memakai
+        // `margin-top` NEGATIF (-6px) sehingga tulisannya menumpuk di bawah pil. Sekarang jaraknya
+        // diatur kelas `.apps-kat` / `.apps-kat-ket` (assets/style.css), tanpa margin negatif.
+        // v1.106.0 (permintaan pemilik): *"Yang saya tandai warna merah buat tombol timbul agar lebih
+        // menarik. Dan yang saya tandai warna biru buat keterangan peringatan 'Penggunaan media
+        // interaktif (aktif atau tidaknya) tergantung dari kebijakan pihak gemini'. Buat tulisan warna
+        // merah dan berkedip sebagai peringatan"* — pil tab dibuat TIMBUL (gaya `.apps-kat > .chip`)
+        // dan peringatan diletakkan pada SISI KANAN baris pil (`.apps-kat-baris` + `.apps-kat-ingat`).
+        // Teksnya disimpan pada konfigurasi menu (kunci `ingat_kategori`) supaya modul bersama ini
+        // tetap umum: menu bertab lain nanti bisa punya peringatannya sendiri atau tidak sama sekali. ?>
+  <?php if ($kategori): ?>
+    <?php
+    // Tab "Buatkan Media" (v1.111.0): pil ke-5, hanya untuk akun guru pada menu yang memintanya.
+    daftar_apps_tab_bar($menu, $berkasDasar, $katAktif, $jmlPerTab, $super, $k, $jmlPerFase);
+    ?>
+  <?php endif; ?>
 
   <?php if ($super): ?>
     <?php // Formulir pengisian — hanya Super Admin (permintaan pemilik). ?>
@@ -1551,11 +2236,59 @@ function daftar_apps_halaman(string $menu, ?array $tugas = null): void
           <input type="text" id="nama" name="nama" maxlength="160" required value="<?= e((string) ($edit['nama'] ?? '')) ?>"
                  placeholder="<?= e($k['placeholder']) ?>">
         </div>
+        <?php if ($kategori): ?>
+          <?php // TAB JENJANG (v1.105.0) — aplikasi masuk ke tab mana. Bawaannya tab yang sedang
+                // dibuka supaya menambah beberapa media pada satu jenjang tidak perlu memilih ulang. ?>
+          <div>
+            <label class="f" for="jenjang">Jenjang (tab) *</label>
+            <select id="jenjang" name="jenjang" required>
+              <?php foreach ($kategori as $katKunci => $katLabel):
+                  $dipilih = daftar_apps_kategori_sah($menu, $edit['jenjang'] ?? '') !== ''
+                      ? daftar_apps_kategori_sah($menu, $edit['jenjang'] ?? '') : $katAktif;
+              ?>
+                <option value="<?= e((string) $katKunci) ?>" <?= $dipilih === $katKunci ? 'selected' : '' ?>>
+                  <?= e((string) $katLabel) ?></option>
+              <?php endforeach; ?>
+            </select>
+            <div class="hint">Menentukan <b>tab</b> tempat aplikasi ini tampil pada halaman guru.</div>
+          </div>
+        <?php endif; ?>
+        <?php if ($kategori && daftar_apps_berfase($menu)): ?>
+          <?php
+          // SUB TAB FASE (v1.112.0) — media masuk ke fase mana pada tab jenjangnya. Pilihannya
+          // DIKELOMPOKKAN per jenjang (`<optgroup>`), dan `initFaseJenjang()` (assets/app.js)
+          // menyembunyikan kelompok yang bukan jenjang terpilih supaya Super Admin tidak salah pilih.
+          // Server TETAP memeriksa sendiri (fase yang tidak cocok jenjangnya ditolak), jadi formulir
+          // ini tetap benar walau JavaScript mati. Kosong = tampil pada semua fase jenjangnya.
+          $faseTerpilih = $edit
+              ? daftar_apps_fase_sah($menu, daftar_apps_kategori_baris($menu, $edit), $edit['fase'] ?? '')
+              : '';
+          ?>
+          <div>
+            <label class="f" for="fase">Fase (sub tab)</label>
+            <select id="fase" name="fase">
+              <option value="">— Semua fase pada jenjangnya —</option>
+              <?php foreach (daftar_apps_fase_menu($menu) as $faseKat => $faseIsi): ?>
+                <?php if (!is_array($faseIsi) || !$faseIsi) { continue; } ?>
+                <optgroup label="<?= e(daftar_apps_kategori_label($menu, (string) $faseKat)) ?>"
+                          data-jenjang="<?= e((string) $faseKat) ?>">
+                  <?php foreach ($faseIsi as $faseKunci => $faseLabel): ?>
+                    <option value="<?= e((string) $faseKunci) ?>" <?= $faseTerpilih === $faseKunci ? 'selected' : '' ?>>
+                      <?= e((string) $faseLabel) ?></option>
+                  <?php endforeach; ?>
+                </optgroup>
+              <?php endforeach; ?>
+            </select>
+            <div class="hint">Memisahkan media per <b>fase</b> di dalam tab jenjang
+              (SD/MI: Fase A–C &middot; SMP/MTs: Fase D &middot; SMA/MA: Fase E–F).
+              Biarkan <b>kosong</b> bila media ini berlaku untuk semua fase pada jenjangnya.</div>
+          </div>
+        <?php endif; ?>
         <div>
           <label class="f" for="link">Link Aplikasi *</label>
           <input type="url" id="link" name="link" maxlength="500" required value="<?= e((string) ($edit['link'] ?? '')) ?>"
                  placeholder="https://…">
-          <div class="hint">Harus dimulai <b>http://</b> atau <b>https://</b>. Tombol “Buka Aplikasi” membuka tautan ini di tab baru.</div>
+          <div class="hint">Harus dimulai <b>http://</b> atau <b>https://</b>. Tombol “<?= e(daftar_apps_buka_label($menu)) ?>” membuka tautan ini di tab baru.</div>
         </div>
         <div class="apps-ket">
           <label class="f" for="keterangan">Keterangan Aplikasi</label>
@@ -1568,9 +2301,10 @@ function daftar_apps_halaman(string $menu, ?array $tugas = null): void
         </label>
         <?php if ($super && daftar_apps_label_baru($menu)): ?>
           <?php // LENCANA "Bonus" BERKEDIP pada menu sidebar (permintaan pemilik): Super Admin
-                // menandai aplikasi, lalu tulisan Bonus tampil DI ATAS nama menu pada sidebar selama
-                // DAFTAR_APPS_BARU_HARI hari. Penanda `app_baru_atur` menjaga agar formulir/skrip
-                // gaya lama (tanpa bagian ini) tidak menghapus tanda yang sudah ada. ?>
+                // menandai aplikasi, lalu tulisan Bonus tampil DI ATAS nama menu pada sidebar SELAMA
+                // tanda itu dipasang (v1.99.0: tidak lagi hilang sendiri setelah sekian hari).
+                // Penanda `app_baru_atur` menjaga agar formulir/skrip gaya lama (tanpa bagian ini)
+                // tidak menghapus tanda yang sudah ada. ?>
           <div class="apps-baru">
             <input type="hidden" name="app_baru_atur" value="1">
             <label class="apps-baru-setelan">
@@ -1579,14 +2313,14 @@ function daftar_apps_halaman(string $menu, ?array $tugas = null): void
               <span><b>Tandai sebagai bonus</b>
                 <span class="new-tag"><?= e(DAFTAR_APPS_BARU_TEKS) ?></span>
                 <span class="xs mut">tulisan <?= e(DAFTAR_APPS_BARU_TEKS) ?> (merah, berkedip) tampil di atas
-                  nama menu <b><?= e($namaMenu) ?></b> pada sidebar selama <?= (int) DAFTAR_APPS_BARU_HARI ?> hari.</span>
+                  nama menu <b><?= e($namaMenu) ?></b> pada sidebar — tampil terus selama centang ini
+                  dipasang, dan hilang bila centangnya dilepas lalu disimpan.</span>
               </span>
             </label>
             <?php if ($edit && daftar_apps_baru($edit)): ?>
               <div class="hint" style="margin:8px 0 0">
-                Aplikasi ini masih berlabel baru — sisa
-                <b><?= (int) daftar_apps_baru_sisa($edit) ?> hari</b>. Hilangkan centangnya lalu simpan
-                bila ingin melepas labelnya sekarang.
+                Aplikasi ini berlabel bonus sejak <b><?= e(daftar_apps_baru_tanggal($edit)) ?></b>.
+                Hilangkan centangnya lalu simpan bila ingin melepas labelnya.
               </div>
             <?php endif; ?>
           </div>
@@ -1680,8 +2414,25 @@ function daftar_apps_halaman(string $menu, ?array $tugas = null): void
         <h3>Belum ada aplikasi</h3>
         <p>
           <?php if ($super): ?>
-            Daftar <?= e($namaMenu) ?> masih kosong. Tambahkan aplikasi pertama pada formulir di atas
-            (nama, link, dan keterangannya).
+            <?php if ($kategori && $daftarFase): ?>
+              Tab <b><?= e((string) ($kategori[$katAktif] ?? '')) ?></b> &middot;
+              <b><?= e(daftar_apps_fase_label($menu, $katAktif, (string) $faseAktif)) ?></b> masih kosong.
+              Pilih <b>Jenjang (tab)</b> dan <b>Fase</b> pada formulir di atas, lalu isi nama, link, dan
+              keterangannya — media yang fasenya dikosongkan tampil pada semua fase jenjang itu.
+            <?php elseif ($kategori): ?>
+              Tab <b><?= e((string) ($kategori[$katAktif] ?? '')) ?></b> masih kosong. Pilih
+              <b>Jenjang (tab)</b> pada formulir di atas lalu isi nama, link, dan keterangannya.
+            <?php else: ?>
+              Daftar <?= e($namaMenu) ?> masih kosong. Tambahkan aplikasi pertama pada formulir di atas
+              (nama, link, dan keterangannya).
+            <?php endif; ?>
+          <?php elseif ($kategori && $daftarFase): ?>
+            Belum ada media pada <b><?= e(daftar_apps_fase_label($menu, $katAktif, (string) $faseAktif)) ?></b>
+            di tab <b><?= e((string) ($kategori[$katAktif] ?? '')) ?></b>.
+            Coba buka fase lain — pengelola aplikasi memisahkan media per fase.
+          <?php elseif ($kategori): ?>
+            Belum ada media pada tab <b><?= e((string) ($kategori[$katAktif] ?? '')) ?></b>.
+            Coba buka tab jenjang lain — pengelola aplikasi mengisi setiap jenjang secara terpisah.
           <?php else: ?>
             Super Admin belum menambahkan aplikasi pada menu <?= e($namaMenu) ?>.
           <?php endif; ?>
@@ -1723,7 +2474,7 @@ function daftar_apps_halaman(string $menu, ?array $tugas = null): void
                     // lalu pengguna dialihkan ke tautan aplikasinya. Jangan dikembalikan ke `$link`. ?>
               <a class="btn btn-primary btn-sm" href="<?= e(app_buka_url($menu, (int) $a['id'], $berkas)) ?>"
                  target="_blank" rel="noopener noreferrer">
-                <?= ikon('eye', 15) ?> Buka Aplikasi
+                <?= ikon('eye', 15) ?> <?= e($labelBuka) ?>
               </a>
             <?php else: ?>
               <span class="hint">Tautan aplikasi belum diisi.</span>
@@ -1797,9 +2548,25 @@ function daftar_apps_halaman(string $menu, ?array $tugas = null): void
       <li><b>Satu daftar untuk semua</b> — daftar ini global (tidak dibedakan per sekolah/madrasah), jadi semua pengguna melihat daftar yang sama.</li>
       <?php endif; ?>
       <li><b>Diisi Super Admin</b> — guru, kepala sekolah/madrasah, dan admin operator hanya melihat dan membuka tautannya (tidak dapat mengubah).</li>
+      <?php if ($kategori): ?>
+        <li><b>Dipisah per TAB</b> — daftar ini dibagi ke tab
+          <b><?= e(implode(' · ', array_values($kategori))) ?></b>. Tab yang dibuka ditentukan oleh
+          pilihan <b>Jenjang (tab)</b> pada formulir; guru otomatis dibukakan tab yang sesuai
+          <b>jenjang lembaganya</b> (bila jenjangnya sudah diisi di Identitas &amp; Pengaturan).</li>
+        <li><b>Tidak ada media yang tersembunyi</b> — aplikasi yang jenjangnya kosong/tidak dikenal
+          tetap tampil pada tab pertama, jadi isian tidak pernah "hilang" dari daftar.</li>
+      <?php endif; ?>
+      <?php if (daftar_apps_hanya_guru($menu)): ?>
+        <li><b>Hanya akun guru</b> — menu <?= e($namaMenu) ?> tidak tampil pada akun kepala
+          sekolah/madrasah maupun Admin Operator (halamannya ditolak bila dibuka langsung). Super
+          Admin tetap dapat membukanya untuk mengisi daftar ini.</li>
+      <?php endif; ?>
       <?php if (daftar_apps_per_aplikasi($menu)): ?>
         <li><b>Tampil bila punya akses</b> — menu <?= e($namaMenu) ?> muncul pada sidebar sekolah/madrasah
           yang punya akses ke minimal satu aplikasi; selain itu menunya disembunyikan.</li>
+      <?php elseif (daftar_apps_hanya_guru($menu)): ?>
+        <li><b>Tampil pada akun guru</b> — menu <?= e($namaMenu) ?> muncul di sidebar akun
+          <b>guru</b> saja (tepat di bawah Smart Teacher), dengan lencana <b>Bonus</b> berkedip.</li>
       <?php else: ?>
         <li><b>Tampil di semua akun</b> — menu <?= e($namaMenu) ?> ada pada sidebar setiap pengguna.</li>
       <?php endif; ?>
@@ -1904,6 +2671,37 @@ document.addEventListener('DOMContentLoaded', function () {
     <?= json_encode($dataApp) ?>, true);
 });
 </script>
+<?php
+    endif;
+    // ------------------------------------------------------------------ POPUP KUTIPAN PEMBUKA
+    // (v1.105.1 — permintaan pemilik: *"saat guru mengklik menu Media Interaktif yang muncul duluan
+    // adalah popup dengan tulisan: 'Pendidikan adalah kunci pembuka pintu masa depan. …' - Supianto
+    // (Pengembang)"*.) Hanya menu yang konfigurasinya memuat `popup_awal`.
+    // v1.105.2 — muncul **SEKALI per sesi login** dan **TIDAK untuk Super Admin**; aturannya satu
+    // tempat pada `popup_awal_perlu_tampil()` (`popup_awal_selesai()` dipanggil setelah dicetak).
+    // Markup dicetak TANPA atribut `open` dan dibuka oleh `initPopupAwal()` (assets/app.js) memakai
+    // showModal() sehingga Esc/klik latar/tombol Tutup menutupnya. Tanpa JavaScript popup TIDAK
+    // menghalangi apa pun — isi halaman tetap terbaca & bisa dipakai.
+    if (popup_awal_perlu_tampil($menu)):
+        $popupAwal = (array) popup_awal_konfig($menu);
+        popup_awal_selesai($menu);
+        $kutipan = (string) ($popupAwal['teks'] ?? '');
+        $sumber  = trim((string) ($popupAwal['sumber'] ?? ''));
+        $peran   = trim((string) ($popupAwal['peran'] ?? ''));
+?>
+<dialog class="popup popup-kutipan" id="popupAwal" aria-labelledby="popupAwalTeks">
+  <div class="popup-kutipan-isi">
+    <div class="popup-kutipan-ic"><?= ikon('quote', 22) ?></div>
+    <p class="popup-kutipan-teks" id="popupAwalTeks"><?= e($kutipan) ?></p>
+    <?php if ($sumber !== ''): ?>
+      <p class="popup-kutipan-oleh">&mdash; <?= e($sumber) ?><?= $peran !== '' ? ' (' . e($peran) . ')' : '' ?></p>
+    <?php endif; ?>
+  </div>
+  <div class="popup-foot">
+    <span class="xs mut">Semoga bermanfaat untuk kegiatan belajar kita semua.</span>
+    <button class="btn btn-primary" type="button" data-popup-awal="tutup" autofocus>Tutup</button>
+  </div>
+</dialog>
 <?php
     endif;
     page_bottom();

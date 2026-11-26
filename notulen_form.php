@@ -246,6 +246,11 @@ page_top($edit ? 'Ubah Notulen Rapat' : 'Buat Notulen Rapat');
           <button class="btn btn-ghost btn-sm" type="button" id="btnHadirKosong">Kosongkan</button>
           <span class="hint">Centang guru yang menghadiri rapat — hanya yang dicentang yang masuk ke daftar hadir.</span>
         </div>
+        <?php // v1.101.0: guru yang dicentang dapat menandatangani daftar hadir ini dari AKUNNYA SENDIRI
+              // (menu "Tanda Tangan Rapat"). Keterangan ini hanya penjelas alur bagi operator. ?>
+        <div class="hint" style="margin:-2px 0 8px">Guru yang dicentang dapat menandatangani daftar hadir
+          ini sendiri dari akunnya melalui menu <b>Tanda Tangan Rapat</b> — tanda tangannya langsung
+          tampil pada kolom tanda tangan lembar Daftar Hadir.</div>
         <div class="table-wrap" style="max-height:420px;overflow:auto">
           <table class="tbl" id="tblPilihGuru">
             <thead>

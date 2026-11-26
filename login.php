@@ -263,6 +263,9 @@ $pengguna  = landing_pengguna_list();
 $tentang   = tentang_isi();
 $waTautan  = landing_wa_tautan('Assalamualaikum, saya ingin bertanya tentang aplikasi ' . APP_NAME . '.');
 $jmlPendaftar = jumlah_pendaftaran_menunggu();
+// Keadaan pendaftaran mandiri (v1.97.0) — dipakai memberi tahu pengunjung bahwa pendaftaran
+// sedang DITUTUP (sumbernya sama dengan halaman `daftar.php`: daftar_status_info()).
+$daftarLogin = daftar_status_info();
 
 // Menu bilah navigasi = bagian-bagian halaman depan.
 // Catatan (permintaan pemilik): tautan "Total Pengguna" TIDAK ditampilkan pada bilah navigasi —
@@ -482,10 +485,15 @@ $menuLanding = [
 
           <div class="divider"></div>
           <p class="sm mut" style="margin:0 0 10px">
-            Belum punya akun? Sekolah/madrasah Anda dapat mendaftar sendiri — pendaftaran disetujui Admin,
-            lalu aplikasi langsung dapat dipakai.
+            <?php if ($daftarLogin['tutup']): ?>
+              Pendaftaran sekolah/madrasah <b>sedang ditutup</b> — <?= e($daftarLogin['pesan']) ?>.
+            <?php else: ?>
+              Belum punya akun? Sekolah/madrasah Anda dapat mendaftar sendiri — pendaftaran disetujui Admin,
+              lalu aplikasi langsung dapat dipakai.
+            <?php endif; ?>
           </p>
-          <a class="btn btn-ghost full" href="daftar.php"><?= ikon('school', 16) ?> Daftarkan Sekolah/Madrasah</a>
+          <a class="btn btn-ghost full" href="daftar.php"><?= ikon('school', 16) ?>
+            <?= $daftarLogin['tutup'] ? 'Pendaftaran Ditutup' : 'Daftarkan Sekolah/Madrasah' ?></a>
 
           <div class="divider"></div>
           <div class="portal-bantuan">
@@ -709,7 +717,8 @@ $menuLanding = [
               <a class="btn btn-ghost" href="<?= e(landing_teks('kontak_maps')) ?>" target="_blank" rel="noopener noreferrer">
                 <?= ikon('lokasi', 16) ?> Lihat Lokasi</a>
             <?php endif; ?>
-            <a class="btn btn-ghost" href="daftar.php"><?= ikon('school', 16) ?> Daftarkan Sekolah/Madrasah</a>
+            <a class="btn btn-ghost" href="daftar.php"><?= ikon('school', 16) ?>
+              <?= $daftarLogin['tutup'] ? 'Pendaftaran Ditutup' : 'Daftarkan Sekolah/Madrasah' ?></a>
           </div>
         </div>
 

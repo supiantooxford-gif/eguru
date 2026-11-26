@@ -41,7 +41,11 @@ require_once __DIR__ . '/inc/daftar_apps.php';
 function app_buka_kembali(string $b): string
 {
     $b = trim($b);
-    if (preg_match('~^[a-z0-9_]+\.php(\?kode=[A-Za-z0-9_\-]+)?$~', $b) === 1) {
+    // Sejak v1.105.0 query boleh memuat parameter halaman sendiri (mis. `?jenjang=sd-mi` pada menu
+    // bertab "Media Interaktif", atau `?kode=…` pada menu Tugas Tambahan). Batasannya tetap ketat:
+    // hanya nama berkas .php di folder aplikasi ini + query huruf/angka/`=`/`-`/`&`, sehingga TIDAK
+    // bisa dipakai sebagai pengalihan terbuka (tidak ada ":" atau "//").
+    if (preg_match('~^[a-z0-9_]+\.php(\?[a-z0-9_%=\-&]+)?$~', $b) === 1) {
         return $b;
     }
     return 'index.php';
@@ -59,6 +63,12 @@ if ($k === null) {
 }
 
 $namaMenu = (string) ($k['menu'] ?? 'Daftar Aplikasi');
+
+// MENU KHUSUS AKUN GURU (v1.105.0 — "Media Interaktif"): peran lain tidak boleh membuka tautannya
+// lewat alamat langsung. Aturan satu tempat: daftar_apps_peran_boleh() (Super Admin selalu boleh).
+if (!daftar_apps_peran_boleh($menu)) {
+    tolak403(daftar_apps_peran_pesan());
+}
 
 // Menu yang dibatasi PER SEKOLAH: sekolah di luar daftar benar-benar ditolak (aturan yang sama
 // dengan halaman menunya — lihat daftar_apps_halaman()).

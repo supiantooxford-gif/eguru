@@ -143,6 +143,38 @@ function kop_render(array $n, string $judul, array $baris = []): void
 }
 
 /**
+ * Gambar TANDA TANGAN kepala + CAP/STEMPEL lembaga untuk blok tanda tangan cetak (v1.104.0).
+ *
+ * Permintaan pemilik: pada blok "Mengetahui, Kepala …" di SELURUH dokumen cetak dicetak tanda tangan
+ * kepala sekolah/madrasah beserta cap/stempel lembaga, dan **cap MENIMPA tanda tangan** (seperti
+ * dokumen resmi — memang agak menutupi nama). Sakelar Operator (`ttd_cap_aktif`) menentukan
+ * muncul/tidaknya keduanya; bila mati (bawaan) fungsi ini mengembalikan '' sehingga tidak ada
+ * perubahan apa pun pada lembar cetak yang sudah ada.
+ *
+ * Hasilnya '' juga bila belum ada berkas yang diunggah. Urutan gambar: tanda tangan lebih dulu,
+ * cap di atasnya (posisi & penumpukan diatur assets/style.css: `.ttd-sekolah`).
+ */
+function ttd_cap_cetak_html(): string
+{
+    if (!ttd_cap_aktif()) {
+        return '';
+    }
+    $ttd = ttd_kepala_gambar();
+    $cap = cap_sekolah_gambar();
+    if ($ttd === '' && $cap === '') {
+        return '';
+    }
+    $h = '<span class="ttd-sekolah">';
+    if ($ttd !== '') {
+        $h .= '<img class="ttd-gambar-kepala" src="' . e($ttd) . '" alt="Tanda tangan">';
+    }
+    if ($cap !== '') {
+        $h .= '<img class="cap-gambar" src="' . e($cap) . '" alt="Cap">';
+    }
+    return $h . '</span>';
+}
+
+/**
  * Blok tanda tangan (dipakai di lembar cetak).
  *
  * @param bool $denganTempat true → cetak baris "tempat, tanggal" DI ATAS blok ini (permintaan
@@ -176,7 +208,13 @@ function ttd_blok(string $jabatan, string $nama, string $nip = '', string $kelas
     // Ruang tanda tangan: tanda tangan digital (bila ada) + tombol pembuka yang HANYA dimunculkan
     // skrip pada perangkat berlayar sentuh. Untuk lembar selain Notulen Rapat, $pihak kosong
     // sehingga hasilnya persis seperti sebelumnya (<div class="space"></div>).
-    echo '<div class="space"' . ($pihak !== '' ? ' data-ttd-sel="' . e($pihak) . '"' : '') . '>';
+    // v1.104.0: blok KEPALA ("Mengetahui, …") juga memuat TANDA TANGAN KEPALA + CAP/STEMPEL lembaga
+    // (bila Operator menyalakan fiturnya) — cap menimpa tanda tangan. Kelas `.space-ttd-sekolah`
+    // memberi tinggi & tumpukan gambar; blok lain tidak berubah sama sekali.
+    $ttdLembaga = str_starts_with($jabatan, 'Mengetahui,') ? ttd_cap_cetak_html() : '';
+    echo '<div class="space' . ($ttdLembaga !== '' ? ' space-ttd-sekolah' : '') . '"'
+        . ($pihak !== '' ? ' data-ttd-sel="' . e($pihak) . '"' : '') . '>';
+    echo $ttdLembaga;
     echo $gambar;
     if ($pihak !== '' && function_exists('notulen_ttd_tombol')) {
         echo notulen_ttd_tombol($pihak, $gambar !== '');

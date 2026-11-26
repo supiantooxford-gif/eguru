@@ -373,6 +373,84 @@ page_top('Identitas & Pengaturan');
           </div>
         </form>
       </div>
+
+      <?php // v1.104.0 (skema v66) — TANDA TANGAN KEPALA & CAP/STEMPEL pada dokumen cetak
+            // (permintaan pemilik, pada bagian yang ditandai di dalam kartu Logo): Operator
+            // mengunggah gambar tanda tangan kepala sekolah/madrasah dan cap/stempel lembaga, lalu
+            // MENYALAKAN fiturnya. Sakelar itu menentukan MUNCUL/TIDAKNYA keduanya pada blok
+            // "Mengetahui, Kepala …" di seluruh lembar cetak (cap menimpa tanda tangan); berkas yang
+            // sudah diunggah tetap tersimpan saat fitur dimatikan. ?>
+      <div class="divider"></div>
+      <div class="section-title"><?= ikon('print', 15) ?> Tanda Tangan <?= e(istilah_sekolah('Kepala Sekolah')) ?> &amp; Cap/Stempel</div>
+      <p class="hint" style="margin-top:0">Dicetak pada blok <b>Mengetahui, <?= e(istilah_sekolah('Kepala Sekolah')) ?></b> di <b>seluruh dokumen cetak</b>, dengan cap/stempel menimpa tanda tangan. Fitur ini dapat diaktifkan dan dinonaktifkan oleh Admin Operator.</p>
+      <div class="ttdcap-baris" id="cardTtdCap">
+        <form class="ttdcap-kotak" method="post" action="upload_ttd_cap.php" enctype="multipart/form-data">
+          <?= csrf_field() ?>
+          <div class="ttdcap-judul">Tanda tangan <?= e(istilah_sekolah('Kepala Sekolah')) ?></div>
+          <div class="ttdcap-pratinjau">
+            <?php if (ttd_kepala_gambar() !== ''): ?>
+              <img src="<?= e(ttd_kepala_gambar()) ?>" alt="Tanda tangan <?= e(istilah_sekolah('Kepala Sekolah')) ?>">
+            <?php else: ?>
+              <span class="mut xs">Belum ada tanda tangan</span>
+            <?php endif; ?>
+          </div>
+          <label class="f" for="berkasTtdKepala">Pilih berkas gambar</label>
+          <input type="file" id="berkasTtdKepala" name="ttd_kepala" accept=".jpg,.jpeg,.png,.gif,.webp,.svg,image/*">
+          <div class="hint">Maksimal <?= e(maks_unggah_teks()) ?>. Disarankan PNG latar transparan (hasil foto tanda tangan di atas kertas putih juga dapat dipakai).</div>
+          <div class="form-actions">
+            <button class="btn btn-primary btn-sm" type="submit" name="aksi" value="ttd"><?= ikon('upload', 15) ?> <?= ttd_kepala_gambar() !== '' ? 'Ganti tanda tangan' : 'Unggah tanda tangan' ?></button>
+            <?php if (ttd_kepala_gambar() !== ''): ?>
+              <button class="btn btn-danger btn-sm" type="submit" name="aksi" value="hapus_ttd" data-confirm="Hapus gambar tanda tangan <?= e(istilah_sekolah('Kepala Sekolah')) ?>?"><?= ikon('trash', 15) ?> Hapus</button>
+            <?php endif; ?>
+          </div>
+        </form>
+        <form class="ttdcap-kotak" method="post" action="upload_ttd_cap.php" enctype="multipart/form-data">
+          <?= csrf_field() ?>
+          <div class="ttdcap-judul">Cap/Stempel <?= e(istilah_sekolah('Sekolah')) ?></div>
+          <div class="ttdcap-pratinjau">
+            <?php if (cap_sekolah_gambar() !== ''): ?>
+              <img src="<?= e(cap_sekolah_gambar()) ?>" alt="Cap/stempel <?= e(istilah_sekolah('Sekolah')) ?>">
+            <?php else: ?>
+              <span class="mut xs">Belum ada cap</span>
+            <?php endif; ?>
+          </div>
+          <label class="f" for="berkasCapSekolah">Pilih berkas gambar</label>
+          <input type="file" id="berkasCapSekolah" name="cap_sekolah" accept=".jpg,.jpeg,.png,.gif,.webp,.svg,image/*">
+          <div class="hint">Maksimal <?= e(maks_unggah_teks()) ?>. Disarankan PNG latar transparan agar tanda tangan tetap terlihat di bawahnya.</div>
+          <div class="form-actions">
+            <button class="btn btn-primary btn-sm" type="submit" name="aksi" value="cap"><?= ikon('upload', 15) ?> <?= cap_sekolah_gambar() !== '' ? 'Ganti cap' : 'Unggah cap' ?></button>
+            <?php if (cap_sekolah_gambar() !== ''): ?>
+              <button class="btn btn-danger btn-sm" type="submit" name="aksi" value="hapus_cap" data-confirm="Hapus gambar cap/stempel <?= e(istilah_sekolah('Sekolah')) ?>?"><?= ikon('trash', 15) ?> Hapus</button>
+            <?php endif; ?>
+          </div>
+        </form>
+      </div>
+      <?php // Sakelar (permintaan pemilik: "bisa diaktifkan dan non aktifkan oleh Operator").
+            // Statusnya juga disebut sebagai kalimat supaya jelas apa yang berubah pada hasil cetak. ?>
+      <form class="ttdcap-saklar" method="post" action="upload_ttd_cap.php" id="formTtdCap">
+        <?= csrf_field() ?>
+        <div class="ttdcap-saklar-teks">
+          <b><?= ikon('switch', 15) ?> Status fitur:</b>
+          <span class="pill <?= ttd_cap_aktif() ? 'pill-ok' : 'pill-gray' ?>" id="pilTtdCap"><?= ttd_cap_aktif() ? 'Aktif — tercetak pada dokumen cetak' : 'Nonaktif' ?></span>
+          <div class="hint" id="ttdCapCatatan">
+            <?php if (ttd_cap_aktif() && !ttd_cap_siap()): ?>
+              Fitur sudah AKTIF, tetapi belum ada tanda tangan maupun cap yang diunggah — hasil cetak belum berubah.
+            <?php elseif (ttd_cap_aktif()): ?>
+              Tanda tangan<?= cap_sekolah_gambar() !== '' ? ' dan cap/stempel' : '' ?> akan tercetak pada
+              blok "Mengetahui, <?= e(istilah_sekolah('Kepala Sekolah')) ?>" di seluruh dokumen cetak.
+            <?php elseif (ttd_kepala_gambar() !== '' || cap_sekolah_gambar() !== ''): ?>
+              Berkas sudah diunggah, tetapi fitur NONAKTIF — hasil cetak kembali tanpa tanda tangan dan cap.
+            <?php else: ?>
+              Fitur mati: dokumen cetak tanpa tanda tangan kepala dan cap/stempel.
+            <?php endif; ?>
+          </div>
+        </div>
+        <?php if (ttd_cap_aktif()): ?>
+          <button class="btn btn-sm" type="submit" name="aksi" value="nonaktif"><?= ikon('x', 15) ?> Nonaktifkan</button>
+        <?php else: ?>
+          <button class="btn btn-primary btn-sm" type="submit" name="aksi" value="aktif"><?= ikon('check', 15) ?> Aktifkan</button>
+        <?php endif; ?>
+      </form>
     </div>
 
     <div class="card">
